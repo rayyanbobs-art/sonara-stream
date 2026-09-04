@@ -1,4 +1,4 @@
-﻿#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod youtube;
 mod spotify;
@@ -8,6 +8,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             youtube::search_youtube,
             youtube::get_stream_url,
+            youtube::get_search_suggestions,
+            youtube::get_related_tracks,
             spotify::resolve_spotify_track,
         ])
         .run(tauri::generate_context!())

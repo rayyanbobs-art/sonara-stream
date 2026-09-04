@@ -319,6 +319,75 @@ body {
   animation: spin 1s linear infinite;
 }
 
+.header-search-container {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.search-suggestions-dropdown {
+  position: absolute;
+  top: 42px;
+  left: 0;
+  right: 0;
+  background: rgba(21, 24, 33, 0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border-light);
+  border-radius: 16px;
+  padding: 6px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.suggestion-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.suggestion-item:hover,
+.suggestion-item.active {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.suggestion-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.suggestion-text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.suggestion-accent-icon {
+  color: var(--accent);
+  opacity: 0.7;
+}
+
+.suggestion-item:hover .suggestion-icon,
+.suggestion-item.active .suggestion-icon {
+  color: var(--accent);
+}
+
 .header-source-toggle {
   display: flex;
   gap: 6px;
@@ -1512,5 +1581,21 @@ body {
 
 .sonara-layout.light .player-vol-slider::-webkit-slider-thumb {
   background: #111827;
+}
+
+.sonara-layout.light .search-suggestions-dropdown {
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.08);
+}
+
+.sonara-layout.light .suggestion-item {
+  color: #4b5563;
+}
+
+.sonara-layout.light .suggestion-item:hover,
+.sonara-layout.light .suggestion-item.active {
+  background: rgba(0, 0, 0, 0.05);
+  color: #111827;
 }
 

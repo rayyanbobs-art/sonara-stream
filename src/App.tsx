@@ -244,21 +244,87 @@ export default function App() {
     }
   };
 
-  const handleNext = () => {
+  const getCleanWords = (track: Track): Set<string> => {
+    const combined = `${track.title} ${track.artist}`.toLowerCase();
+    const noise = new Set([
+      "official", "video", "audio", "music", "lyrics", "lyric", "remastered",
+      "remaster", "hd", "hq", "4k", "version", "original", "stem", "edit",
+      "visualizer", "soundtrack", "ost", "theme", "full", "song", "records",
+      "vevo", "channel", "topic", "special", "mix", "extended"
+    ]);
+    const cleaned = combined
+      .replace(/\([^)]*\)/g, " ")
+      .replace(/\[[^\]]*\]/g, " ")
+      .replace(/[^a-z0-9\s]/g, " ");
+    return new Set(
+      cleaned.split(/\s+/).filter((w) => w.length >= 2 && !noise.has(w))
+    );
+  };
+
+  const isSameSong = (a: Track, b: Track): boolean => {
+    if (a.id === b.id) return true;
+    const wordsA = getCleanWords(a);
+    const wordsB = getCleanWords(b);
+    if (wordsA.size === 0 || wordsB.size === 0) return false;
+    let intersection = 0;
+    for (const w of wordsA) {
+      if (wordsB.has(w)) intersection++;
+    }
+    const overlap = intersection / Math.min(wordsA.size, wordsB.size);
+    return overlap >= 0.7;
+  };
+
+  const handleNext = async () => {
     const list = activeTab === "favorites" ? favorites : tracks;
     if (!currentTrack || list.length === 0) return;
 
     if (isShuffle) {
-      let rand = Math.floor(Math.random() * list.length);
-      if (list.length > 1 && list[rand].id === currentTrack.id) {
-        rand = (rand + 1) % list.length;
+      const candidateTracks = list.filter((t) => !isSameSong(t, currentTrack));
+      if (candidateTracks.length > 0) {
+        const rand = Math.floor(Math.random() * candidateTracks.length);
+        handlePlayTrack(candidateTracks[rand]);
+        return;
       }
-      handlePlayTrack(list[rand]);
+    }
+
+    // Sequential: pick next distinct track (skip any duplicate upload)
+    const currIdx = list.findIndex((t) => t.id === currentTrack.id);
+    let nextTrack: Track | null = null;
+
+    for (let i = 1; i < list.length; i++) {
+      const candidate = list[(currIdx + i) % list.length];
+      if (!isSameSong(candidate, currentTrack)) {
+        nextTrack = candidate;
+        break;
+      }
+    }
+
+    if (nextTrack) {
+      handlePlayTrack(nextTrack);
       return;
     }
 
-    const idx = list.findIndex((t) => t.id === currentTrack.id);
-    const nextIdx = (idx + 1) % list.length;
+    // Smart Continuous Radio Autoplay:
+    // If all remaining tracks are duplicates or queue reached end, fetch new related songs!
+    try {
+      setIsBuffering(true);
+      const related: Track[] = await invoke("get_related_tracks", {
+        artist: currentTrack.artist,
+        title: currentTrack.title,
+      });
+
+      const freshTracks = related.filter((r) => !isSameSong(r, currentTrack));
+      if (freshTracks.length > 0) {
+        setTracks((prev) => [...prev, ...freshTracks]);
+        handlePlayTrack(freshTracks[0]);
+        return;
+      }
+    } catch (err) {
+      console.error("Autoplay radio error:", err);
+    }
+
+    // Fallback: pick the next item
+    const nextIdx = (currIdx + 1) % list.length;
     handlePlayTrack(list[nextIdx]);
   };
 
@@ -308,8 +374,9 @@ export default function App() {
         <Header
           query={searchQuery}
           onQueryChange={setSearchQuery}
-          onSearch={() => {
-            performSearch(searchQuery, source);
+          onSearch={(customQuery) => {
+            const q = customQuery || searchQuery;
+            performSearch(q, source);
             setActiveTab("songs");
           }}
           source={source}

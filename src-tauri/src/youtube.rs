@@ -27,6 +27,36 @@ fn get_in_flight() -> &'static Mutex<HashMap<String, tokio::sync::broadcast::Sen
     IN_FLIGHT.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+fn insert_stream_cache(key: String, value: String) {
+    if let Ok(mut guard) = get_stream_cache().lock() {
+        if guard.len() >= 200 {
+            guard.retain(|_, (_, inst)| inst.elapsed() < Duration::from_secs(2 * 3600));
+            if guard.len() >= 200 {
+                let keys_to_remove: Vec<String> = guard.keys().take(50).cloned().collect();
+                for k in keys_to_remove {
+                    guard.remove(&k);
+                }
+            }
+        }
+        guard.insert(key, (value, Instant::now()));
+    }
+}
+
+fn insert_search_cache(key: String, value: Vec<Track>) {
+    if let Ok(mut guard) = get_search_cache().lock() {
+        if guard.len() >= 100 {
+            guard.retain(|_, (_, inst)| inst.elapsed() < Duration::from_secs(1800));
+            if guard.len() >= 100 {
+                let keys_to_remove: Vec<String> = guard.keys().take(30).cloned().collect();
+                for k in keys_to_remove {
+                    guard.remove(&k);
+                }
+            }
+        }
+        guard.insert(key, (value, Instant::now()));
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Track {
     pub id: String,
@@ -123,13 +153,14 @@ fn execute_ytdlp_search(search_arg: &str, binary: &PathBuf) -> Result<Vec<Track>
 
     let output = cmd
         .args([
-            search_arg,
             "--dump-json",
             "--flat-playlist",
             "--no-warnings",
             "--no-check-certificates",
             "--extractor-args",
             "youtube:player_client=android",
+            "--",
+            search_arg,
         ])
         .output()
         .map_err(|e| format!("Failed to execute yt-dlp at {:?}: {}", binary, e))?;
@@ -211,7 +242,25 @@ pub async fn get_search_suggestions(query: String) -> Result<Vec<String>, String
 
 #[tauri::command]
 pub async fn search_youtube(query: String) -> Result<Vec<Track>, String> {
-    let q = query.trim().to_lowercase();
+    let raw_q = query.trim();
+    if raw_q.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Sanitize input: limit length and strip leading CLI flag dashes
+    let sanitized_query: String = raw_q
+        .chars()
+        .take(250)
+        .collect::<String>()
+        .trim_start_matches('-')
+        .trim()
+        .to_string();
+
+    if sanitized_query.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let q = sanitized_query.to_lowercase();
     if let Ok(guard) = get_search_cache().lock() {
         if let Some((cached_tracks, instant)) = guard.get(&q) {
             if instant.elapsed() < Duration::from_secs(3600) {
@@ -222,7 +271,7 @@ pub async fn search_youtube(query: String) -> Result<Vec<Track>, String> {
 
     tokio::task::spawn_blocking(move || {
         let binary = get_ytdlp_path();
-        let search_arg = format!("ytsearch25:{}", query);
+        let search_arg = format!("ytsearch25:{}", sanitized_query);
 
         let raw_tracks = execute_ytdlp_search(&search_arg, &binary)?;
 
@@ -245,10 +294,10 @@ pub async fn search_youtube(query: String) -> Result<Vec<Track>, String> {
                 if first.artist != "Unknown Artist" && !first.artist.is_empty() {
                     first.artist.clone()
                 } else {
-                    query.clone()
+                    sanitized_query.clone()
                 }
             } else {
-                query.clone()
+                sanitized_query.clone()
             };
 
             let expand_arg = format!("ytsearch15:{} greatest hits", fallback_artist);
@@ -266,9 +315,7 @@ pub async fn search_youtube(query: String) -> Result<Vec<Track>, String> {
             }
         }
 
-        if let Ok(mut guard) = get_search_cache().lock() {
-            guard.insert(q, (unique_tracks.clone(), Instant::now()));
-        }
+        insert_search_cache(q, unique_tracks.clone());
 
         Ok(unique_tracks)
     })
@@ -278,17 +325,20 @@ pub async fn search_youtube(query: String) -> Result<Vec<Track>, String> {
 
 #[tauri::command]
 pub async fn get_related_tracks(artist: String, title: String) -> Result<Vec<Track>, String> {
+    let clean_artist = artist.trim().trim_start_matches('-').to_string();
+    let clean_title = title.trim().trim_start_matches('-').to_string();
+
     tokio::task::spawn_blocking(move || {
         let binary = get_ytdlp_path();
-        let query_term = if !artist.is_empty() && artist != "Unknown Artist" {
-            format!("ytsearch15:{} songs", artist)
+        let query_term = if !clean_artist.is_empty() && clean_artist != "Unknown Artist" {
+            format!("ytsearch15:{} songs", clean_artist)
         } else {
-            format!("ytsearch15:{} mix", title)
+            format!("ytsearch15:{} mix", clean_title)
         };
 
         let raw = execute_ytdlp_search(&query_term, &binary)?;
         let mut seen = std::collections::HashSet::new();
-        let target_sig = get_title_signature(&title, &artist);
+        let target_sig = get_title_signature(&clean_title, &clean_artist);
         seen.insert(target_sig);
 
         let mut related = Vec::new();
@@ -426,6 +476,21 @@ pub async fn get_genre_mix(artist: String, title: String) -> Result<Vec<Track>, 
 #[tauri::command]
 pub async fn get_stream_url(id: String) -> Result<String, String> {
     let clean_id = id.trim().to_string();
+    if clean_id.is_empty() || clean_id.len() > 300 {
+        return Err("Invalid track identifier".into());
+    }
+
+    // SSRF & Malicious Scheme Protection: Only permit legitimate YouTube URLs
+    if clean_id.starts_with("http:") || clean_id.starts_with("https:") {
+        let is_valid_youtube = clean_id.starts_with("https://www.youtube.com/")
+            || clean_id.starts_with("https://youtube.com/")
+            || clean_id.starts_with("https://youtu.be/")
+            || clean_id.starts_with("https://music.youtube.com/");
+        if !is_valid_youtube {
+            return Err("Invalid external streaming host".into());
+        }
+    }
+
     if let Ok(guard) = get_stream_cache().lock() {
         if let Some((url, instant)) = guard.get(&clean_id) {
             if instant.elapsed() < Duration::from_secs(4 * 3600) {
@@ -456,11 +521,14 @@ pub async fn get_stream_url(id: String) -> Result<String, String> {
     let result: Result<String, String> = tokio::task::spawn_blocking(move || {
         let binary = get_ytdlp_path();
         let video_url = if id_clone.starts_with("search:") {
-            format!("ytsearch1:{}", &id_clone[7..])
+            let search_term = id_clone[7..].trim_start_matches('-');
+            format!("ytsearch1:{}", search_term)
         } else if id_clone.starts_with("http") {
             id_clone.clone()
         } else {
-            format!("https://www.youtube.com/watch?v={}", id_clone)
+            // Strip any leading dashes from video ID
+            let safe_id = id_clone.trim_start_matches('-');
+            format!("https://www.youtube.com/watch?v={}", safe_id)
         };
 
         let mut cmd = Command::new(&binary);
@@ -469,7 +537,6 @@ pub async fn get_stream_url(id: String) -> Result<String, String> {
 
         let output = cmd
             .args([
-                &video_url,
                 "-f",
                 "18/ba/b",
                 "--get-url",
@@ -482,6 +549,8 @@ pub async fn get_stream_url(id: String) -> Result<String, String> {
                 "4",
                 "--extractor-args",
                 "youtube:player_client=android;player_skip=webpage,configs",
+                "--",
+                &video_url,
             ])
             .output()
             .map_err(|e| format!("Failed to resolve stream URL: {}", e))?;
@@ -496,9 +565,7 @@ pub async fn get_stream_url(id: String) -> Result<String, String> {
             return Err("Resolved stream URL was empty".into());
         }
 
-        if let Ok(mut guard) = get_stream_cache().lock() {
-            guard.insert(id_clone, (url.clone(), Instant::now()));
-        }
+        insert_stream_cache(id_clone, url.clone());
 
         Ok(url)
     })

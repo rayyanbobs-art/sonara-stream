@@ -1,0 +1,215 @@
+﻿import React, { useState } from "react";
+import {
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  Shuffle,
+  Repeat,
+  Volume2,
+  VolumeX,
+  Heart,
+  Radio,
+} from "lucide-react";
+import { Track } from "../types";
+
+interface PlayerProps {
+  currentTrack: Track | null;
+  isPlaying: boolean;
+  isBuffering: boolean;
+  currentTime: number;
+  duration: number;
+  volume: number;
+  isShuffle: boolean;
+  isFavorite: boolean;
+  onTogglePlay: () => void;
+  onSeek: (time: number) => void;
+  onVolumeChange: (vol: number) => void;
+  onNext: () => void;
+  onPrev: () => void;
+  onToggleShuffle: () => void;
+  onToggleFavorite: () => void;
+}
+
+const formatTime = (secs: number): string => {
+  if (!secs || isNaN(secs)) return "0:00";
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+};
+
+export const Player: React.FC<PlayerProps> = ({
+  currentTrack,
+  isPlaying,
+  isBuffering,
+  currentTime,
+  duration,
+  volume,
+  isShuffle,
+  isFavorite,
+  onTogglePlay,
+  onSeek,
+  onVolumeChange,
+  onNext,
+  onPrev,
+  onToggleShuffle,
+  onToggleFavorite,
+}) => {
+  const [prevVol, setPrevVol] = useState(volume || 0.85);
+
+  const toggleMute = () => {
+    if (volume > 0) {
+      setPrevVol(volume);
+      onVolumeChange(0);
+    } else {
+      onVolumeChange(prevVol || 0.85);
+    }
+  };
+
+  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  return (
+    <footer className="sonara-player">
+      <div className="player-content-grid">
+        {/* Left: Track Details */}
+        <div className="player-left">
+          {currentTrack ? (
+            <div className="player-track-meta">
+              <img
+                src={currentTrack.thumbnail}
+                alt={currentTrack.title}
+                className="player-track-art"
+              />
+              <div className="player-track-labels">
+                <div className="player-track-name" title={currentTrack.title}>
+                  {currentTrack.title}
+                </div>
+                <div className="player-track-sub">{currentTrack.artist}</div>
+              </div>
+              <button
+                type="button"
+                className={`player-fav-btn ${isFavorite ? "fav" : ""}`}
+                onClick={onToggleFavorite}
+                title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+              >
+                <Heart size={16} fill={isFavorite ? "currentColor" : "none"} />
+              </button>
+            </div>
+          ) : (
+            <div className="player-empty-meta">
+              <div className="player-art-placeholder" />
+              <div>
+                <p className="player-empty-title">No song selected</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Center: Playback Controls & Progress Bar */}
+        <div className="player-center">
+          <div className="player-button-row">
+            <button
+              type="button"
+              className={`ctrl-icon-btn ${isShuffle ? "active" : ""}`}
+              onClick={onToggleShuffle}
+              title="Shuffle"
+            >
+              <Shuffle size={15} />
+            </button>
+
+            <button
+              type="button"
+              className="ctrl-icon-btn"
+              onClick={onPrev}
+              disabled={!currentTrack}
+              title="Previous"
+            >
+              <SkipBack size={18} />
+            </button>
+
+            <button
+              type="button"
+              className="player-play-btn"
+              onClick={onTogglePlay}
+              disabled={!currentTrack}
+              title={isPlaying ? "Pause" : "Play"}
+            >
+              {isBuffering ? (
+                <div className="player-buffer-spinner" />
+              ) : isPlaying ? (
+                <Pause size={18} />
+              ) : (
+                <Play size={18} fill="currentColor" />
+              )}
+            </button>
+
+            <button
+              type="button"
+              className="ctrl-icon-btn"
+              onClick={onNext}
+              disabled={!currentTrack}
+              title="Next"
+            >
+              <SkipForward size={18} />
+            </button>
+
+            <button
+              type="button"
+              className="ctrl-icon-btn"
+              title="Repeat"
+            >
+              <Repeat size={15} />
+            </button>
+          </div>
+
+          <div className="player-scrubber-row">
+            <span className="player-time">{formatTime(currentTime)}</span>
+            <div className="slider-track-wrap">
+              <input
+                type="range"
+                min={0}
+                max={duration || 100}
+                step={0.5}
+                value={currentTime}
+                onChange={(e) => onSeek(parseFloat(e.target.value))}
+                className="player-progress-slider"
+                style={{
+                  background: `linear-gradient(to right, var(--accent) ${progressPercent}%, rgba(255,255,255,0.15) ${progressPercent}%)`,
+                }}
+              />
+            </div>
+            <span className="player-time">{formatTime(duration)}</span>
+          </div>
+        </div>
+
+        {/* Right: Streaming Status & Volume */}
+        <div className="player-right">
+          {currentTrack && (
+            <div className={`player-stream-chip ${isBuffering ? "buffering" : "live"}`}>
+              <Radio size={12} className={isBuffering ? "pulse-anim" : ""} />
+              <span>{isBuffering ? "Buffering" : "Streaming"}</span>
+            </div>
+          )}
+
+          <div className="player-vol-wrapper">
+            <button type="button" className="vol-toggle-btn" onClick={toggleMute}>
+              {volume === 0 ? <VolumeX size={17} /> : <Volume2 size={17} />}
+            </button>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={volume}
+              onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
+              className="player-vol-slider"
+              style={{
+                background: `linear-gradient(to right, var(--accent) ${volume * 100}%, rgba(255,255,255,0.15) ${volume * 100}%)`,
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    </footer>
+  );
+};

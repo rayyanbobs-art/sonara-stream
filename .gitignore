@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Rust build artifacts
+src-tauri/target/
+target/
+
+# Frontend build output
+dist/
+
+# Large sidecar binaries (distributed via releases)
+src-tauri/binaries/
+
+# Cloned reference repo
+sonara-0.3.1/
+
+# Release assets
+release_assets/
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/

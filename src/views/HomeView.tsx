@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import { Play, Pause, Flame, Radio } from "lucide-react";
 import { Track } from "../types";
 
@@ -7,6 +7,7 @@ interface HomeViewProps {
   currentTrack: Track | null;
   isPlaying: boolean;
   onPlayTrack: (track: Track) => void;
+  onPrefetchTrack?: (track: Track) => void;
   onVibeClick: (genre: string) => void;
   loading: boolean;
 }
@@ -23,6 +24,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   currentTrack,
   isPlaying,
   onPlayTrack,
+  onPrefetchTrack,
   onVibeClick,
   loading,
 }) => {
@@ -81,6 +83,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               key={track.id}
               className={`track-card ${isCurrent ? "current" : ""}`}
               onClick={() => onPlayTrack(track)}
+              onMouseEnter={() => onPrefetchTrack?.(track)}
             >
               <div className="card-thumb-wrap">
                 <img src={track.thumbnail} alt={track.title} className="card-thumb" />

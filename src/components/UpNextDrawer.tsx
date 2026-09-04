@@ -8,6 +8,7 @@ interface UpNextDrawerProps {
   currentTrack: Track | null;
   upNextTracks: Track[];
   onPlayTrack: (track: Track) => void;
+  onPrefetchTrack?: (track: Track) => void;
   isPlaying: boolean;
 }
 
@@ -24,6 +25,7 @@ export const UpNextDrawer: React.FC<UpNextDrawerProps> = ({
   currentTrack,
   upNextTracks,
   onPlayTrack,
+  onPrefetchTrack,
   isPlaying,
 }) => {
   if (!isOpen) return null;
@@ -66,6 +68,7 @@ export const UpNextDrawer: React.FC<UpNextDrawerProps> = ({
                     key={`${track.id}-${idx}`}
                     className={`upnext-track-row ${isCurrent ? "current" : ""}`}
                     onClick={() => onPlayTrack(track)}
+                    onMouseEnter={() => onPrefetchTrack?.(track)}
                   >
                     <div className="upnext-row-left">
                       <span className="upnext-row-index">

@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import { Play, Pause, Music, Heart, Clock } from "lucide-react";
 import { Track } from "../types";
 
@@ -7,6 +7,7 @@ interface SongsViewProps {
   currentTrack: Track | null;
   isPlaying: boolean;
   onPlayTrack: (track: Track) => void;
+  onPrefetchTrack?: (track: Track) => void;
   onToggleFavorite: (track: Track) => void;
   isFavorite: (id: string) => boolean;
   onBrowse: () => void;
@@ -24,6 +25,7 @@ export const SongsView: React.FC<SongsViewProps> = ({
   currentTrack,
   isPlaying,
   onPlayTrack,
+  onPrefetchTrack,
   onToggleFavorite,
   isFavorite,
   onBrowse,
@@ -72,6 +74,7 @@ export const SongsView: React.FC<SongsViewProps> = ({
                   key={track.id}
                   className={`table-row ${isCurrent ? "current" : ""}`}
                   onClick={() => onPlayTrack(track)}
+                  onMouseEnter={() => onPrefetchTrack?.(track)}
                 >
                   <td className="row-index">
                     <span className="index-num">{index + 1}</span>

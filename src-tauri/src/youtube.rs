@@ -13,6 +13,7 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 static STREAM_CACHE: OnceLock<Mutex<HashMap<String, (String, Instant)>>> = OnceLock::new();
 static SEARCH_CACHE: OnceLock<Mutex<HashMap<String, (Vec<Track>, Instant)>>> = OnceLock::new();
+static IN_FLIGHT: OnceLock<Mutex<HashMap<String, tokio::sync::broadcast::Sender<Result<String, String>>>>> = OnceLock::new();
 
 fn get_stream_cache() -> &'static Mutex<HashMap<String, (String, Instant)>> {
     STREAM_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
@@ -20,6 +21,10 @@ fn get_stream_cache() -> &'static Mutex<HashMap<String, (String, Instant)>> {
 
 fn get_search_cache() -> &'static Mutex<HashMap<String, (Vec<Track>, Instant)>> {
     SEARCH_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn get_in_flight() -> &'static Mutex<HashMap<String, tokio::sync::broadcast::Sender<Result<String, String>>>> {
+    IN_FLIGHT.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -422,14 +427,33 @@ pub async fn get_stream_url(id: String) -> Result<String, String> {
         }
     }
 
-    tokio::task::spawn_blocking(move || {
-        let binary = get_ytdlp_path();
-        let video_url = if clean_id.starts_with("search:") {
-            format!("ytsearch1:{}", &clean_id[7..])
-        } else if clean_id.starts_with("http") {
-            clean_id.clone()
+    // Check if another async task is already resolving this exact ID
+    let mut rx = {
+        let mut flight_guard = get_in_flight().lock().unwrap();
+        if let Some(tx) = flight_guard.get(&clean_id) {
+            Some(tx.subscribe())
         } else {
-            format!("https://www.youtube.com/watch?v={}", clean_id)
+            let (tx, _) = tokio::sync::broadcast::channel(2);
+            flight_guard.insert(clean_id.clone(), tx);
+            None
+        }
+    };
+
+    if let Some(ref mut receiver) = rx {
+        if let Ok(res) = receiver.recv().await {
+            return res;
+        }
+    }
+
+    let id_clone = clean_id.clone();
+    let result: Result<String, String> = tokio::task::spawn_blocking(move || {
+        let binary = get_ytdlp_path();
+        let video_url = if id_clone.starts_with("search:") {
+            format!("ytsearch1:{}", &id_clone[7..])
+        } else if id_clone.starts_with("http") {
+            id_clone.clone()
+        } else {
+            format!("https://www.youtube.com/watch?v={}", id_clone)
         };
 
         let mut cmd = Command::new(&binary);
@@ -440,14 +464,17 @@ pub async fn get_stream_url(id: String) -> Result<String, String> {
             .args([
                 &video_url,
                 "-f",
-                "ba/b",
+                "18/ba/b",
                 "--get-url",
                 "--no-playlist",
                 "--skip-download",
                 "--no-warnings",
                 "--no-check-certificates",
+                "--no-cache-dir",
+                "--socket-timeout",
+                "4",
                 "--extractor-args",
-                "youtube:player_client=android",
+                "youtube:player_client=android;player_skip=webpage,configs",
             ])
             .output()
             .map_err(|e| format!("Failed to resolve stream URL: {}", e))?;
@@ -463,11 +490,20 @@ pub async fn get_stream_url(id: String) -> Result<String, String> {
         }
 
         if let Ok(mut guard) = get_stream_cache().lock() {
-            guard.insert(clean_id, (url.clone(), Instant::now()));
+            guard.insert(id_clone, (url.clone(), Instant::now()));
         }
 
         Ok(url)
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?;
+
+    // Broadcast result to any pending waiters and remove from in-flight
+    if let Ok(mut flight_guard) = get_in_flight().lock() {
+        if let Some(tx) = flight_guard.remove(&clean_id) {
+            let _ = tx.send(result.clone());
+        }
+    }
+
+    result
 }

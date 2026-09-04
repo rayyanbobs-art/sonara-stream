@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import { Music, Play, Pause, Heart } from "lucide-react";
 import { Track } from "../types";
 
@@ -7,6 +7,7 @@ interface FavoritesViewProps {
   currentTrack: Track | null;
   isPlaying: boolean;
   onPlayTrack: (track: Track) => void;
+  onPrefetchTrack?: (track: Track) => void;
   onToggleFavorite: (track: Track) => void;
   onBrowse: () => void;
 }
@@ -23,6 +24,7 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
   currentTrack,
   isPlaying,
   onPlayTrack,
+  onPrefetchTrack,
   onToggleFavorite,
   onBrowse,
 }) => {
@@ -69,6 +71,7 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
                   key={track.id}
                   className={`table-row ${isCurrent ? "current" : ""}`}
                   onClick={() => onPlayTrack(track)}
+                  onMouseEnter={() => onPrefetchTrack?.(track)}
                 >
                   <td className="row-index">
                     <span className="index-num">{index + 1}</span>

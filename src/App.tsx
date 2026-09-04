@@ -53,11 +53,19 @@ export default function App() {
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const preloadAudioRef = useRef<HTMLAudioElement | null>(null);
+  const preloadTrackRef = useRef<Track | null>(null);
+  const prefetchedIds = useRef<Set<string>>(new Set());
 
   // Mutable refs to prevent stale closure bugs in audio events
   const handleNextRef = useRef<() => void>(() => {});
   const handleTogglePlayRef = useRef<() => void>(() => {});
   const handlePrevRef = useRef<() => void>(() => {});
+
+  const handlePrefetchTrack = (track: Track) => {
+    if (!track.id || prefetchedIds.current.has(track.id)) return;
+    prefetchedIds.current.add(track.id);
+    invoke("get_stream_url", { id: track.id }).catch(() => {});
+  };
 
   // Sync accent color to document
   useEffect(() => {
@@ -170,10 +178,12 @@ export default function App() {
 
         // Predictive zero-latency pre-fetching for top tracks
         if (formatted.length > 0) {
-          invoke("get_stream_url", { id: formatted[0].id }).catch(() => {});
-          if (formatted.length > 1) {
-            invoke("get_stream_url", { id: formatted[1].id }).catch(() => {});
-          }
+          formatted.slice(0, 6).forEach((t) => {
+            if (!prefetchedIds.current.has(t.id)) {
+              prefetchedIds.current.add(t.id);
+              invoke("get_stream_url", { id: t.id }).catch(() => {});
+            }
+          });
         }
       }
     } catch (err: any) {
@@ -197,8 +207,20 @@ export default function App() {
     setErrorMessage(null);
 
     try {
-      const streamUrl: string = await invoke("get_stream_url", { id: track.id });
-      audioRef.current.src = streamUrl;
+      let streamUrl: string;
+      // If preloadAudioRef has this exact track buffered already, reuse it immediately for zero-wait play!
+      if (
+        preloadAudioRef.current &&
+        preloadAudioRef.current.src &&
+        preloadTrackRef.current?.id === track.id
+      ) {
+        streamUrl = preloadAudioRef.current.src;
+        audioRef.current.src = streamUrl;
+      } else {
+        streamUrl = await invoke("get_stream_url", { id: track.id });
+        audioRef.current.src = streamUrl;
+      }
+
       audioRef.current.currentTime = 0;
       await audioRef.current.play();
       setIsPlaying(true);
@@ -209,12 +231,23 @@ export default function App() {
         .then((mix: any) => {
           if (Array.isArray(mix) && mix.length > 0) {
             setUpNextMix(mix);
-            // Lookahead pre-fetch the 1st song of the genre mix
-            invoke("get_stream_url", { id: mix[0].id }).then((nextUrl) => {
-              if (preloadAudioRef.current && typeof nextUrl === "string") {
-                preloadAudioRef.current.src = nextUrl;
+            // Pre-fetch the first 3 songs of the mix immediately in the background
+            mix.slice(0, 3).forEach((mTrack: Track) => {
+              if (!prefetchedIds.current.has(mTrack.id)) {
+                prefetchedIds.current.add(mTrack.id);
+                invoke("get_stream_url", { id: mTrack.id }).catch(() => {});
               }
-            }).catch(() => {});
+            });
+
+            // Pre-buffer the 1st song of the genre mix into preload audio element
+            invoke("get_stream_url", { id: mix[0].id })
+              .then((nextUrl) => {
+                if (preloadAudioRef.current && typeof nextUrl === "string") {
+                  preloadAudioRef.current.src = nextUrl;
+                  preloadTrackRef.current = mix[0];
+                }
+              })
+              .catch(() => {});
           }
         })
         .catch((err) => console.error("Genre mix error:", err));
@@ -224,10 +257,12 @@ export default function App() {
       const currIdx = list.findIndex((t) => t.id === track.id);
       if (currIdx !== -1 && list.length > 1) {
         const nextTrack = list[(currIdx + 1) % list.length];
-        if (nextTrack) {
+        if (nextTrack && !prefetchedIds.current.has(nextTrack.id)) {
+          prefetchedIds.current.add(nextTrack.id);
           invoke("get_stream_url", { id: nextTrack.id }).then((nextUrl) => {
             if (preloadAudioRef.current && typeof nextUrl === "string") {
               preloadAudioRef.current.src = nextUrl;
+              preloadTrackRef.current = nextTrack;
             }
           }).catch(() => {});
         }
@@ -441,6 +476,7 @@ export default function App() {
               currentTrack={currentTrack}
               isPlaying={isPlaying}
               onPlayTrack={handlePlayTrack}
+              onPrefetchTrack={handlePrefetchTrack}
               onVibeClick={(vibe) => {
                 setSearchQuery(vibe);
                 performSearch(vibe, "youtube");
@@ -455,6 +491,7 @@ export default function App() {
               currentTrack={currentTrack}
               isPlaying={isPlaying}
               onPlayTrack={handlePlayTrack}
+              onPrefetchTrack={handlePrefetchTrack}
               onToggleFavorite={toggleFavorite}
               isFavorite={isFavorite}
               onBrowse={() => {
@@ -470,6 +507,7 @@ export default function App() {
               currentTrack={currentTrack}
               isPlaying={isPlaying}
               onPlayTrack={handlePlayTrack}
+              onPrefetchTrack={handlePrefetchTrack}
               onToggleFavorite={toggleFavorite}
               isFavorite={isFavorite}
               onBrowse={() => setActiveTab("home")}
@@ -482,6 +520,7 @@ export default function App() {
               currentTrack={currentTrack}
               isPlaying={isPlaying}
               onPlayTrack={handlePlayTrack}
+              onPrefetchTrack={handlePrefetchTrack}
               onToggleFavorite={toggleFavorite}
               onBrowse={() => setActiveTab("home")}
             />
@@ -531,6 +570,7 @@ export default function App() {
           handlePlayTrack(track);
           setUpNextMix((prev) => prev.filter((t) => t.id !== track.id));
         }}
+        onPrefetchTrack={handlePrefetchTrack}
         isPlaying={isPlaying}
       />
     </div>

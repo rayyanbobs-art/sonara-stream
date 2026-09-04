@@ -4,6 +4,7 @@ import { AlertCircle } from "lucide-react";
 import { Sidebar } from "./components/Sidebar";
 import { Header } from "./components/Header";
 import { Player } from "./components/Player";
+import { UpNextDrawer } from "./components/UpNextDrawer";
 import { HomeView } from "./views/HomeView";
 import { SongsView } from "./views/SongsView";
 import { FavoritesView } from "./views/FavoritesView";
@@ -27,6 +28,8 @@ export default function App() {
   });
 
   const [tracks, setTracks] = useState<Track[]>([]);
+  const [upNextMix, setUpNextMix] = useState<Track[]>([]);
+  const [isQueueOpen, setIsQueueOpen] = useState(false);
   const [favorites, setFavorites] = useState<Track[]>(() => {
     try {
       const saved = localStorage.getItem("sonara_favorites");
@@ -201,6 +204,21 @@ export default function App() {
       setIsPlaying(true);
       setDuration(track.duration || 0);
 
+      // Fetch dynamic genre radio mix for this song
+      invoke("get_genre_mix", { artist: track.artist, title: track.title })
+        .then((mix: any) => {
+          if (Array.isArray(mix) && mix.length > 0) {
+            setUpNextMix(mix);
+            // Lookahead pre-fetch the 1st song of the genre mix
+            invoke("get_stream_url", { id: mix[0].id }).then((nextUrl) => {
+              if (preloadAudioRef.current && typeof nextUrl === "string") {
+                preloadAudioRef.current.src = nextUrl;
+              }
+            }).catch(() => {});
+          }
+        })
+        .catch((err) => console.error("Genre mix error:", err));
+
       // Speculatively pre-fetch and buffer the next track in background
       const list = activeTab === "favorites" ? favorites : tracks;
       const currIdx = list.findIndex((t) => t.id === track.id);
@@ -275,6 +293,29 @@ export default function App() {
   };
 
   const handleNext = async () => {
+    // 1. YouTube Music-style Genre Autoplay: Prioritize upcoming tracks from the genre mix
+    if (activeTab !== "favorites" && upNextMix.length > 0) {
+      let candidateIdx = -1;
+      if (isShuffle) {
+        const candidates = upNextMix
+          .map((t, idx) => ({ t, idx }))
+          .filter(({ t }) => !isSameSong(t, currentTrack!));
+        if (candidates.length > 0) {
+          const rand = Math.floor(Math.random() * candidates.length);
+          candidateIdx = candidates[rand].idx;
+        }
+      } else {
+        candidateIdx = upNextMix.findIndex((t) => !isSameSong(t, currentTrack!));
+      }
+
+      if (candidateIdx !== -1) {
+        const nextTrack = upNextMix[candidateIdx];
+        setUpNextMix((prev) => prev.filter((_, idx) => idx !== candidateIdx));
+        handlePlayTrack(nextTrack);
+        return;
+      }
+    }
+
     const list = activeTab === "favorites" ? favorites : tracks;
     if (!currentTrack || list.length === 0) return;
 
@@ -476,6 +517,21 @@ export default function App() {
         onPrev={handlePrev}
         onToggleShuffle={() => setIsShuffle((prev) => !prev)}
         onToggleFavorite={() => currentTrack && toggleFavorite(currentTrack)}
+        onToggleQueue={() => setIsQueueOpen((prev) => !prev)}
+        isQueueOpen={isQueueOpen}
+      />
+
+      {/* Up Next Genre Mix Drawer */}
+      <UpNextDrawer
+        isOpen={isQueueOpen}
+        onClose={() => setIsQueueOpen(false)}
+        currentTrack={currentTrack}
+        upNextTracks={upNextMix}
+        onPlayTrack={(track) => {
+          handlePlayTrack(track);
+          setUpNextMix((prev) => prev.filter((t) => t.id !== track.id));
+        }}
+        isPlaying={isPlaying}
       />
     </div>
   );

@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import {
   Play,
   Pause,
@@ -10,6 +10,7 @@ import {
   VolumeX,
   Heart,
   Radio,
+  ListMusic,
 } from "lucide-react";
 import { Track } from "../types";
 
@@ -29,6 +30,8 @@ interface PlayerProps {
   onPrev: () => void;
   onToggleShuffle: () => void;
   onToggleFavorite: () => void;
+  onToggleQueue?: () => void;
+  isQueueOpen?: boolean;
 }
 
 const formatTime = (secs: number): string => {
@@ -54,6 +57,8 @@ export const Player: React.FC<PlayerProps> = ({
   onPrev,
   onToggleShuffle,
   onToggleFavorite,
+  onToggleQueue,
+  isQueueOpen,
 }) => {
   const [prevVol, setPrevVol] = useState(volume || 0.85);
 
@@ -182,13 +187,24 @@ export const Player: React.FC<PlayerProps> = ({
           </div>
         </div>
 
-        {/* Right: Streaming Status & Volume */}
+        {/* Right: Streaming Status, Up Next Queue & Volume */}
         <div className="player-right">
           {currentTrack && (
             <div className={`player-stream-chip ${isBuffering ? "buffering" : "live"}`}>
               <Radio size={12} className={isBuffering ? "pulse-anim" : ""} />
               <span>{isBuffering ? "Buffering" : "Streaming"}</span>
             </div>
+          )}
+
+          {currentTrack && onToggleQueue && (
+            <button
+              type="button"
+              className={`ctrl-icon-btn ${isQueueOpen ? "active" : ""}`}
+              onClick={onToggleQueue}
+              title="Up Next (Genre Radio Mix)"
+            >
+              <ListMusic size={18} />
+            </button>
           )}
 
           <div className="player-vol-wrapper">

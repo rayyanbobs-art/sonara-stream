@@ -10,6 +10,7 @@ fn main() {
             youtube::get_stream_url,
             youtube::get_search_suggestions,
             youtube::get_related_tracks,
+            youtube::get_genre_mix,
             spotify::resolve_spotify_track,
         ])
         .run(tauri::generate_context!())

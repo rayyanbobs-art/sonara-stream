@@ -304,6 +304,113 @@ pub async fn get_related_tracks(artist: String, title: String) -> Result<Vec<Tra
     .map_err(|e| e.to_string())?
 }
 
+#[derive(Debug, Deserialize)]
+struct ITunesSong {
+    #[serde(rename = "trackName")]
+    track_name: Option<String>,
+    #[serde(rename = "artistName")]
+    artist_name: Option<String>,
+    #[serde(rename = "artworkUrl100")]
+    artwork_url: Option<String>,
+    #[serde(rename = "trackTimeMillis")]
+    track_time_millis: Option<u64>,
+    #[serde(rename = "primaryGenreName")]
+    primary_genre_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ITunesResponse {
+    results: Vec<ITunesSong>,
+}
+
+#[tauri::command]
+pub async fn get_genre_mix(artist: String, title: String) -> Result<Vec<Track>, String> {
+    let clean_artist = artist.trim();
+    let clean_title = title.trim();
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_millis(3500))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let search_term = if !clean_artist.is_empty() && clean_artist != "Unknown Artist" {
+        format!("{} {}", clean_artist, clean_title)
+    } else {
+        clean_title.to_string()
+    };
+
+    let itunes_url = format!(
+        "https://itunes.apple.com/search?term={}&entity=song&limit=6",
+        urlencoding::encode(&search_term)
+    );
+
+    let mut mix_tracks: Vec<Track> = Vec::new();
+    let mut seen_sigs = std::collections::HashSet::new();
+    seen_sigs.insert(get_title_signature(clean_title, clean_artist));
+
+    let mut detected_genre = "Alternative".to_string();
+
+    if let Ok(res) = client.get(&itunes_url).send().await {
+        if let Ok(data) = res.json::<ITunesResponse>().await {
+            for s in data.results {
+                if let (Some(t_name), Some(a_name)) = (s.track_name, s.artist_name) {
+                    if let Some(g) = s.primary_genre_name {
+                        detected_genre = g;
+                    }
+                    let sig = get_title_signature(&t_name, &a_name);
+                    if !sig.is_empty() && !seen_sigs.contains(&sig) {
+                        seen_sigs.insert(sig);
+                        let duration = s.track_time_millis.map(|ms| ms / 1000).unwrap_or(210);
+                        let thumb = s.artwork_url.unwrap_or_default().replace("100x100", "600x600");
+                        mix_tracks.push(Track {
+                            id: format!("search:{} - {}", a_name, t_name),
+                            title: t_name,
+                            artist: a_name,
+                            duration,
+                            thumbnail: thumb,
+                            source: "youtube".into(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // Fetch iconic similar tracks from that exact genre
+    let genre_url = format!(
+        "https://itunes.apple.com/search?term={}+hits&entity=song&limit=15",
+        urlencoding::encode(&detected_genre)
+    );
+
+    if let Ok(res) = client.get(&genre_url).send().await {
+        if let Ok(data) = res.json::<ITunesResponse>().await {
+            for s in data.results {
+                if let (Some(t_name), Some(a_name)) = (s.track_name, s.artist_name) {
+                    let sig = get_title_signature(&t_name, &a_name);
+                    if !sig.is_empty() && !seen_sigs.contains(&sig) {
+                        seen_sigs.insert(sig);
+                        let duration = s.track_time_millis.map(|ms| ms / 1000).unwrap_or(210);
+                        let thumb = s.artwork_url.unwrap_or_default().replace("100x100", "600x600");
+                        mix_tracks.push(Track {
+                            id: format!("search:{} - {}", a_name, t_name),
+                            title: t_name,
+                            artist: a_name,
+                            duration,
+                            thumbnail: thumb,
+                            source: "youtube".into(),
+                        });
+                    }
+                }
+                if mix_tracks.len() >= 15 {
+                    break;
+                }
+            }
+        }
+    }
+
+    Ok(mix_tracks)
+}
+
 #[tauri::command]
 pub async fn get_stream_url(id: String) -> Result<String, String> {
     let clean_id = id.trim().to_string();
@@ -317,7 +424,9 @@ pub async fn get_stream_url(id: String) -> Result<String, String> {
 
     tokio::task::spawn_blocking(move || {
         let binary = get_ytdlp_path();
-        let video_url = if clean_id.starts_with("http") {
+        let video_url = if clean_id.starts_with("search:") {
+            format!("ytsearch1:{}", &clean_id[7..])
+        } else if clean_id.starts_with("http") {
             clean_id.clone()
         } else {
             format!("https://www.youtube.com/watch?v={}", clean_id)

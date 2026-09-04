@@ -381,19 +381,26 @@ pub async fn get_genre_mix(artist: String, title: String) -> Result<Vec<Track>, 
         }
     }
 
-    // Fetch iconic similar tracks from that exact genre
+    // Fetch iconic diverse tracks from that exact genre (max 2 per artist for variety)
     let genre_url = format!(
-        "https://itunes.apple.com/search?term={}+hits&entity=song&limit=15",
+        "https://itunes.apple.com/search?term={}+hits&entity=song&limit=30",
         urlencoding::encode(&detected_genre)
     );
 
     if let Ok(res) = client.get(&genre_url).send().await {
         if let Ok(data) = res.json::<ITunesResponse>().await {
+            let mut artist_count: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
             for s in data.results {
                 if let (Some(t_name), Some(a_name)) = (s.track_name, s.artist_name) {
+                    let a_clean = a_name.trim().to_lowercase();
+                    let count = artist_count.entry(a_clean).or_insert(0);
+                    if *count >= 2 {
+                        continue;
+                    }
                     let sig = get_title_signature(&t_name, &a_name);
                     if !sig.is_empty() && !seen_sigs.contains(&sig) {
                         seen_sigs.insert(sig);
+                        *count += 1;
                         let duration = s.track_time_millis.map(|ms| ms / 1000).unwrap_or(210);
                         let thumb = s.artwork_url.unwrap_or_default().replace("100x100", "600x600");
                         mix_tracks.push(Track {
@@ -406,7 +413,7 @@ pub async fn get_genre_mix(artist: String, title: String) -> Result<Vec<Track>, 
                         });
                     }
                 }
-                if mix_tracks.len() >= 15 {
+                if mix_tracks.len() >= 20 {
                     break;
                 }
             }

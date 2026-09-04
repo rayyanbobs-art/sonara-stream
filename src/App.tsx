@@ -67,6 +67,61 @@ export default function App() {
     invoke("get_stream_url", { id: track.id }).catch(() => {});
   };
 
+  const recentlyPlayedSignatures = useRef<Set<string>>(new Set());
+
+  const getCleanWords = (track: Track): Set<string> => {
+    const combined = `${track.title} ${track.artist}`.toLowerCase();
+    const noise = new Set([
+      "official", "video", "audio", "music", "lyrics", "lyric", "remastered",
+      "remaster", "hd", "hq", "4k", "version", "original", "stem", "edit",
+      "visualizer", "soundtrack", "ost", "theme", "full", "song", "records",
+      "vevo", "channel", "topic", "special", "mix", "extended"
+    ]);
+    const cleaned = combined
+      .replace(/\([^)]*\)/g, " ")
+      .replace(/\[[^\]]*\]/g, " ")
+      .replace(/[^a-z0-9\s]/g, " ");
+    return new Set(
+      cleaned.split(/\s+/).filter((w) => w.length >= 2 && !noise.has(w))
+    );
+  };
+
+  const isSameSong = (a: Track, b: Track): boolean => {
+    if (a.id === b.id) return true;
+    const wordsA = getCleanWords(a);
+    const wordsB = getCleanWords(b);
+    if (wordsA.size === 0 || wordsB.size === 0) return false;
+    let intersection = 0;
+    for (const w of wordsA) {
+      if (wordsB.has(w)) intersection++;
+    }
+    const overlap = intersection / Math.min(wordsA.size, wordsB.size);
+    return overlap >= 0.7;
+  };
+
+  const getSongSignature = (track: Track): string => {
+    const words = Array.from(getCleanWords(track)).sort();
+    return words.join(" ");
+  };
+
+  const isRecentlyPlayed = (track: Track): boolean => {
+    if (recentlyPlayedSignatures.current.has(track.id)) return true;
+    const sig = getSongSignature(track);
+    return sig.length > 0 && recentlyPlayedSignatures.current.has(sig);
+  };
+
+  const markAsPlayed = (track: Track) => {
+    recentlyPlayedSignatures.current.add(track.id);
+    const sig = getSongSignature(track);
+    if (sig.length > 0) {
+      recentlyPlayedSignatures.current.add(sig);
+    }
+    if (recentlyPlayedSignatures.current.size > 100) {
+      const arr = Array.from(recentlyPlayedSignatures.current);
+      recentlyPlayedSignatures.current = new Set(arr.slice(arr.length - 60));
+    }
+  };
+
   // Sync accent color to document
   useEffect(() => {
     document.documentElement.setAttribute("data-accent", accentColor);
@@ -194,7 +249,7 @@ export default function App() {
     }
   };
 
-  const handlePlayTrack = async (track: Track) => {
+  const handlePlayTrack = async (track: Track, preserveQueue = false) => {
     if (!audioRef.current) return;
 
     if (currentTrack?.id === track.id) {
@@ -202,6 +257,7 @@ export default function App() {
       return;
     }
 
+    markAsPlayed(track);
     setCurrentTrack(track);
     setIsBuffering(true);
     setErrorMessage(null);
@@ -226,31 +282,75 @@ export default function App() {
       setIsPlaying(true);
       setDuration(track.duration || 0);
 
-      // Fetch dynamic genre radio mix for this song
-      invoke("get_genre_mix", { artist: track.artist, title: track.title })
-        .then((mix: any) => {
-          if (Array.isArray(mix) && mix.length > 0) {
-            setUpNextMix(mix);
-            // Pre-fetch the first 3 songs of the mix immediately in the background
-            mix.slice(0, 3).forEach((mTrack: Track) => {
-              if (!prefetchedIds.current.has(mTrack.id)) {
-                prefetchedIds.current.add(mTrack.id);
-                invoke("get_stream_url", { id: mTrack.id }).catch(() => {});
-              }
-            });
+      // Only rebuild entire genre mix when clicking a fresh song from Search/Home (preserveQueue is false)
+      if (!preserveQueue) {
+        invoke("get_genre_mix", { artist: track.artist, title: track.title })
+          .then((mix: any) => {
+            if (Array.isArray(mix) && mix.length > 0) {
+              const freshMix = mix.filter(
+                (m: Track) => !isSameSong(m, track) && !isRecentlyPlayed(m)
+              );
+              setUpNextMix(freshMix);
 
-            // Pre-buffer the 1st song of the genre mix into preload audio element
-            invoke("get_stream_url", { id: mix[0].id })
-              .then((nextUrl) => {
-                if (preloadAudioRef.current && typeof nextUrl === "string") {
-                  preloadAudioRef.current.src = nextUrl;
-                  preloadTrackRef.current = mix[0];
+              // Pre-fetch the first 3 songs of the mix immediately in the background
+              freshMix.slice(0, 3).forEach((mTrack: Track) => {
+                if (!prefetchedIds.current.has(mTrack.id)) {
+                  prefetchedIds.current.add(mTrack.id);
+                  invoke("get_stream_url", { id: mTrack.id }).catch(() => {});
+                }
+              });
+
+              // Pre-buffer the 1st song of the genre mix into preload audio element
+              if (freshMix.length > 0) {
+                invoke("get_stream_url", { id: freshMix[0].id })
+                  .then((nextUrl) => {
+                    if (preloadAudioRef.current && typeof nextUrl === "string") {
+                      preloadAudioRef.current.src = nextUrl;
+                      preloadTrackRef.current = freshMix[0];
+                    }
+                  })
+                  .catch(() => {});
+              }
+            }
+          })
+          .catch((err) => console.error("Genre mix error:", err));
+      } else {
+        // preserveQueue is TRUE (auto-advancing): keep queue and top up if low (< 4 tracks)
+        setUpNextMix((currentMix) => {
+          if (currentMix.length < 4) {
+            invoke("get_genre_mix", { artist: track.artist, title: track.title })
+              .then((moreMix: any) => {
+                if (Array.isArray(moreMix) && moreMix.length > 0) {
+                  setUpNextMix((prev) => {
+                    const existingIds = new Set(prev.map((t) => t.id));
+                    const newItems = moreMix.filter(
+                      (m: Track) =>
+                        !existingIds.has(m.id) &&
+                        !isSameSong(m, track) &&
+                        !isRecentlyPlayed(m)
+                    );
+                    return [...prev, ...newItems];
+                  });
                 }
               })
               .catch(() => {});
           }
-        })
-        .catch((err) => console.error("Genre mix error:", err));
+
+          if (currentMix.length > 0) {
+            const nextCandidate = currentMix[0];
+            invoke("get_stream_url", { id: nextCandidate.id })
+              .then((nextUrl) => {
+                if (preloadAudioRef.current && typeof nextUrl === "string") {
+                  preloadAudioRef.current.src = nextUrl;
+                  preloadTrackRef.current = nextCandidate;
+                }
+              })
+              .catch(() => {});
+          }
+
+          return currentMix;
+        });
+      }
 
       // Speculatively pre-fetch and buffer the next track in background
       const list = activeTab === "favorites" ? favorites : tracks;
@@ -297,91 +397,72 @@ export default function App() {
     }
   };
 
-  const getCleanWords = (track: Track): Set<string> => {
-    const combined = `${track.title} ${track.artist}`.toLowerCase();
-    const noise = new Set([
-      "official", "video", "audio", "music", "lyrics", "lyric", "remastered",
-      "remaster", "hd", "hq", "4k", "version", "original", "stem", "edit",
-      "visualizer", "soundtrack", "ost", "theme", "full", "song", "records",
-      "vevo", "channel", "topic", "special", "mix", "extended"
-    ]);
-    const cleaned = combined
-      .replace(/\([^)]*\)/g, " ")
-      .replace(/\[[^\]]*\]/g, " ")
-      .replace(/[^a-z0-9\s]/g, " ");
-    return new Set(
-      cleaned.split(/\s+/).filter((w) => w.length >= 2 && !noise.has(w))
-    );
-  };
-
-  const isSameSong = (a: Track, b: Track): boolean => {
-    if (a.id === b.id) return true;
-    const wordsA = getCleanWords(a);
-    const wordsB = getCleanWords(b);
-    if (wordsA.size === 0 || wordsB.size === 0) return false;
-    let intersection = 0;
-    for (const w of wordsA) {
-      if (wordsB.has(w)) intersection++;
-    }
-    const overlap = intersection / Math.min(wordsA.size, wordsB.size);
-    return overlap >= 0.7;
-  };
-
   const handleNext = async () => {
+    if (!currentTrack) return;
+
     // 1. YouTube Music-style Genre Autoplay: Prioritize upcoming tracks from the genre mix
     if (activeTab !== "favorites" && upNextMix.length > 0) {
       let candidateIdx = -1;
       if (isShuffle) {
         const candidates = upNextMix
           .map((t, idx) => ({ t, idx }))
-          .filter(({ t }) => !isSameSong(t, currentTrack!));
+          .filter(({ t }) => !isSameSong(t, currentTrack) && !isRecentlyPlayed(t));
         if (candidates.length > 0) {
           const rand = Math.floor(Math.random() * candidates.length);
           candidateIdx = candidates[rand].idx;
         }
       } else {
-        candidateIdx = upNextMix.findIndex((t) => !isSameSong(t, currentTrack!));
+        candidateIdx = upNextMix.findIndex(
+          (t) => !isSameSong(t, currentTrack) && !isRecentlyPlayed(t)
+        );
+      }
+
+      // If all tracks were marked as recently played, take any track that is not the same song
+      if (candidateIdx === -1) {
+        candidateIdx = upNextMix.findIndex((t) => !isSameSong(t, currentTrack));
       }
 
       if (candidateIdx !== -1) {
         const nextTrack = upNextMix[candidateIdx];
-        setUpNextMix((prev) => prev.filter((_, idx) => idx !== candidateIdx));
-        handlePlayTrack(nextTrack);
+        // Advance queue: drop this track and any skipped before it
+        setUpNextMix((prev) => prev.filter((_, idx) => idx > candidateIdx));
+        handlePlayTrack(nextTrack, true /* PRESERVE QUEUE! */);
         return;
       }
     }
 
     const list = activeTab === "favorites" ? favorites : tracks;
-    if (!currentTrack || list.length === 0) return;
+    if (list.length > 0) {
+      if (isShuffle) {
+        const candidateTracks = list.filter(
+          (t) => !isSameSong(t, currentTrack) && !isRecentlyPlayed(t)
+        );
+        if (candidateTracks.length > 0) {
+          const rand = Math.floor(Math.random() * candidateTracks.length);
+          handlePlayTrack(candidateTracks[rand], true);
+          return;
+        }
+      }
 
-    if (isShuffle) {
-      const candidateTracks = list.filter((t) => !isSameSong(t, currentTrack));
-      if (candidateTracks.length > 0) {
-        const rand = Math.floor(Math.random() * candidateTracks.length);
-        handlePlayTrack(candidateTracks[rand]);
+      // Sequential: pick next distinct unplayed track
+      const currIdx = list.findIndex((t) => t.id === currentTrack.id);
+      let nextTrack: Track | null = null;
+
+      for (let i = 1; i < list.length; i++) {
+        const candidate = list[(currIdx + i) % list.length];
+        if (!isSameSong(candidate, currentTrack) && !isRecentlyPlayed(candidate)) {
+          nextTrack = candidate;
+          break;
+        }
+      }
+
+      if (nextTrack) {
+        handlePlayTrack(nextTrack, true);
         return;
       }
     }
 
-    // Sequential: pick next distinct track (skip any duplicate upload)
-    const currIdx = list.findIndex((t) => t.id === currentTrack.id);
-    let nextTrack: Track | null = null;
-
-    for (let i = 1; i < list.length; i++) {
-      const candidate = list[(currIdx + i) % list.length];
-      if (!isSameSong(candidate, currentTrack)) {
-        nextTrack = candidate;
-        break;
-      }
-    }
-
-    if (nextTrack) {
-      handlePlayTrack(nextTrack);
-      return;
-    }
-
-    // Smart Continuous Radio Autoplay:
-    // If all remaining tracks are duplicates or queue reached end, fetch new related songs!
+    // 3. Queue / Playlist exhausted: Fetch FRESH never-before-played related tracks!
     try {
       setIsBuffering(true);
       const related: Track[] = await invoke("get_related_tracks", {
@@ -389,19 +470,28 @@ export default function App() {
         title: currentTrack.title,
       });
 
-      const freshTracks = related.filter((r) => !isSameSong(r, currentTrack));
+      const freshTracks = related.filter(
+        (r) => !isSameSong(r, currentTrack) && !isRecentlyPlayed(r)
+      );
       if (freshTracks.length > 0) {
-        setTracks((prev) => [...prev, ...freshTracks]);
-        handlePlayTrack(freshTracks[0]);
+        const next = freshTracks[0];
+        setUpNextMix(freshTracks.slice(1));
+        handlePlayTrack(next, true);
         return;
       }
     } catch (err) {
       console.error("Autoplay radio error:", err);
     }
 
-    // Fallback: pick the next item
-    const nextIdx = (currIdx + 1) % list.length;
-    handlePlayTrack(list[nextIdx]);
+    // 4. Fallback: pick any track from list that is not the same song
+    const fallbackList = activeTab === "favorites" ? favorites : tracks;
+    if (fallbackList.length > 1) {
+      const candidate = fallbackList.find((t) => !isSameSong(t, currentTrack));
+      if (candidate) {
+        handlePlayTrack(candidate, true);
+        return;
+      }
+    }
   };
 
   const handlePrev = () => {
@@ -409,7 +499,7 @@ export default function App() {
     if (!currentTrack || list.length === 0) return;
     const idx = list.findIndex((t) => t.id === currentTrack.id);
     const prevIdx = (idx - 1 + list.length) % list.length;
-    handlePlayTrack(list[prevIdx]);
+    handlePlayTrack(list[prevIdx], false);
   };
 
   // Keep refs synchronized on every render

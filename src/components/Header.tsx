@@ -92,7 +92,13 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="sonara-header">
       <div className="header-left">
-        <button type="button" className="header-nav-btn" onClick={onBack} title="Go Back">
+        <button
+          type="button"
+          className="header-nav-btn"
+          onClick={onBack}
+          title="Go Back"
+          aria-label="Go Back"
+        >
           <ChevronLeft size={18} />
         </button>
 
@@ -112,6 +118,7 @@ export const Header: React.FC<HeaderProps> = ({
                   ? "Search Spotify track or paste link..."
                   : "Search songs, artists, albums..."
               }
+              aria-label="Search"
               className="header-search-input"
             />
             {loading && <Loader2 size={16} className="spinner header-spinner" />}
@@ -148,6 +155,8 @@ export const Header: React.FC<HeaderProps> = ({
             type="button"
             className={`source-chip yt ${source === "youtube" ? "active" : ""}`}
             onClick={() => onSourceChange("youtube")}
+            aria-pressed={source === "youtube"}
+            aria-label="Source: YouTube"
           >
             <Youtube size={14} />
             <span>YouTube</span>
@@ -156,6 +165,8 @@ export const Header: React.FC<HeaderProps> = ({
             type="button"
             className={`source-chip sp ${source === "spotify" ? "active" : ""}`}
             onClick={() => onSourceChange("spotify")}
+            aria-pressed={source === "spotify"}
+            aria-label="Source: Spotify"
           >
             <Music2 size={14} />
             <span>Spotify</span>

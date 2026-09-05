@@ -96,6 +96,8 @@ export const Player: React.FC<PlayerProps> = ({
                 className={`player-fav-btn ${isFavorite ? "fav" : ""}`}
                 onClick={onToggleFavorite}
                 title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+                aria-label={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+                aria-pressed={isFavorite}
               >
                 <Heart size={16} fill={isFavorite ? "currentColor" : "none"} />
               </button>
@@ -118,6 +120,8 @@ export const Player: React.FC<PlayerProps> = ({
               className={`ctrl-icon-btn ${isShuffle ? "active" : ""}`}
               onClick={onToggleShuffle}
               title="Shuffle"
+              aria-label="Toggle shuffle"
+              aria-pressed={isShuffle}
             >
               <Shuffle size={15} />
             </button>
@@ -128,6 +132,7 @@ export const Player: React.FC<PlayerProps> = ({
               onClick={onPrev}
               disabled={!currentTrack}
               title="Previous"
+              aria-label="Previous track"
             >
               <SkipBack size={18} />
             </button>
@@ -138,6 +143,7 @@ export const Player: React.FC<PlayerProps> = ({
               onClick={onTogglePlay}
               disabled={!currentTrack}
               title={isPlaying ? "Pause" : "Play"}
+              aria-label={isPlaying ? "Pause" : "Play"}
             >
               {isBuffering ? (
                 <div className="player-buffer-spinner" />
@@ -154,6 +160,7 @@ export const Player: React.FC<PlayerProps> = ({
               onClick={onNext}
               disabled={!currentTrack}
               title="Next"
+              aria-label="Next track"
             >
               <SkipForward size={18} />
             </button>
@@ -162,6 +169,7 @@ export const Player: React.FC<PlayerProps> = ({
               type="button"
               className="ctrl-icon-btn"
               title="Repeat"
+              aria-label="Repeat"
             >
               <Repeat size={15} />
             </button>
@@ -178,6 +186,7 @@ export const Player: React.FC<PlayerProps> = ({
                 value={currentTime}
                 onChange={(e) => onSeek(parseFloat(e.target.value))}
                 className="player-progress-slider"
+                aria-label="Seek track position"
                 style={{
                   background: `linear-gradient(to right, var(--accent) ${progressPercent}%, rgba(255,255,255,0.15) ${progressPercent}%)`,
                 }}
@@ -202,13 +211,20 @@ export const Player: React.FC<PlayerProps> = ({
               className={`ctrl-icon-btn ${isQueueOpen ? "active" : ""}`}
               onClick={onToggleQueue}
               title="Up Next (Genre Radio Mix)"
+              aria-label="Up Next queue"
+              aria-pressed={isQueueOpen}
             >
               <ListMusic size={18} />
             </button>
           )}
 
           <div className="player-vol-wrapper">
-            <button type="button" className="vol-toggle-btn" onClick={toggleMute}>
+            <button
+              type="button"
+              className="vol-toggle-btn"
+              onClick={toggleMute}
+              aria-label={volume === 0 ? "Unmute volume" : "Mute volume"}
+            >
               {volume === 0 ? <VolumeX size={17} /> : <Volume2 size={17} />}
             </button>
             <input
@@ -219,6 +235,7 @@ export const Player: React.FC<PlayerProps> = ({
               value={volume}
               onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
               className="player-vol-slider"
+              aria-label="Volume level"
               style={{
                 background: `linear-gradient(to right, var(--accent) ${volume * 100}%, rgba(255,255,255,0.15) ${volume * 100}%)`,
               }}

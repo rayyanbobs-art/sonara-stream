@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Track, NavTab } from "../types";
 import { isSameSong } from "../utils/trackSignature";
@@ -93,8 +93,8 @@ export function useQueue({
   const updateQueueForTrack = useCallback((track: Track, preserveQueue: boolean) => {
     // Only rebuild entire genre mix when clicking a fresh song from Search/Home (preserveQueue is false)
     if (!preserveQueue) {
-      invoke("get_genre_mix", { artist: track.artist, title: track.title })
-        .then((mix: any) => {
+      invoke<Track[]>("get_genre_mix", { artist: track.artist, title: track.title })
+        .then((mix: Track[]) => {
           if (Array.isArray(mix) && mix.length > 0) {
             const freshMix = mix.filter(
               (m: Track) => !isSameSong(m, track) && !isRecentlyPlayed(m)
@@ -129,8 +129,8 @@ export function useQueue({
       // preserveQueue is TRUE (auto-advancing): keep queue and top up if low (< 4 tracks)
       setUpNextMix((currentMix) => {
         if (currentMix.length < 4) {
-          invoke("get_genre_mix", { artist: track.artist, title: track.title })
-            .then((moreMix: any) => {
+          invoke<Track[]>("get_genre_mix", { artist: track.artist, title: track.title })
+            .then((moreMix: Track[]) => {
               if (Array.isArray(moreMix) && moreMix.length > 0) {
                 setUpNextMix((prev) => {
                   const existingIds = new Set(prev.map((t) => t.id));

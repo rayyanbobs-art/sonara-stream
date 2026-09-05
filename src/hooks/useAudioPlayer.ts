@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Track } from "../types";
 
@@ -192,7 +192,7 @@ export function useAudioPlayer(options: UseAudioPlayerOptions = {}) {
       await audioRef.current.play();
       setIsPlaying(true);
       setDuration(track.duration || 0);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Playback error:", err);
       setIsBuffering(false);
       setIsPlaying(false);

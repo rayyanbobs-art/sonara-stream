@@ -121,7 +121,7 @@ export default function App() {
           });
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       setErrorMessage(typeof err === "string" ? err : "Failed to load music. Check internet.");
     } finally {

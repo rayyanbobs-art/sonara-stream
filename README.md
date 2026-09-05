@@ -55,12 +55,12 @@ See the full [CHANGELOG.md](./CHANGELOG.md) for version details.
 ## 🛠️ Development & Building
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) (v18+) & [pnpm](https://pnpm.io/)
+- [Bun](https://bun.sh/) (v1.2+) & [Node.js](https://nodejs.org/) (v18+)
 - [Rust Toolchain](https://rustup.rs/) (`stable-x86_64-pc-windows-msvc`)
 - Visual Studio Build Tools (C++ workload)
 
 ### Sidecar Binary Setup (`yt-dlp`)
-Tauri expects the sidecar executable to match the target triple (`yt-dlp-x86_64-pc-windows-msvc.exe`). Because sidecar binaries are excluded from Git to keep the repository lightweight, you must obtain and verify `yt-dlp.exe` before building or running `pnpm tauri dev`:
+Tauri expects the sidecar executable to match the target triple (`yt-dlp-x86_64-pc-windows-msvc.exe`). Because sidecar binaries are excluded from Git to keep the repository lightweight, you must obtain and verify `yt-dlp.exe` before building or running `bun run tauri dev`:
 
 ```powershell
 # Fetch and verify pinned yt-dlp sidecar binary via PowerShell script
@@ -95,7 +95,7 @@ When creating new Sonara releases with a fresh bundled sidecar baseline:
    - Update `$YTDLP_VERSION` and `$EXPECTED_SHA256` in `scripts/fetch-ytdlp.ps1`.
 4. **Verify integrity and compatibility**:
    - Run `cargo test --manifest-path src-tauri/Cargo.toml`
-   - Run `pnpm tauri build`
+   - Run `bun run tauri build`
 
 #### Path 3: Desktop Application Updates (Tauri Updater)
 Sonara Stream desktop updates are built with `@tauri-apps/plugin-updater` and cryptographically signed with minisign keys:
@@ -104,7 +104,7 @@ Sonara Stream desktop updates are built with `@tauri-apps/plugin-updater` and cr
 - **Signer Key Setup (For Maintainers)**:
   1. Generate a Tauri signer private/public keypair:
      ```bash
-     pnpm tauri signer generate -w ~/.tauri/sonara.key
+     bun run tauri signer generate -w ~/.tauri/sonara.key
      ```
   2. Set the generated public key in `src-tauri/tauri.conf.json`:
      ```json
@@ -138,19 +138,19 @@ cd sonara-stream
 powershell -ExecutionPolicy Bypass -File scripts/fetch-ytdlp.ps1
 
 # Install dependencies
-pnpm install
+bun install
 
 # Run in development mode (hot reload)
-pnpm tauri dev
+bun run tauri dev
 
 # Build optimized production release
-pnpm tauri build
+bun run tauri build
 ```
 
 ### Running Tests
 ```bash
 # Run frontend unit tests
-pnpm test
+bun run test
 
 # Run offline Rust unit tests
 cargo test --manifest-path src-tauri/Cargo.toml

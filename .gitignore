@@ -23,3 +23,7 @@ Thumbs.db
 *.log
 .vscode/
 .idea/
+
+# Tauri generated schemas
+src-tauri/gen/schemas/
+

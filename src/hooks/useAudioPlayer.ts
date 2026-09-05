@@ -25,6 +25,7 @@ export function useAudioPlayer(options: UseAudioPlayerOptions = {}) {
 
   const currentTrackRef = useRef<Track | null>(null);
   const retryCountRef = useRef<number>(0);
+  const playGenerationRef = useRef<number>(0);
 
   // Fresh callbacks in refs to avoid stale closures in audio events
   const onEndedRef = useRef(onEnded);
@@ -78,8 +79,11 @@ export function useAudioPlayer(options: UseAudioPlayerOptions = {}) {
 
     audio.onerror = async () => {
       const activeTrack = currentTrackRef.current;
+      const gen = playGenerationRef.current;
+      if (!activeTrack) return;
+
       // Exactly 1 retry bypassing the cache before surfacing failure
-      if (activeTrack && retryCountRef.current === 0) {
+      if (retryCountRef.current === 0) {
         retryCountRef.current += 1;
         setIsBuffering(true);
         onErrorRef.current?.("Playback error: refreshing stream URL...");
@@ -88,15 +92,41 @@ export function useAudioPlayer(options: UseAudioPlayerOptions = {}) {
             id: activeTrack.id,
             bypassCache: true,
           });
+          if (gen !== playGenerationRef.current) {
+            return;
+          }
           if (audioRef.current && typeof freshUrl === "string" && freshUrl.length > 0) {
             audioRef.current.src = freshUrl;
-            await audioRef.current.play();
+            try {
+              await audioRef.current.play();
+            } catch (playErr: unknown) {
+              if (gen !== playGenerationRef.current) return;
+              if (
+                playErr instanceof DOMException &&
+                (playErr.name === "AbortError" || playErr.name === "NotAllowedError")
+              ) {
+                return;
+              }
+              throw playErr;
+            }
+            if (gen !== playGenerationRef.current) return;
             onErrorRef.current?.(null);
             return;
           }
-        } catch (retryErr) {
+        } catch (retryErr: unknown) {
+          if (gen !== playGenerationRef.current) return;
+          if (
+            retryErr instanceof DOMException &&
+            (retryErr.name === "AbortError" || retryErr.name === "NotAllowedError")
+          ) {
+            return;
+          }
           console.error("Audio stream retry failed:", retryErr);
         }
+      }
+
+      if (gen !== playGenerationRef.current) {
+        return;
       }
 
       setIsBuffering(false);
@@ -168,11 +198,18 @@ export function useAudioPlayer(options: UseAudioPlayerOptions = {}) {
       return;
     }
 
+    const generation = ++playGenerationRef.current;
+    const previousTrack = currentTrackRef.current;
     currentTrackRef.current = track;
     retryCountRef.current = 0;
     setCurrentTrack(track);
     setIsBuffering(true);
     onErrorRef.current?.(null);
+
+    // Cancel superseded backend stream request if any
+    if (previousTrack && previousTrack.id !== track.id) {
+      invoke("cancel_stream_request", { id: previousTrack.id }).catch(() => {});
+    }
 
     try {
       let streamUrl: string;
@@ -182,17 +219,51 @@ export function useAudioPlayer(options: UseAudioPlayerOptions = {}) {
         preloadTrackRef.current?.id === track.id
       ) {
         streamUrl = preloadAudioRef.current.src;
-        audioRef.current.src = streamUrl;
       } else {
         streamUrl = await invoke("get_stream_url", { id: track.id });
-        audioRef.current.src = streamUrl;
       }
 
+      // If a newer generation started while waiting for streamUrl, discard this result
+      if (generation !== playGenerationRef.current) {
+        return;
+      }
+
+      audioRef.current.src = streamUrl;
       audioRef.current.currentTime = 0;
-      await audioRef.current.play();
+
+      try {
+        await audioRef.current.play();
+      } catch (playErr: unknown) {
+        // Check generation first
+        if (generation !== playGenerationRef.current) {
+          return;
+        }
+        // Treat AbortError / NotAllowedError (autoplay policy) as non-errors
+        if (
+          playErr instanceof DOMException &&
+          (playErr.name === "AbortError" || playErr.name === "NotAllowedError")
+        ) {
+          return;
+        }
+        throw playErr;
+      }
+
+      if (generation !== playGenerationRef.current) {
+        return;
+      }
+
       setIsPlaying(true);
       setDuration(track.duration || 0);
     } catch (err: unknown) {
+      if (generation !== playGenerationRef.current) {
+        return;
+      }
+      if (
+        err instanceof DOMException &&
+        (err.name === "AbortError" || err.name === "NotAllowedError")
+      ) {
+        return;
+      }
       console.error("Playback error:", err);
       setIsBuffering(false);
       setIsPlaying(false);

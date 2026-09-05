@@ -96,6 +96,10 @@ export default function App() {
     tracks,
     favorites,
     onPlayTrack: (track, preserveQueue) => handlePlayTrackRef.current(track, preserveQueue),
+    onSelectTrack: (track) => {
+      setCurrentTrack(track);
+      setIsBuffering(true);
+    },
     preloadAudioRef,
     preloadTrackRef,
   });

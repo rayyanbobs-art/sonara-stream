@@ -199,9 +199,9 @@ export const Player: React.FC<PlayerProps> = ({
         {/* Right: Streaming Status, Up Next Queue & Volume */}
         <div className="player-right">
           {currentTrack && (
-            <div className={`player-stream-chip ${isBuffering ? "buffering" : "live"}`}>
+            <div className={`player-stream-chip ${isBuffering ? "buffering" : isPlaying ? "live" : "idle"}`}>
               <Radio size={12} className={isBuffering ? "pulse-anim" : ""} />
-              <span>{isBuffering ? "Buffering" : "Streaming"}</span>
+              <span>{isBuffering ? "Buffering" : isPlaying ? "Streaming" : "Ready"}</span>
             </div>
           )}
 

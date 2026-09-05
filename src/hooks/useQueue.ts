@@ -9,6 +9,7 @@ interface UseQueueProps {
   tracks: Track[];
   favorites: Track[];
   onPlayTrack: (track: Track, preserveQueue?: boolean) => Promise<void>;
+  onSelectTrack?: (track: Track) => void;
   preloadAudioRef?: React.RefObject<HTMLAudioElement | null>;
   preloadTrackRef?: React.RefObject<Track | null>;
 }
@@ -19,6 +20,7 @@ export function useQueue({
   tracks,
   favorites,
   onPlayTrack,
+  onSelectTrack,
   preloadAudioRef,
   preloadTrackRef,
 }: UseQueueProps) {
@@ -34,9 +36,11 @@ export function useQueue({
 
   const prefetchedIds = useRef<Set<string>>(new Set());
   const recentlyPlayedSignatures = useRef<Set<string>>(new Set());
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Keep fresh references to avoid stale closure issues
   const onPlayTrackRef = useRef(onPlayTrack);
+  const onSelectTrackRef = useRef(onSelectTrack);
   const currentTrackRef = useRef(currentTrack);
   const activeTabRef = useRef(activeTab);
   const tracksRef = useRef(tracks);
@@ -46,6 +50,7 @@ export function useQueue({
 
   useEffect(() => {
     onPlayTrackRef.current = onPlayTrack;
+    onSelectTrackRef.current = onSelectTrack;
     currentTrackRef.current = currentTrack;
     activeTabRef.current = activeTab;
     tracksRef.current = tracks;
@@ -53,6 +58,14 @@ export function useQueue({
     isShuffleRef.current = isShuffle;
     upNextMixRef.current = upNextMix;
   });
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleShuffleDefaultChange = useCallback((val: boolean) => {
     setShuffleDefault(val);
@@ -166,23 +179,41 @@ export function useQueue({
     }
 
     // Speculatively pre-fetch and buffer the next track in background
-    const list = activeTabRef.current === "favorites" ? favoritesRef.current : tracksRef.current;
-    const currIdx = list.findIndex((t) => t.id === track.id);
-    if (currIdx !== -1 && list.length > 1) {
-      const nextTrack = list[(currIdx + 1) % list.length];
-      if (nextTrack && !prefetchedIds.current.has(nextTrack.id)) {
-        prefetchedIds.current.add(nextTrack.id);
-        invoke("get_stream_url", { id: nextTrack.id }).then((nextUrl) => {
-          if (preloadAudioRef?.current && typeof nextUrl === "string") {
-            preloadAudioRef.current.src = nextUrl;
-            if (preloadTrackRef) {
-              preloadTrackRef.current = nextTrack;
-            }
-          }
-        }).catch(() => {});
+    let nextCandidate: Track | null = null;
+    if (upNextMixRef.current.length > 0) {
+      nextCandidate = upNextMixRef.current[0];
+    } else {
+      const list = activeTabRef.current === "favorites" ? favoritesRef.current : tracksRef.current;
+      const currIdx = list.findIndex((t) => t.id === track.id);
+      if (currIdx !== -1 && list.length > 1) {
+        nextCandidate = list[(currIdx + 1) % list.length];
       }
     }
+
+    if (nextCandidate && !prefetchedIds.current.has(nextCandidate.id)) {
+      prefetchedIds.current.add(nextCandidate.id);
+      invoke("get_stream_url", { id: nextCandidate.id }).then((nextUrl) => {
+        if (preloadAudioRef?.current && typeof nextUrl === "string") {
+          preloadAudioRef.current.src = nextUrl;
+          if (preloadTrackRef) {
+            preloadTrackRef.current = nextCandidate;
+          }
+        }
+      }).catch(() => {});
+    }
   }, [isRecentlyPlayed, preloadAudioRef, preloadTrackRef]);
+
+  const triggerDebouncedPlay = useCallback((track: Track, preserveQueue: boolean) => {
+    currentTrackRef.current = track;
+    onSelectTrackRef.current?.(track);
+
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+    debounceTimeoutRef.current = setTimeout(() => {
+      onPlayTrackRef.current(track, preserveQueue);
+    }, 200);
+  }, []);
 
   const handleNext = useCallback(async () => {
     const activeCurrent = currentTrackRef.current;
@@ -218,7 +249,7 @@ export function useQueue({
         const nextTrack = currentMix[candidateIdx];
         // Advance queue: drop this track and any skipped before it
         setUpNextMix((prev) => prev.filter((_, idx) => idx > candidateIdx));
-        onPlayTrackRef.current(nextTrack, true /* PRESERVE QUEUE! */);
+        triggerDebouncedPlay(nextTrack, true /* PRESERVE QUEUE! */);
         return;
       }
     }
@@ -231,7 +262,7 @@ export function useQueue({
         );
         if (candidateTracks.length > 0) {
           const rand = Math.floor(Math.random() * candidateTracks.length);
-          onPlayTrackRef.current(candidateTracks[rand], true);
+          triggerDebouncedPlay(candidateTracks[rand], true);
           return;
         }
       }
@@ -249,7 +280,7 @@ export function useQueue({
       }
 
       if (nextTrack) {
-        onPlayTrackRef.current(nextTrack, true);
+        triggerDebouncedPlay(nextTrack, true);
         return;
       }
     }
@@ -267,7 +298,7 @@ export function useQueue({
       if (freshTracks.length > 0) {
         const next = freshTracks[0];
         setUpNextMix(freshTracks.slice(1));
-        onPlayTrackRef.current(next, true);
+        triggerDebouncedPlay(next, true);
         return;
       }
     } catch (err) {
@@ -279,11 +310,11 @@ export function useQueue({
     if (fallbackList.length > 1) {
       const candidate = fallbackList.find((t) => !isSameSong(t, activeCurrent));
       if (candidate) {
-        onPlayTrackRef.current(candidate, true);
+        triggerDebouncedPlay(candidate, true);
         return;
       }
     }
-  }, [isRecentlyPlayed]);
+  }, [isRecentlyPlayed, triggerDebouncedPlay]);
 
   const handlePrev = useCallback(() => {
     const activeCurrent = currentTrackRef.current;
@@ -291,8 +322,8 @@ export function useQueue({
     if (!activeCurrent || list.length === 0) return;
     const idx = list.findIndex((t) => t.id === activeCurrent.id);
     const prevIdx = (idx - 1 + list.length) % list.length;
-    onPlayTrackRef.current(list[prevIdx], false);
-  }, []);
+    triggerDebouncedPlay(list[prevIdx], false);
+  }, [triggerDebouncedPlay]);
 
   return {
     upNextMix,

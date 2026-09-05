@@ -1,6 +1,23 @@
 import React, { useState, useEffect, useRef } from "react";
-import { ChevronLeft, Search, Youtube, Music2, Loader2, Sparkles } from "lucide-react";
+import { ChevronLeft, Search, Music2, Loader2, Sparkles } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+
+const YoutubeIcon: React.FC<{ size?: number; className?: string }> = ({ size = 14, className }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17" />
+    <polygon points="10 15 15 12 10 9" fill="currentColor" />
+  </svg>
+);
 
 interface HeaderProps {
   query: string;
@@ -158,7 +175,7 @@ export const Header: React.FC<HeaderProps> = ({
             aria-pressed={source === "youtube"}
             aria-label="Source: YouTube"
           >
-            <Youtube size={14} />
+            <YoutubeIcon size={14} />
             <span>YouTube</span>
           </button>
           <button

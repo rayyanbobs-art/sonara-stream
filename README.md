@@ -105,6 +105,18 @@ pnpm tauri dev
 pnpm tauri build
 ```
 
+### Running Tests
+```bash
+# Run frontend unit tests
+pnpm test
+
+# Run offline Rust unit tests
+cargo test --manifest-path src-tauri/Cargo.toml
+
+# Run network/binary-dependent tests
+cargo test --manifest-path src-tauri/Cargo.toml -- --ignored
+```
+
 ---
 
 ## 📜 License

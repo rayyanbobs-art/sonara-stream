@@ -713,17 +713,11 @@ mod tests {
         assert!(guard.contains_key("fresh_key"));
     }
 
+    /// Requires the pinned `yt-dlp` sidecar binary to exist on disk at `binaries/yt-dlp*`.
+    /// Run with `cargo test -- --ignored` when the sidecar binary is present.
     #[tokio::test]
+    #[ignore = "requires local yt-dlp sidecar binary"]
     async fn test_timed_out_ytdlp_removes_in_flight_entry() {
-        let binary = get_ytdlp_path();
-        if !binary.exists() {
-            println!(
-                "Skipping test_timed_out_ytdlp_removes_in_flight_entry: yt-dlp binary is absent at {:?}",
-                binary
-            );
-            return;
-        }
-
         let test_id = "test_timeout_removal_id".to_string();
 
         // Ensure in-flight is clean initially

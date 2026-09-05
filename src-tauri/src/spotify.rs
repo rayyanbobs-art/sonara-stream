@@ -67,14 +67,11 @@ mod tests {
         assert!(err.contains("Invalid Spotify track URL"));
     }
 
+    /// Requires live network access to open.spotify.com/oembed and the local `yt-dlp` sidecar binary.
+    /// Run with `cargo test -- --ignored` to execute network-dependent integration tests.
     #[tokio::test]
+    #[ignore = "requires live network access and local yt-dlp binary"]
     async fn test_spotify_oembed_live_resolution() {
-        let binary = crate::youtube::get_ytdlp_path();
-        if !binary.exists() {
-            println!("Skipping live Spotify test: yt-dlp binary is absent");
-            return;
-        }
-
         // Rick Astley - Never Gonna Give You Up public Spotify track
         let spotify_url = "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT";
         let res = resolve_spotify_track(spotify_url.into()).await;

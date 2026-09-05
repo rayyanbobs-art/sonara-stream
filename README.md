@@ -119,5 +119,19 @@ cargo test --manifest-path src-tauri/Cargo.toml -- --ignored
 
 ---
 
+## 🌐 Network Requests This App Makes
+
+Sonara Stream runs entirely on your local machine and collects no telemetry, analytics, or user data. The app interacts with the following external endpoints:
+
+| Destination | Initiator | Purpose | Data Leaving Your Machine |
+|---|---|---|---|
+| **YouTube** (`*.googlevideo.com`, `*.ytimg.com`) | Backend sidecar (`yt-dlp`) & Webview `<audio>` / `<img>` | Searching songs, extracting direct audio stream URLs, streaming audio playback, and displaying track thumbnails. | Search keywords entered in the search bar, YouTube video IDs for stream resolution, and standard HTTP streaming range headers. |
+| **`suggestqueries.google.com`** | Frontend Webview (`fetch`) | Providing real-time autocomplete search suggestions as you type in the search bar. | Typed query strings directly sent from the search input field. |
+| **`itunes.apple.com`** (`*.mzstatic.com`) | Rust backend (`reqwest`) & Webview `<img>` | Identifying song genre and fetching diverse auto-mix recommendations; loading album artwork. | URL-encoded track title, artist name, and detected genre keyword; thumbnail image requests sent to Apple CDN (`*.mzstatic.com`). |
+| **Spotify** (`open.spotify.com/oembed`, `*.scdn.co`, `*.spotifycdn.com`) | Rust backend (`reqwest`) & Webview `<img>` | Resolving track title, artist name, and cover artwork when a Spotify link is pasted. | The public Spotify track URL pasted by the user sent to Spotify's oEmbed endpoint; artwork image requests sent to Spotify CDN. |
+
+---
+
 ## 📜 License
 [MIT License](./LICENSE). Copyright (c) 2026 rayyanbobs-art.
+

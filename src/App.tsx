@@ -11,6 +11,7 @@ import { FavoritesView } from "./views/FavoritesView";
 import { SettingsView } from "./views/SettingsView";
 import { Track, NavTab, AccentColor } from "./types";
 import { isSameSong } from "./utils/trackSignature";
+import { useFavorites } from "./hooks/useFavorites";
 import "./App.css";
 
 export default function App() {
@@ -31,14 +32,7 @@ export default function App() {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [upNextMix, setUpNextMix] = useState<Track[]>([]);
   const [isQueueOpen, setIsQueueOpen] = useState(false);
-  const [favorites, setFavorites] = useState<Track[]>(() => {
-    try {
-      const saved = localStorage.getItem("sonara_favorites");
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const { favorites, isFavorite, toggleFavorite } = useFavorites();
 
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -99,11 +93,6 @@ export default function App() {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem("sonara_theme", theme);
   }, [theme]);
-
-  // Sync favorites
-  useEffect(() => {
-    localStorage.setItem("sonara_favorites", JSON.stringify(favorites));
-  }, [favorites]);
 
   // Audio element setup (mount once)
   useEffect(() => {
@@ -501,16 +490,6 @@ export default function App() {
     setShuffleDefault(val);
     setIsShuffle(val);
     localStorage.setItem("sonara_shuffle_default", String(val));
-  };
-
-  const isFavorite = (id: string) => favorites.some((f) => f.id === id);
-
-  const toggleFavorite = (track: Track) => {
-    if (isFavorite(track.id)) {
-      setFavorites((prev) => prev.filter((f) => f.id !== track.id));
-    } else {
-      setFavorites((prev) => [...prev, track]);
-    }
   };
 
   return (

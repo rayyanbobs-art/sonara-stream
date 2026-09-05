@@ -56,7 +56,9 @@ export default function App() {
   const preloadTrackRef = useRef<Track | null>(null);
   const prefetchedIds = useRef<Set<string>>(new Set());
 
-  // Mutable refs to prevent stale closure bugs in audio events
+  // Mutable refs to prevent stale closure bugs in audio events & track retries
+  const currentTrackRef = useRef<Track | null>(null);
+  const retryCountRef = useRef<number>(0);
   const handleNextRef = useRef<() => void>(() => {});
   const handleTogglePlayRef = useRef<() => void>(() => {});
   const handlePrevRef = useRef<() => void>(() => {});
@@ -173,10 +175,32 @@ export default function App() {
       handleNextRef.current();
     };
 
-    audio.onerror = () => {
+    audio.onerror = async () => {
+      const activeTrack = currentTrackRef.current;
+      // Exactly 1 retry bypassing the cache before surfacing failure
+      if (activeTrack && retryCountRef.current === 0) {
+        retryCountRef.current += 1;
+        setIsBuffering(true);
+        setErrorMessage("Playback error: refreshing stream URL...");
+        try {
+          const freshUrl: string = await invoke("get_stream_url", {
+            id: activeTrack.id,
+            bypassCache: true,
+          });
+          if (audioRef.current && typeof freshUrl === "string" && freshUrl.length > 0) {
+            audioRef.current.src = freshUrl;
+            await audioRef.current.play();
+            setErrorMessage(null);
+            return;
+          }
+        } catch (retryErr) {
+          console.error("Audio stream retry failed:", retryErr);
+        }
+      }
+
       setIsBuffering(false);
       setIsPlaying(false);
-      setErrorMessage("Stream error or link expired. Retrying or picking another song...");
+      setErrorMessage("Stream playback failed. The audio stream could not be loaded. Please choose another track.");
     };
 
     return () => {
@@ -258,6 +282,8 @@ export default function App() {
     }
 
     markAsPlayed(track);
+    currentTrackRef.current = track;
+    retryCountRef.current = 0;
     setCurrentTrack(track);
     setIsBuffering(true);
     setErrorMessage(null);

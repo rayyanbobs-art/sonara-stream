@@ -60,22 +60,40 @@ See the full [CHANGELOG.md](./CHANGELOG.md) for version details.
 - Visual Studio Build Tools (C++ workload)
 
 ### Sidecar Binary Setup (`yt-dlp`)
-Tauri expects the sidecar executable to match the target triple (`yt-dlp-x86_64-pc-windows-msvc.exe`). Because sidecar binaries are excluded from Git to keep the repository lightweight, you must obtain `yt-dlp.exe` before running `pnpm tauri dev`:
+Tauri expects the sidecar executable to match the target triple (`yt-dlp-x86_64-pc-windows-msvc.exe`). Because sidecar binaries are excluded from Git to keep the repository lightweight, you must obtain and verify `yt-dlp.exe` before building or running `pnpm tauri dev`:
 
 ```powershell
-# Create the binaries directory if needed
-mkdir -p src-tauri/binaries
-
-# Download pinned yt-dlp release (2026.08.19)
-Invoke-WebRequest -Uri "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp.exe" -OutFile "src-tauri/binaries/yt-dlp-x86_64-pc-windows-msvc.exe"
+# Fetch and verify pinned yt-dlp sidecar binary via PowerShell script
+powershell -ExecutionPolicy Bypass -File scripts/fetch-ytdlp.ps1
 ```
-*Note: During build, `src-tauri/build.rs` automatically verifies the SHA-256 hash of this sidecar to protect against corrupted or tampered downloads.*
+*Note: During build, `src-tauri/build.rs` strictly fails the build if the binary is absent or if its SHA-256 hash does not match the pinned release, preventing execution of unverified binaries.*
+
+### Updating yt-dlp
+When upstream YouTube changes require updating the pinned `yt-dlp` sidecar release:
+
+1. **Download the new release executable**:
+   ```powershell
+   Invoke-WebRequest -Uri "https://github.com/yt-dlp/yt-dlp/releases/download/<NEW_TAG>/yt-dlp.exe" -OutFile "src-tauri/binaries/yt-dlp-x86_64-pc-windows-msvc.exe"
+   ```
+2. **Compute its cryptographic SHA-256 hash**:
+   ```powershell
+   Get-FileHash -Path "src-tauri/binaries/yt-dlp-x86_64-pc-windows-msvc.exe" -Algorithm SHA256
+   ```
+3. **Update build and script configurations**:
+   - Update `EXPECTED_YTDLP_SHA256` and the version comments in `src-tauri/build.rs`.
+   - Update `$YTDLP_VERSION` and `$EXPECTED_SHA256` in `scripts/fetch-ytdlp.ps1`.
+4. **Verify integrity and compatibility**:
+   - Run `cargo test --manifest-path src-tauri/Cargo.toml`
+   - Run `pnpm tauri build`
 
 ### Setup & Run
 ```bash
 # Clone the repository
 git clone https://github.com/rayyanbobs-art/sonara-stream.git
 cd sonara-stream
+
+# Fetch sidecar binary
+powershell -ExecutionPolicy Bypass -File scripts/fetch-ytdlp.ps1
 
 # Install dependencies
 pnpm install

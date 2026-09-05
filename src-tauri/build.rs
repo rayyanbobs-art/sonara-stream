@@ -3,7 +3,13 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-// Pinned yt-dlp release: 2026.08.19 Windows x86_64 standalone executable
+// Pinned yt-dlp release: 2026.08.19 Windows x86_64 standalone executable.
+// Why it is pinned:
+// 1. Supply-chain security: Sonara Stream invokes yt-dlp directly as a local sidecar subprocess.
+//    Pinning an exact release and enforcing SHA-256 verification prevents execution of unvetted,
+//    tampered, or malicious external binaries.
+// 2. Deterministic builds & stability: YouTube extraction logic and CLI flags can drift across
+//    upstream yt-dlp versions. Pinning guarantees full compatibility with internal argument handling.
 const EXPECTED_YTDLP_SHA256: &str =
     "66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a";
 
@@ -11,11 +17,15 @@ fn verify_sidecar_checksum() {
     let sidecar_path = Path::new("binaries/yt-dlp-x86_64-pc-windows-msvc.exe");
 
     if !sidecar_path.exists() {
-        println!(
-            "cargo:warning=yt-dlp sidecar binary not found at {:?}. Development runs will fail unless installed.",
+        panic!(
+            "\n\n======================================================================\n\
+             FATAL BUILD ERROR: yt-dlp sidecar binary not found at {:?}!\n\
+             Sonara Stream requires the pinned yt-dlp binary (version 2026.08.19).\n\
+             To fetch and verify the required binary, run:\n\n\
+                 powershell -ExecutionPolicy Bypass -File scripts/fetch-ytdlp.ps1\n\n\
+             ======================================================================\n\n",
             sidecar_path
         );
-        return;
     }
 
     let mut file = File::open(sidecar_path)

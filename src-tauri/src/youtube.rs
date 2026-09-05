@@ -34,12 +34,19 @@ fn get_in_flight() -> &'static Mutex<HashMap<String, tokio::sync::broadcast::Sen
     IN_FLIGHT.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn insert_stream_cache(key: String, value: String) {
-    if let Ok(mut guard) = get_stream_cache().lock() {
-        if guard.len() >= 200 {
-            guard.retain(|_, (_, inst)| inst.elapsed() < Duration::from_secs(2 * 3600));
-            if guard.len() >= 200 {
-                let keys_to_remove: Vec<String> = guard.keys().take(50).cloned().collect();
+pub(crate) fn insert_bounded_cache<T>(
+    cache_mutex: &Mutex<HashMap<String, (T, Instant)>>,
+    key: String,
+    value: T,
+    max_capacity: usize,
+    ttl: Duration,
+    purge_count: usize,
+) {
+    if let Ok(mut guard) = cache_mutex.lock() {
+        if guard.len() >= max_capacity {
+            guard.retain(|_, (_, inst)| inst.elapsed() < ttl);
+            if guard.len() >= max_capacity {
+                let keys_to_remove: Vec<String> = guard.keys().take(purge_count).cloned().collect();
                 for k in keys_to_remove {
                     guard.remove(&k);
                 }
@@ -49,19 +56,26 @@ fn insert_stream_cache(key: String, value: String) {
     }
 }
 
+fn insert_stream_cache(key: String, value: String) {
+    insert_bounded_cache(
+        get_stream_cache(),
+        key,
+        value,
+        200,
+        Duration::from_secs(3600),
+        50,
+    );
+}
+
 fn insert_search_cache(key: String, value: Vec<Track>) {
-    if let Ok(mut guard) = get_search_cache().lock() {
-        if guard.len() >= 100 {
-            guard.retain(|_, (_, inst)| inst.elapsed() < Duration::from_secs(1800));
-            if guard.len() >= 100 {
-                let keys_to_remove: Vec<String> = guard.keys().take(30).cloned().collect();
-                for k in keys_to_remove {
-                    guard.remove(&k);
-                }
-            }
-        }
-        guard.insert(key, (value, Instant::now()));
-    }
+    insert_bounded_cache(
+        get_search_cache(),
+        key,
+        value,
+        100,
+        Duration::from_secs(1800),
+        30,
+    );
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -284,10 +298,12 @@ pub async fn search_youtube(query: String) -> Result<Vec<Track>, String> {
     }
 
     let q = sanitized_query.to_lowercase();
-    if let Ok(guard) = get_search_cache().lock() {
+    if let Ok(mut guard) = get_search_cache().lock() {
         if let Some((cached_tracks, instant)) = guard.get(&q) {
-            if instant.elapsed() < Duration::from_secs(3600) {
+            if instant.elapsed() < Duration::from_secs(1800) {
                 return Ok(cached_tracks.clone());
+            } else {
+                guard.remove(&q);
             }
         }
     }

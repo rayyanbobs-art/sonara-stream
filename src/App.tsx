@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AlertCircle } from "lucide-react";
 import { check, Update } from "@tauri-apps/plugin-updater";
 import { UpdateBanner } from "./components/UpdateBanner";
@@ -87,14 +86,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Reveal window once React has mounted (zero white flash)
-  useEffect(() => {
-    try {
-      getCurrentWindow().show().catch(() => {});
-    } catch {
-      // Running in browser/vitest environment
-    }
-  }, []);
+
 
   useEffect(() => {
     const checkAppUpdate = async () => {

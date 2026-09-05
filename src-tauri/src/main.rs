@@ -3,6 +3,7 @@
 mod youtube;
 mod spotify;
 mod ytdlp_updater;
+mod recommend;
 
 use tauri::Manager;
 
@@ -18,7 +19,8 @@ fn main() {
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
             if let Ok(app_data) = app.path().app_data_dir() {
-                let manager = ytdlp_updater::init_manager(app_data);
+                let manager = ytdlp_updater::init_manager(app_data.clone());
+                recommend::init_recommendations(app_data);
                 // Background update check on startup (non-blocking, delayed by 3s to not affect initial render)
                 tauri::async_runtime::spawn(async move {
                     tokio::time::sleep(std::time::Duration::from_secs(3)).await;
@@ -38,6 +40,9 @@ fn main() {
             ytdlp_updater::get_ytdlp_status,
             ytdlp_updater::check_ytdlp_update,
             ytdlp_updater::set_ytdlp_auto_update,
+            recommend::get_recommendations,
+            recommend::build_radio,
+            recommend::record_play_event,
         ])
         .run(tauri::generate_context!())
         .expect("error while running sonara-stream application");

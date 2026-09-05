@@ -235,7 +235,7 @@ pub fn is_extraction_failure(err: &str) -> bool {
 }
 
 // Invokes external yt-dlp binary to search YouTube; subject to YouTube ToS and breakage on UI/API changes.
-async fn execute_ytdlp_search(search_arg: &str, binary: &PathBuf) -> Result<Vec<Track>, String> {
+pub(crate) async fn execute_ytdlp_search(search_arg: &str, binary: &PathBuf) -> Result<Vec<Track>, String> {
     let _permit = get_ytdlp_semaphore()
         .acquire()
         .await

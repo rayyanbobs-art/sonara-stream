@@ -634,3 +634,69 @@ pub async fn get_stream_url(id: String, bypass_cache: Option<bool>) -> Result<St
 
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_signature_strips_noise_and_brackets() {
+        let sig1 = get_title_signature_string("Blinding Lights (Official Music Video)", "The Weeknd");
+        let sig2 = get_title_signature_string("Blinding Lights [Lyrics Audio HD]", "The Weeknd");
+        assert_eq!(sig1, sig2);
+        assert!(sig1.contains("blinding"));
+        assert!(sig1.contains("lights"));
+        assert!(sig1.contains("weeknd"));
+        assert!(!sig1.contains("official"));
+        assert!(!sig1.contains("video"));
+    }
+
+    #[test]
+    fn test_signature_deterministic_ordering() {
+        let sig = get_title_signature_string("Starboy feat Daft Punk", "The Weeknd");
+        let words: Vec<&str> = sig.split_whitespace().collect();
+        let mut sorted = words.clone();
+        sorted.sort();
+        assert_eq!(words, sorted);
+    }
+
+    #[test]
+    fn test_bounded_cache_capacity_eviction() {
+        let cache = Mutex::new(HashMap::new());
+        for i in 0..15 {
+            insert_bounded_cache(
+                &cache,
+                format!("key_{}", i),
+                format!("val_{}", i),
+                10,
+                Duration::from_secs(60),
+                3,
+            );
+        }
+        let guard = cache.lock().unwrap();
+        assert!(guard.len() <= 10);
+    }
+
+    #[test]
+    fn test_bounded_cache_ttl_expiry() {
+        let cache = Mutex::new(HashMap::new());
+        {
+            let mut guard = cache.lock().unwrap();
+            let past_instant = Instant::now() - Duration::from_secs(100);
+            guard.insert("stale_key".to_string(), ("stale_val".to_string(), past_instant));
+        }
+
+        insert_bounded_cache(
+            &cache,
+            "fresh_key".to_string(),
+            "fresh_val".to_string(),
+            1,
+            Duration::from_secs(10),
+            1,
+        );
+
+        let guard = cache.lock().unwrap();
+        assert!(!guard.contains_key("stale_key"));
+        assert!(guard.contains_key("fresh_key"));
+    }
+}

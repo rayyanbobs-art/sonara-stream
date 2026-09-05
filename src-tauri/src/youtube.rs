@@ -508,8 +508,11 @@ pub async fn get_genre_mix(artist: String, title: String) -> Result<Vec<Track>, 
     Ok(mix_tracks)
 }
 
-#[tauri::command]
-pub async fn get_stream_url(id: String, bypass_cache: Option<bool>) -> Result<String, String> {
+pub async fn resolve_stream_url_internal(
+    id: String,
+    bypass_cache: Option<bool>,
+    timeout_duration: Duration,
+) -> Result<String, String> {
     let clean_id = id.trim().to_string();
     if clean_id.is_empty() || clean_id.len() > 300 {
         return Err("Invalid track identifier".into());
@@ -619,10 +622,10 @@ pub async fn get_stream_url(id: String, bypass_cache: Option<bool>) -> Result<St
         Ok(url)
     };
 
-    // Enforce 20s timeout on stream resolution
-    let result = match tokio::time::timeout(Duration::from_secs(20), stream_resolve_task).await {
+    // Enforce timeout on stream resolution
+    let result = match tokio::time::timeout(timeout_duration, stream_resolve_task).await {
         Ok(res) => res,
-        Err(_) => Err("Stream resolution timed out after 20s".into()),
+        Err(_) => Err(format!("Stream resolution timed out after {:?}", timeout_duration)),
     };
 
     // CRITICAL: Always remove from in-flight (even on timeout) and notify waiters
@@ -633,6 +636,11 @@ pub async fn get_stream_url(id: String, bypass_cache: Option<bool>) -> Result<St
     }
 
     result
+}
+
+#[tauri::command]
+pub async fn get_stream_url(id: String, bypass_cache: Option<bool>) -> Result<String, String> {
+    resolve_stream_url_internal(id, bypass_cache, Duration::from_secs(20)).await
 }
 
 #[cfg(test)]
@@ -698,5 +706,45 @@ mod tests {
         let guard = cache.lock().unwrap();
         assert!(!guard.contains_key("stale_key"));
         assert!(guard.contains_key("fresh_key"));
+    }
+
+    #[tokio::test]
+    async fn test_timed_out_ytdlp_removes_in_flight_entry() {
+        let test_id = "test_timeout_removal_id".to_string();
+
+        // Ensure in-flight is clean initially
+        {
+            let mut guard = get_in_flight().lock().unwrap();
+            guard.remove(&test_id);
+        }
+
+        // Call with an impossibly short timeout (1 microsecond) so it times out
+        let res = resolve_stream_url_internal(test_id.clone(), Some(true), Duration::from_micros(1)).await;
+        assert!(res.is_err());
+        let err_msg = res.unwrap_err();
+        assert!(err_msg.contains("timed out"), "Expected timeout error, got: {}", err_msg);
+
+        // Verify in-flight entry was removed
+        {
+            let guard = get_in_flight().lock().unwrap();
+            assert!(
+                !guard.contains_key(&test_id),
+                "in-flight entry must be cleaned up on timeout"
+            );
+        }
+
+        // Verify a subsequent call for the same ID proceeds and creates its own channel without deadlock
+        let second_channel_inserted = {
+            let mut guard = get_in_flight().lock().unwrap();
+            assert!(!guard.contains_key(&test_id));
+            let (tx, _) = tokio::sync::broadcast::channel(2);
+            guard.insert(test_id.clone(), tx);
+            true
+        };
+        assert!(second_channel_inserted);
+
+        // Cleanup
+        let mut guard = get_in_flight().lock().unwrap();
+        guard.remove(&test_id);
     }
 }

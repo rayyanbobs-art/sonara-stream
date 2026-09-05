@@ -18,15 +18,26 @@ use std::time::{Duration, Instant};
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
+#[derive(Clone)]
+pub struct InFlightEntry {
+    pub tx: InFlightSender,
+    pub abort_handle: tokio::task::AbortHandle,
+}
+
 type StreamCacheMap = HashMap<String, (String, Instant)>;
 type SearchCacheMap = HashMap<String, (Vec<Track>, Instant)>;
 type InFlightSender = tokio::sync::broadcast::Sender<Result<String, String>>;
-type InFlightMap = HashMap<String, InFlightSender>;
+type InFlightMap = HashMap<String, InFlightEntry>;
 
 static STREAM_CACHE: OnceLock<Mutex<StreamCacheMap>> = OnceLock::new();
 static SEARCH_CACHE: OnceLock<Mutex<SearchCacheMap>> = OnceLock::new();
 static IN_FLIGHT: OnceLock<Mutex<InFlightMap>> = OnceLock::new();
 static SHARED_HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+static YTDLP_SEMAPHORE: OnceLock<tokio::sync::Semaphore> = OnceLock::new();
+
+pub fn get_ytdlp_semaphore() -> &'static tokio::sync::Semaphore {
+    YTDLP_SEMAPHORE.get_or_init(|| tokio::sync::Semaphore::new(3))
+}
 
 pub fn get_http_client() -> &'static reqwest::Client {
     SHARED_HTTP_CLIENT.get_or_init(|| {
@@ -225,6 +236,11 @@ pub fn is_extraction_failure(err: &str) -> bool {
 
 // Invokes external yt-dlp binary to search YouTube; subject to YouTube ToS and breakage on UI/API changes.
 async fn execute_ytdlp_search(search_arg: &str, binary: &PathBuf) -> Result<Vec<Track>, String> {
+    let _permit = get_ytdlp_semaphore()
+        .acquire()
+        .await
+        .map_err(|e| format!("Failed to acquire yt-dlp permit: {}", e))?;
+
     let mut cmd = tokio::process::Command::new(binary);
     #[cfg(windows)]
     cmd.creation_flags(CREATE_NO_WINDOW);
@@ -600,27 +616,29 @@ pub async fn resolve_stream_url_internal(
     }
 
     // Check if another async task is already resolving this exact ID
-    let mut rx = {
-        let mut flight_guard = get_in_flight()
+    let maybe_rx = {
+        let flight_guard = get_in_flight()
             .lock()
             .map_err(|_| "In-flight mutex poisoned".to_string())?;
-        if let Some(tx) = flight_guard.get(&clean_id) {
-            Some(tx.subscribe())
-        } else {
-            let (tx, _) = tokio::sync::broadcast::channel(2);
-            flight_guard.insert(clean_id.clone(), tx);
-            None
-        }
+        flight_guard.get(&clean_id).map(|entry| entry.tx.subscribe())
     };
 
-    if let Some(ref mut receiver) = rx {
+    if let Some(mut receiver) = maybe_rx {
         if let Ok(res) = receiver.recv().await {
             return res;
         }
     }
 
+    let (tx, _rx) = tokio::sync::broadcast::channel(2);
+    drop(_rx); // ensure tx.receiver_count() reflects active subscribers
+
     let id_clone = clean_id.clone();
-    let stream_resolve_task = async move {
+    let task = tokio::spawn(async move {
+        let _permit = get_ytdlp_semaphore()
+            .acquire()
+            .await
+            .map_err(|e| format!("Failed to acquire yt-dlp permit: {}", e))?;
+
         let binary = get_ytdlp_path();
         let video_url = if let Some(search_term) = id_clone.strip_prefix("search:") {
             let safe_term = search_term.trim_start_matches('-');
@@ -706,22 +724,64 @@ pub async fn resolve_stream_url_internal(
         insert_stream_cache(id_clone, url.clone());
 
         Ok(url)
-    };
+    });
+
+    let abort_handle = task.abort_handle();
+    {
+        let mut flight_guard = get_in_flight()
+            .lock()
+            .map_err(|_| "In-flight mutex poisoned".to_string())?;
+        flight_guard.insert(
+            clean_id.clone(),
+            InFlightEntry {
+                tx: tx.clone(),
+                abort_handle: abort_handle.clone(),
+            },
+        );
+    }
 
     // Enforce timeout on stream resolution
-    let result = match tokio::time::timeout(timeout_duration, stream_resolve_task).await {
-        Ok(res) => res,
-        Err(_) => Err(format!("Stream resolution timed out after {:?}", timeout_duration)),
+    let result = match tokio::time::timeout(timeout_duration, task).await {
+        Ok(task_res) => match task_res {
+            Ok(inner_res) => inner_res,
+            Err(join_err) => {
+                if join_err.is_cancelled() {
+                    Err("Stream resolution was cancelled".into())
+                } else {
+                    Err(format!("Stream resolution failed: {}", join_err))
+                }
+            }
+        },
+        Err(_) => {
+            abort_handle.abort();
+            Err(format!("Stream resolution timed out after {:?}", timeout_duration))
+        }
     };
 
-    // CRITICAL: Always remove from in-flight (even on timeout) and notify waiters
+    // CRITICAL: Always remove from in-flight (even on timeout/cancel) and notify waiters
     if let Ok(mut flight_guard) = get_in_flight().lock() {
-        if let Some(tx) = flight_guard.remove(&clean_id) {
-            let _ = tx.send(result.clone());
+        if let Some(entry) = flight_guard.remove(&clean_id) {
+            let _ = entry.tx.send(result.clone());
         }
     }
 
     result
+}
+
+#[tauri::command]
+pub fn cancel_stream_request(id: String) -> bool {
+    let clean_id = id.trim().to_string();
+    if let Ok(mut flight_guard) = get_in_flight().lock() {
+        if let Some(entry) = flight_guard.get(&clean_id) {
+            // Respect in-flight de-dup: only kill when no other subscriber is waiting on that broadcast.
+            if entry.tx.receiver_count() == 0 {
+                entry.abort_handle.abort();
+                flight_guard.remove(&clean_id);
+                return true;
+            }
+        }
+    }
+    false
 }
 
 #[tauri::command]
@@ -846,4 +906,106 @@ mod tests {
         let mut guard = get_in_flight().lock().unwrap();
         guard.remove(&test_id);
     }
+
+    #[tokio::test]
+    async fn test_ytdlp_semaphore_caps_permits() {
+        let sem = get_ytdlp_semaphore();
+        // Acquire all available permits (semaphore has 3)
+        let p1 = sem.acquire().await.unwrap();
+        let p2 = sem.acquire().await.unwrap();
+        let p3 = sem.acquire().await.unwrap();
+
+        // 4th acquire should fail immediately if try_acquire
+        assert!(sem.try_acquire().is_err());
+
+        // Drop one permit
+        drop(p1);
+
+        // Now try_acquire should succeed
+        let p4 = sem.try_acquire();
+        assert!(p4.is_ok());
+
+        drop(p2);
+        drop(p3);
+        drop(p4);
+    }
+
+    #[tokio::test]
+    async fn test_cancel_stream_request_kills_task_and_removes_in_flight() {
+        let test_id = "test_cancel_id_123".to_string();
+
+        // Spawn a dummy task that stays alive
+        let task = tokio::spawn(async {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+        });
+        let abort_handle = task.abort_handle();
+        let (tx, _rx) = tokio::sync::broadcast::channel(2);
+        drop(_rx);
+
+        {
+            let mut guard = get_in_flight().lock().unwrap();
+            guard.insert(
+                test_id.clone(),
+                InFlightEntry {
+                    tx,
+                    abort_handle,
+                },
+            );
+        }
+
+        // Cancellation should succeed because receiver_count is 0
+        let cancelled = cancel_stream_request(test_id.clone());
+        assert!(cancelled, "Must return true when request is cancelled");
+
+        // Verify task was aborted
+        let task_result = task.await;
+        assert!(task_result.is_err());
+        assert!(task_result.unwrap_err().is_cancelled());
+
+        // Verify removed from IN_FLIGHT
+        {
+            let guard = get_in_flight().lock().unwrap();
+            assert!(!guard.contains_key(&test_id));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_cancel_stream_request_respects_subscribers() {
+        let test_id = "test_cancel_with_subs".to_string();
+
+        let task = tokio::spawn(async {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+        });
+        let abort_handle = task.abort_handle();
+        let (tx, _rx) = tokio::sync::broadcast::channel(2);
+        drop(_rx);
+
+        // Add a subscriber
+        let _sub_rx = tx.subscribe();
+
+        {
+            let mut guard = get_in_flight().lock().unwrap();
+            guard.insert(
+                test_id.clone(),
+                InFlightEntry {
+                    tx,
+                    abort_handle,
+                },
+            );
+        }
+
+        // Cancellation should return false because subscriber is waiting
+        let cancelled = cancel_stream_request(test_id.clone());
+        assert!(!cancelled, "Must not cancel if another subscriber is waiting");
+
+        // Verify still in in-flight
+        {
+            let mut guard = get_in_flight().lock().unwrap();
+            assert!(guard.contains_key(&test_id));
+            if let Some(entry) = guard.remove(&test_id) {
+                entry.abort_handle.abort();
+            }
+        }
+    }
 }
+

@@ -43,7 +43,7 @@ pub async fn resolve_spotify_track(url: String) -> Result<Track, String> {
     if let Some(best) = yt_results.first() {
         Ok(Track {
             id: best.id.clone(),
-            title: title,
+            title,
             artist: best.artist.clone(),
             duration: best.duration,
             thumbnail: if !thumbnail.is_empty() { thumbnail } else { best.thumbnail.clone() },

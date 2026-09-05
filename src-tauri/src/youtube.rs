@@ -18,19 +18,24 @@ use std::time::{Duration, Instant};
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-static STREAM_CACHE: OnceLock<Mutex<HashMap<String, (String, Instant)>>> = OnceLock::new();
-static SEARCH_CACHE: OnceLock<Mutex<HashMap<String, (Vec<Track>, Instant)>>> = OnceLock::new();
-static IN_FLIGHT: OnceLock<Mutex<HashMap<String, tokio::sync::broadcast::Sender<Result<String, String>>>>> = OnceLock::new();
+type StreamCacheMap = HashMap<String, (String, Instant)>;
+type SearchCacheMap = HashMap<String, (Vec<Track>, Instant)>;
+type InFlightSender = tokio::sync::broadcast::Sender<Result<String, String>>;
+type InFlightMap = HashMap<String, InFlightSender>;
 
-fn get_stream_cache() -> &'static Mutex<HashMap<String, (String, Instant)>> {
+static STREAM_CACHE: OnceLock<Mutex<StreamCacheMap>> = OnceLock::new();
+static SEARCH_CACHE: OnceLock<Mutex<SearchCacheMap>> = OnceLock::new();
+static IN_FLIGHT: OnceLock<Mutex<InFlightMap>> = OnceLock::new();
+
+fn get_stream_cache() -> &'static Mutex<StreamCacheMap> {
     STREAM_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn get_search_cache() -> &'static Mutex<HashMap<String, (Vec<Track>, Instant)>> {
+fn get_search_cache() -> &'static Mutex<SearchCacheMap> {
     SEARCH_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn get_in_flight() -> &'static Mutex<HashMap<String, tokio::sync::broadcast::Sender<Result<String, String>>>> {
+fn get_in_flight() -> &'static Mutex<InFlightMap> {
     IN_FLIGHT.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
@@ -569,9 +574,9 @@ pub async fn resolve_stream_url_internal(
     let id_clone = clean_id.clone();
     let stream_resolve_task = async move {
         let binary = get_ytdlp_path();
-        let video_url = if id_clone.starts_with("search:") {
-            let search_term = id_clone[7..].trim_start_matches('-');
-            format!("ytsearch1:{}", search_term)
+        let video_url = if let Some(search_term) = id_clone.strip_prefix("search:") {
+            let safe_term = search_term.trim_start_matches('-');
+            format!("ytsearch1:{}", safe_term)
         } else if id_clone.starts_with("http") {
             id_clone.clone()
         } else {

@@ -1,10 +1,11 @@
-﻿export interface Track {
+export interface Track {
   id: string;
   title: string;
   artist: string;
   duration: number;
   thumbnail: string;
   source: "youtube" | "spotify";
+  signature: string;
   addedAt?: number;
 }
 

@@ -48,6 +48,7 @@ pub async fn resolve_spotify_track(url: String) -> Result<Track, String> {
             duration: best.duration,
             thumbnail: if !thumbnail.is_empty() { thumbnail } else { best.thumbnail.clone() },
             source: "spotify".into(),
+            signature: best.signature.clone(),
         })
     } else {
         Err("Could not find matching stream for Spotify track".into())

@@ -64,7 +64,7 @@ fn insert_search_cache(key: String, value: Vec<Track>) {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Track {
     pub id: String,
     pub title: String,
@@ -72,6 +72,7 @@ pub struct Track {
     pub duration: u64,
     pub thumbnail: String,
     pub source: String,
+    pub signature: String,
 }
 
 pub fn get_ytdlp_path() -> PathBuf {
@@ -153,6 +154,11 @@ pub fn get_title_signature(title: &str, artist: &str) -> std::collections::BTree
     words
 }
 
+pub fn get_title_signature_string(title: &str, artist: &str) -> String {
+    let words = get_title_signature(title, artist);
+    words.into_iter().collect::<Vec<_>>().join(" ")
+}
+
 // Invokes external yt-dlp binary to search YouTube; subject to YouTube ToS and breakage on UI/API changes.
 async fn execute_ytdlp_search(search_arg: &str, binary: &PathBuf) -> Result<Vec<Track>, String> {
     let mut cmd = tokio::process::Command::new(binary);
@@ -208,6 +214,7 @@ async fn execute_ytdlp_search(search_arg: &str, binary: &PathBuf) -> Result<Vec<
             }
 
             if !id.is_empty() && !title.is_empty() {
+                let signature = get_title_signature_string(&title, &artist);
                 tracks.push(Track {
                     id,
                     title,
@@ -215,6 +222,7 @@ async fn execute_ytdlp_search(search_arg: &str, binary: &PathBuf) -> Result<Vec<
                     duration,
                     thumbnail,
                     source: "youtube".into(),
+                    signature,
                 });
             }
         }
@@ -294,9 +302,8 @@ pub async fn search_youtube(query: String) -> Result<Vec<Track>, String> {
     let mut unique_tracks = Vec::new();
 
     for track in raw_tracks {
-        let sig = get_title_signature(&track.title, &track.artist);
-        if !sig.is_empty() && !seen_signatures.contains(&sig) {
-            seen_signatures.insert(sig);
+        if !track.signature.is_empty() && !seen_signatures.contains(&track.signature) {
+            seen_signatures.insert(track.signature.clone());
             unique_tracks.push(track);
         }
     }
@@ -317,9 +324,8 @@ pub async fn search_youtube(query: String) -> Result<Vec<Track>, String> {
         let expand_arg = format!("ytsearch15:{} greatest hits", fallback_artist);
         if let Ok(extra_tracks) = execute_ytdlp_search(&expand_arg, &binary).await {
             for track in extra_tracks {
-                let sig = get_title_signature(&track.title, &track.artist);
-                if !sig.is_empty() && !seen_signatures.contains(&sig) {
-                    seen_signatures.insert(sig);
+                if !track.signature.is_empty() && !seen_signatures.contains(&track.signature) {
+                    seen_signatures.insert(track.signature.clone());
                     unique_tracks.push(track);
                 }
                 if unique_tracks.len() >= 15 {
@@ -348,14 +354,15 @@ pub async fn get_related_tracks(artist: String, title: String) -> Result<Vec<Tra
 
     let raw = execute_ytdlp_search(&query_term, &binary).await?;
     let mut seen = std::collections::HashSet::new();
-    let target_sig = get_title_signature(&clean_title, &clean_artist);
-    seen.insert(target_sig);
+    let target_sig = get_title_signature_string(&clean_title, &clean_artist);
+    if !target_sig.is_empty() {
+        seen.insert(target_sig);
+    }
 
     let mut related = Vec::new();
     for t in raw {
-        let sig = get_title_signature(&t.title, &t.artist);
-        if !sig.is_empty() && !seen.contains(&sig) {
-            seen.insert(sig);
+        if !t.signature.is_empty() && !seen.contains(&t.signature) {
+            seen.insert(t.signature.clone());
             related.push(t);
         }
         if related.len() >= 10 {
@@ -408,7 +415,10 @@ pub async fn get_genre_mix(artist: String, title: String) -> Result<Vec<Track>, 
 
     let mut mix_tracks: Vec<Track> = Vec::new();
     let mut seen_sigs = std::collections::HashSet::new();
-    seen_sigs.insert(get_title_signature(clean_title, clean_artist));
+    let seed_sig = get_title_signature_string(clean_title, clean_artist);
+    if !seed_sig.is_empty() {
+        seen_sigs.insert(seed_sig);
+    }
 
     let mut detected_genre = "Alternative".to_string();
 
@@ -419,9 +429,9 @@ pub async fn get_genre_mix(artist: String, title: String) -> Result<Vec<Track>, 
                     if let Some(g) = s.primary_genre_name {
                         detected_genre = g;
                     }
-                    let sig = get_title_signature(&t_name, &a_name);
+                    let sig = get_title_signature_string(&t_name, &a_name);
                     if !sig.is_empty() && !seen_sigs.contains(&sig) {
-                        seen_sigs.insert(sig);
+                        seen_sigs.insert(sig.clone());
                         let duration = s.track_time_millis.map(|ms| ms / 1000).unwrap_or(210);
                         let thumb = s.artwork_url.unwrap_or_default().replace("100x100", "600x600");
                         mix_tracks.push(Track {
@@ -431,6 +441,7 @@ pub async fn get_genre_mix(artist: String, title: String) -> Result<Vec<Track>, 
                             duration,
                             thumbnail: thumb,
                             source: "youtube".into(),
+                            signature: sig,
                         });
                     }
                 }
@@ -454,9 +465,9 @@ pub async fn get_genre_mix(artist: String, title: String) -> Result<Vec<Track>, 
                     if *count >= 2 {
                         continue;
                     }
-                    let sig = get_title_signature(&t_name, &a_name);
+                    let sig = get_title_signature_string(&t_name, &a_name);
                     if !sig.is_empty() && !seen_sigs.contains(&sig) {
-                        seen_sigs.insert(sig);
+                        seen_sigs.insert(sig.clone());
                         *count += 1;
                         let duration = s.track_time_millis.map(|ms| ms / 1000).unwrap_or(210);
                         let thumb = s.artwork_url.unwrap_or_default().replace("100x100", "600x600");
@@ -467,6 +478,7 @@ pub async fn get_genre_mix(artist: String, title: String) -> Result<Vec<Track>, 
                             duration,
                             thumbnail: thumb,
                             source: "youtube".into(),
+                            signature: sig,
                         });
                     }
                 }

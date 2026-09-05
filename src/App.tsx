@@ -10,6 +10,7 @@ import { SongsView } from "./views/SongsView";
 import { FavoritesView } from "./views/FavoritesView";
 import { SettingsView } from "./views/SettingsView";
 import { Track, NavTab, AccentColor } from "./types";
+import { isSameSong } from "./utils/trackSignature";
 import "./App.css";
 
 export default function App() {
@@ -71,52 +72,15 @@ export default function App() {
 
   const recentlyPlayedSignatures = useRef<Set<string>>(new Set());
 
-  const getCleanWords = (track: Track): Set<string> => {
-    const combined = `${track.title} ${track.artist}`.toLowerCase();
-    const noise = new Set([
-      "official", "video", "audio", "music", "lyrics", "lyric", "remastered",
-      "remaster", "hd", "hq", "4k", "version", "original", "stem", "edit",
-      "visualizer", "soundtrack", "ost", "theme", "full", "song", "records",
-      "vevo", "channel", "topic", "special", "mix", "extended"
-    ]);
-    const cleaned = combined
-      .replace(/\([^)]*\)/g, " ")
-      .replace(/\[[^\]]*\]/g, " ")
-      .replace(/[^a-z0-9\s]/g, " ");
-    return new Set(
-      cleaned.split(/\s+/).filter((w) => w.length >= 2 && !noise.has(w))
-    );
-  };
-
-  const isSameSong = (a: Track, b: Track): boolean => {
-    if (a.id === b.id) return true;
-    const wordsA = getCleanWords(a);
-    const wordsB = getCleanWords(b);
-    if (wordsA.size === 0 || wordsB.size === 0) return false;
-    let intersection = 0;
-    for (const w of wordsA) {
-      if (wordsB.has(w)) intersection++;
-    }
-    const overlap = intersection / Math.min(wordsA.size, wordsB.size);
-    return overlap >= 0.7;
-  };
-
-  const getSongSignature = (track: Track): string => {
-    const words = Array.from(getCleanWords(track)).sort();
-    return words.join(" ");
-  };
-
   const isRecentlyPlayed = (track: Track): boolean => {
     if (recentlyPlayedSignatures.current.has(track.id)) return true;
-    const sig = getSongSignature(track);
-    return sig.length > 0 && recentlyPlayedSignatures.current.has(sig);
+    return Boolean(track.signature && recentlyPlayedSignatures.current.has(track.signature));
   };
 
   const markAsPlayed = (track: Track) => {
     recentlyPlayedSignatures.current.add(track.id);
-    const sig = getSongSignature(track);
-    if (sig.length > 0) {
-      recentlyPlayedSignatures.current.add(sig);
+    if (track.signature) {
+      recentlyPlayedSignatures.current.add(track.signature);
     }
     if (recentlyPlayedSignatures.current.size > 100) {
       const arr = Array.from(recentlyPlayedSignatures.current);

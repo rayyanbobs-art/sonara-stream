@@ -10,9 +10,9 @@ import { SongsView } from "./views/SongsView";
 import { FavoritesView } from "./views/FavoritesView";
 import { SettingsView } from "./views/SettingsView";
 import { Track, NavTab, AccentColor } from "./types";
-import { isSameSong } from "./utils/trackSignature";
 import { useFavorites } from "./hooks/useFavorites";
 import { useAudioPlayer } from "./hooks/useAudioPlayer";
+import { useQueue } from "./hooks/useQueue";
 import "./App.css";
 
 export default function App() {
@@ -23,16 +23,7 @@ export default function App() {
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     return (localStorage.getItem("sonara_theme") as "dark" | "light") || "dark";
   });
-  const [shuffleDefault, setShuffleDefault] = useState<boolean>(() => {
-    return localStorage.getItem("sonara_shuffle_default") === "true";
-  });
-  const [isShuffle, setIsShuffle] = useState<boolean>(() => {
-    return localStorage.getItem("sonara_shuffle_default") === "true";
-  });
-
   const [tracks, setTracks] = useState<Track[]>([]);
-  const [upNextMix, setUpNextMix] = useState<Track[]>([]);
-  const [isQueueOpen, setIsQueueOpen] = useState(false);
   const { favorites, isFavorite, toggleFavorite } = useFavorites();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -42,16 +33,15 @@ export default function App() {
 
   const handleNextRef = useRef<() => void>(() => {});
   const handlePrevRef = useRef<() => void>(() => {});
+  const handlePlayTrackRef = useRef<(track: Track, preserveQueue?: boolean) => Promise<void>>(async () => {});
 
   const {
     currentTrack,
     isPlaying,
     isBuffering,
-    setIsBuffering,
     currentTime,
     duration,
     volume,
-    audioRef,
     preloadAudioRef,
     preloadTrackRef,
     playTrack,
@@ -64,31 +54,33 @@ export default function App() {
     onError: setErrorMessage,
   });
 
-  const prefetchedIds = useRef<Set<string>>(new Set());
+  const {
+    upNextMix,
+    setUpNextMix,
+    isQueueOpen,
+    setIsQueueOpen,
+    toggleQueue,
+    isShuffle,
+    toggleShuffle,
+    shuffleDefault,
+    handleShuffleDefaultChange,
+    handleNext,
+    handlePrev,
+    handlePrefetchTrack,
+    updateQueueForTrack,
+    markAsPlayed,
+  } = useQueue({
+    currentTrack,
+    activeTab,
+    tracks,
+    favorites,
+    onPlayTrack: (track, preserveQueue) => handlePlayTrackRef.current(track, preserveQueue),
+    preloadAudioRef,
+    preloadTrackRef,
+  });
 
-  const handlePrefetchTrack = (track: Track) => {
-    if (!track.id || prefetchedIds.current.has(track.id)) return;
-    prefetchedIds.current.add(track.id);
-    invoke("get_stream_url", { id: track.id }).catch(() => {});
-  };
-
-  const recentlyPlayedSignatures = useRef<Set<string>>(new Set());
-
-  const isRecentlyPlayed = (track: Track): boolean => {
-    if (recentlyPlayedSignatures.current.has(track.id)) return true;
-    return Boolean(track.signature && recentlyPlayedSignatures.current.has(track.signature));
-  };
-
-  const markAsPlayed = (track: Track) => {
-    recentlyPlayedSignatures.current.add(track.id);
-    if (track.signature) {
-      recentlyPlayedSignatures.current.add(track.signature);
-    }
-    if (recentlyPlayedSignatures.current.size > 100) {
-      const arr = Array.from(recentlyPlayedSignatures.current);
-      recentlyPlayedSignatures.current = new Set(arr.slice(arr.length - 60));
-    }
-  };
+  handleNextRef.current = handleNext;
+  handlePrevRef.current = handlePrev;
 
   // Sync accent color to document
   useEffect(() => {
@@ -125,10 +117,7 @@ export default function App() {
         // Predictive zero-latency pre-fetching for top tracks
         if (formatted.length > 0) {
           formatted.slice(0, 6).forEach((t) => {
-            if (!prefetchedIds.current.has(t.id)) {
-              prefetchedIds.current.add(t.id);
-              invoke("get_stream_url", { id: t.id }).catch(() => {});
-            }
+            handlePrefetchTrack(t);
           });
         }
       }
@@ -150,211 +139,13 @@ export default function App() {
 
     try {
       await playTrack(track);
-
-      // Only rebuild entire genre mix when clicking a fresh song from Search/Home (preserveQueue is false)
-      if (!preserveQueue) {
-        invoke("get_genre_mix", { artist: track.artist, title: track.title })
-          .then((mix: any) => {
-            if (Array.isArray(mix) && mix.length > 0) {
-              const freshMix = mix.filter(
-                (m: Track) => !isSameSong(m, track) && !isRecentlyPlayed(m)
-              );
-              setUpNextMix(freshMix);
-
-              // Pre-fetch the first 3 songs of the mix immediately in the background
-              freshMix.slice(0, 3).forEach((mTrack: Track) => {
-                if (!prefetchedIds.current.has(mTrack.id)) {
-                  prefetchedIds.current.add(mTrack.id);
-                  invoke("get_stream_url", { id: mTrack.id }).catch(() => {});
-                }
-              });
-
-              // Pre-buffer the 1st song of the genre mix into preload audio element
-              if (freshMix.length > 0) {
-                invoke("get_stream_url", { id: freshMix[0].id })
-                  .then((nextUrl) => {
-                    if (preloadAudioRef.current && typeof nextUrl === "string") {
-                      preloadAudioRef.current.src = nextUrl;
-                      preloadTrackRef.current = freshMix[0];
-                    }
-                  })
-                  .catch(() => {});
-              }
-            }
-          })
-          .catch((err) => console.error("Genre mix error:", err));
-      } else {
-        // preserveQueue is TRUE (auto-advancing): keep queue and top up if low (< 4 tracks)
-        setUpNextMix((currentMix) => {
-          if (currentMix.length < 4) {
-            invoke("get_genre_mix", { artist: track.artist, title: track.title })
-              .then((moreMix: any) => {
-                if (Array.isArray(moreMix) && moreMix.length > 0) {
-                  setUpNextMix((prev) => {
-                    const existingIds = new Set(prev.map((t) => t.id));
-                    const newItems = moreMix.filter(
-                      (m: Track) =>
-                        !existingIds.has(m.id) &&
-                        !isSameSong(m, track) &&
-                        !isRecentlyPlayed(m)
-                    );
-                    return [...prev, ...newItems];
-                  });
-                }
-              })
-              .catch(() => {});
-          }
-
-          if (currentMix.length > 0) {
-            const nextCandidate = currentMix[0];
-            invoke("get_stream_url", { id: nextCandidate.id })
-              .then((nextUrl) => {
-                if (preloadAudioRef.current && typeof nextUrl === "string") {
-                  preloadAudioRef.current.src = nextUrl;
-                  preloadTrackRef.current = nextCandidate;
-                }
-              })
-              .catch(() => {});
-          }
-
-          return currentMix;
-        });
-      }
-
-      // Speculatively pre-fetch and buffer the next track in background
-      const list = activeTab === "favorites" ? favorites : tracks;
-      const currIdx = list.findIndex((t) => t.id === track.id);
-      if (currIdx !== -1 && list.length > 1) {
-        const nextTrack = list[(currIdx + 1) % list.length];
-        if (nextTrack && !prefetchedIds.current.has(nextTrack.id)) {
-          prefetchedIds.current.add(nextTrack.id);
-          invoke("get_stream_url", { id: nextTrack.id }).then((nextUrl) => {
-            if (preloadAudioRef.current && typeof nextUrl === "string") {
-              preloadAudioRef.current.src = nextUrl;
-              preloadTrackRef.current = nextTrack;
-            }
-          }).catch(() => {});
-        }
-      }
+      updateQueueForTrack(track, preserveQueue);
     } catch {
       // Playback errors handled in useAudioPlayer
     }
   };
 
-  const handleNext = async () => {
-    if (!currentTrack) return;
-
-    // 1. YouTube Music-style Genre Autoplay: Prioritize upcoming tracks from the genre mix
-    if (activeTab !== "favorites" && upNextMix.length > 0) {
-      let candidateIdx = -1;
-      if (isShuffle) {
-        const candidates = upNextMix
-          .map((t, idx) => ({ t, idx }))
-          .filter(({ t }) => !isSameSong(t, currentTrack) && !isRecentlyPlayed(t));
-        if (candidates.length > 0) {
-          const rand = Math.floor(Math.random() * candidates.length);
-          candidateIdx = candidates[rand].idx;
-        }
-      } else {
-        candidateIdx = upNextMix.findIndex(
-          (t) => !isSameSong(t, currentTrack) && !isRecentlyPlayed(t)
-        );
-      }
-
-      // If all tracks were marked as recently played, take any track that is not the same song
-      if (candidateIdx === -1) {
-        candidateIdx = upNextMix.findIndex((t) => !isSameSong(t, currentTrack));
-      }
-
-      if (candidateIdx !== -1) {
-        const nextTrack = upNextMix[candidateIdx];
-        // Advance queue: drop this track and any skipped before it
-        setUpNextMix((prev) => prev.filter((_, idx) => idx > candidateIdx));
-        handlePlayTrack(nextTrack, true /* PRESERVE QUEUE! */);
-        return;
-      }
-    }
-
-    const list = activeTab === "favorites" ? favorites : tracks;
-    if (list.length > 0) {
-      if (isShuffle) {
-        const candidateTracks = list.filter(
-          (t) => !isSameSong(t, currentTrack) && !isRecentlyPlayed(t)
-        );
-        if (candidateTracks.length > 0) {
-          const rand = Math.floor(Math.random() * candidateTracks.length);
-          handlePlayTrack(candidateTracks[rand], true);
-          return;
-        }
-      }
-
-      // Sequential: pick next distinct unplayed track
-      const currIdx = list.findIndex((t) => t.id === currentTrack.id);
-      let nextTrack: Track | null = null;
-
-      for (let i = 1; i < list.length; i++) {
-        const candidate = list[(currIdx + i) % list.length];
-        if (!isSameSong(candidate, currentTrack) && !isRecentlyPlayed(candidate)) {
-          nextTrack = candidate;
-          break;
-        }
-      }
-
-      if (nextTrack) {
-        handlePlayTrack(nextTrack, true);
-        return;
-      }
-    }
-
-    // 3. Queue / Playlist exhausted: Fetch FRESH never-before-played related tracks!
-    try {
-      setIsBuffering(true);
-      const related: Track[] = await invoke("get_related_tracks", {
-        artist: currentTrack.artist,
-        title: currentTrack.title,
-      });
-
-      const freshTracks = related.filter(
-        (r) => !isSameSong(r, currentTrack) && !isRecentlyPlayed(r)
-      );
-      if (freshTracks.length > 0) {
-        const next = freshTracks[0];
-        setUpNextMix(freshTracks.slice(1));
-        handlePlayTrack(next, true);
-        return;
-      }
-    } catch (err) {
-      console.error("Autoplay radio error:", err);
-    }
-
-    // 4. Fallback: pick any track from list that is not the same song
-    const fallbackList = activeTab === "favorites" ? favorites : tracks;
-    if (fallbackList.length > 1) {
-      const candidate = fallbackList.find((t) => !isSameSong(t, currentTrack));
-      if (candidate) {
-        handlePlayTrack(candidate, true);
-        return;
-      }
-    }
-  };
-
-  const handlePrev = () => {
-    const list = activeTab === "favorites" ? favorites : tracks;
-    if (!currentTrack || list.length === 0) return;
-    const idx = list.findIndex((t) => t.id === currentTrack.id);
-    const prevIdx = (idx - 1 + list.length) % list.length;
-    handlePlayTrack(list[prevIdx], false);
-  };
-
-  // Keep refs synchronized on every render
-  handleNextRef.current = handleNext;
-  handlePrevRef.current = handlePrev;
-
-  const handleShuffleDefaultChange = (val: boolean) => {
-    setShuffleDefault(val);
-    setIsShuffle(val);
-    localStorage.setItem("sonara_shuffle_default", String(val));
-  };
+  handlePlayTrackRef.current = handlePlayTrack;
 
   return (
     <div className={`sonara-layout ${theme}`}>
@@ -477,9 +268,9 @@ export default function App() {
         onVolumeChange={setVolume}
         onNext={handleNext}
         onPrev={handlePrev}
-        onToggleShuffle={() => setIsShuffle((prev) => !prev)}
+        onToggleShuffle={toggleShuffle}
         onToggleFavorite={() => currentTrack && toggleFavorite(currentTrack)}
-        onToggleQueue={() => setIsQueueOpen((prev) => !prev)}
+        onToggleQueue={toggleQueue}
         isQueueOpen={isQueueOpen}
       />
 

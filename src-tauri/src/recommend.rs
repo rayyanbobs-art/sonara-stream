@@ -158,7 +158,14 @@ pub fn filter_diverse_tracks(
             track.signature.clone()
         };
 
-        if sig.is_empty() || seen_signatures.contains(&sig) {
+        if sig.is_empty() {
+            continue;
+        }
+
+        let is_same = seen_signatures.iter().any(|ex| {
+            crate::youtube::signatures_are_same_song(ex, &sig)
+        });
+        if is_same {
             continue;
         }
 
@@ -467,6 +474,21 @@ mod tests {
         let filtered = filter_diverse_tracks(tracks, &excluded, 2, 10);
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].id, "2");
+    }
+
+    #[test]
+    fn test_diversity_rules_excludes_same_song_variations() {
+        let tracks = vec![
+            dummy_track("1", "Woh Lamhe", "Atif Aslam", "aslam atif lamhe woh"),
+            dummy_track("2", "Woh Lamhe Woh Baatein", "Atif Aslam", "aslam atif baatein lamhe woh"),
+            dummy_track("3", "Aadat", "Atif Aslam", "aadat aslam atif"),
+        ];
+
+        let filtered = filter_diverse_tracks(tracks, &HashSet::new(), 2, 10);
+        // Track 2 is a variation of Track 1, so it must be excluded. Track 3 is a different song by the same artist.
+        assert_eq!(filtered.len(), 2);
+        assert_eq!(filtered[0].id, "1");
+        assert_eq!(filtered[1].id, "3");
     }
 
     #[test]

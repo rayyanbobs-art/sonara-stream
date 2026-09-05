@@ -168,7 +168,9 @@ pub fn get_title_signature(title: &str, artist: &str) -> std::collections::BTree
         "official", "video", "audio", "music", "lyrics", "lyric", "remastered",
         "remaster", "hd", "hq", "4k", "version", "original", "stem", "edit",
         "visualizer", "soundtrack", "ost", "theme", "full", "song", "records",
-        "vevo", "channel", "topic", "special", "mix", "extended", "lyrics", "audio"
+        "vevo", "channel", "topic", "special", "mix", "extended", "live",
+        "acoustic", "unplugged", "slowed", "reverb", "feat", "ft", "cover",
+        "performance", "clip", "prod", "bass", "boosted"
     ]
     .into_iter()
     .collect();
@@ -215,6 +217,32 @@ pub fn get_title_signature(title: &str, artist: &str) -> std::collections::BTree
 pub fn get_title_signature_string(title: &str, artist: &str) -> String {
     let words = get_title_signature(title, artist);
     words.into_iter().collect::<Vec<_>>().join(" ")
+}
+
+pub fn signatures_are_same_song(sig_a: &str, sig_b: &str) -> bool {
+    let a = sig_a.trim();
+    let b = sig_b.trim();
+    if a.is_empty() || b.is_empty() {
+        return false;
+    }
+    if a == b {
+        return true;
+    }
+    let words_a: std::collections::HashSet<&str> = a.split_whitespace().collect();
+    let words_b: std::collections::HashSet<&str> = b.split_whitespace().collect();
+    if words_a.is_empty() || words_b.is_empty() {
+        return false;
+    }
+    let intersection = words_a.intersection(&words_b).count();
+    let min_len = words_a.len().min(words_b.len());
+    if min_len >= 2 && intersection >= min_len {
+        return true;
+    }
+    let union = words_a.union(&words_b).count();
+    if union > 0 && (intersection as f64 / union as f64) >= 0.75 {
+        return true;
+    }
+    false
 }
 
 pub fn is_extraction_failure(err: &str) -> bool {
@@ -968,6 +996,26 @@ mod tests {
                 entry.abort_handle.abort();
             }
         }
+    }
+
+    #[test]
+    fn test_signatures_are_same_song() {
+        assert!(signatures_are_same_song(
+            "aslam atif lamhe woh",
+            "aslam atif baatein lamhe woh"
+        ));
+        assert!(signatures_are_same_song(
+            "aslam atif lamhe woh",
+            "aslam atif lamhe woh"
+        ));
+        assert!(!signatures_are_same_song(
+            "aslam atif lamhe woh",
+            "aadat aslam atif"
+        ));
+        assert!(!signatures_are_same_song(
+            "arjit singh channa mereya",
+            "aslam atif lamhe woh"
+        ));
     }
 
     #[tokio::test]

@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import { isSameSong } from "../utils/trackSignature";
 import { Track } from "../types";
 
@@ -65,6 +65,50 @@ describe("isSameSong", () => {
       thumbnail: "https://example.com/2.jpg",
       source: "youtube",
       signature: "artist b song two",
+    };
+    expect(isSameSong(a, b)).toBe(false);
+  });
+
+  it("returns true for subset variations of the same song (e.g. Woh Lamhe vs Woh Lamhe Woh Baatein)", () => {
+    const a: Track = {
+      id: "yt-1",
+      title: "Woh Lamhe",
+      artist: "Atif Aslam",
+      duration: 320,
+      thumbnail: "https://example.com/1.jpg",
+      source: "youtube",
+      signature: "aslam atif lamhe woh",
+    };
+    const b: Track = {
+      id: "yt-2",
+      title: "Woh Lamhe Woh Baatein",
+      artist: "Atif Aslam",
+      duration: 325,
+      thumbnail: "https://example.com/2.jpg",
+      source: "youtube",
+      signature: "aslam atif baatein lamhe woh",
+    };
+    expect(isSameSong(a, b)).toBe(true);
+  });
+
+  it("returns false for completely different songs by the same artist (e.g. Woh Lamhe vs Aadat)", () => {
+    const a: Track = {
+      id: "yt-1",
+      title: "Woh Lamhe",
+      artist: "Atif Aslam",
+      duration: 320,
+      thumbnail: "https://example.com/1.jpg",
+      source: "youtube",
+      signature: "aslam atif lamhe woh",
+    };
+    const b: Track = {
+      id: "yt-3",
+      title: "Aadat",
+      artist: "Atif Aslam",
+      duration: 300,
+      thumbnail: "https://example.com/3.jpg",
+      source: "youtube",
+      signature: "aadat aslam atif",
     };
     expect(isSameSong(a, b)).toBe(false);
   });

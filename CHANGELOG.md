@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [0.2.1] - 2026-09-05
+
+### 🎵 Autoplay & Queue Deduplication
+- **Same-Song Variation Prevention**: Expanded noise stripping (`live`, `acoustic`, `unplugged`, `slowed`, `reverb`, `feat`, `ft`, `cover`, `performance`, `clip`, `prod`, `bass`, `boosted`) and implemented token subset matching + 75% Jaccard word similarity to prevent duplicate variations of the same song (e.g. "Woh Lamhe" vs "Woh Lamhe Woh Baatein") from playing in autoplay.
+- **Radio & Recommendation Engine**: Local signal tracking, diversity filtering (max 2 tracks per artist), and guaranteed non-consecutive artist ordering.
+- **Playback Controls**: Tri-state repeat (Off / Repeat All / Repeat One), restart track on previous if elapsed > 3s, and radio-backed automatic continuation when reaching the end of the manual queue.
+
+### ⚡ Rapid Toolchain & Bun Integration
+- **Bun Migration**: Fully migrated frontend package management, dev server, build bundling, and testing to Bun v1.4.2.
+- **Sub-Second Speeds**: Dependency checks in ~15ms, production bundle in ~1.3s, Vitest test suites executing in ~1.4s.
+- **GitHub Actions Workflows**: Upgraded CI and Release pipelines to `oven-sh/setup-bun@v2` for rapid, deterministic cloud builds.
+
+### 🚀 Latency & Search Optimization
+- **Search Streamlining**: Eliminated redundant secondary search expansion in `search_youtube`, cutting search response time and avoiding extra sidecar spawns.
+- **Concurrency Safeguards**: Capped concurrent `yt-dlp` spawns with an async semaphore and implemented cancelable in-flight stream requests.
+
+### 🖥️ UI & Desktop Integration
+- **Browser Context Guard**: Added detection banner with clear guidance when the web frontend is viewed inside external browsers without Tauri runtime bindings.
+- **Decoupled Search & Discovery**: Cleanly separated search results from personalized recommendation grids with independent version groupings and clear status messaging.
+
+---
+
 ## [0.2.0] - 2026-09-05
 
 ### 🔄 Multi-Tier Self-Updating Architecture

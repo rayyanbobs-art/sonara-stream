@@ -12,6 +12,7 @@ import { SettingsView } from "./views/SettingsView";
 import { Track, NavTab, AccentColor } from "./types";
 import { isSameSong } from "./utils/trackSignature";
 import { useFavorites } from "./hooks/useFavorites";
+import { useAudioPlayer } from "./hooks/useAudioPlayer";
 import "./App.css";
 
 export default function App() {
@@ -34,29 +35,36 @@ export default function App() {
   const [isQueueOpen, setIsQueueOpen] = useState(false);
   const { favorites, isFavorite, toggleFavorite } = useFavorites();
 
-  const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isBuffering, setIsBuffering] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(0.85);
-
   const [searchQuery, setSearchQuery] = useState("");
   const [source, setSource] = useState<"youtube" | "spotify">("youtube");
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const preloadAudioRef = useRef<HTMLAudioElement | null>(null);
-  const preloadTrackRef = useRef<Track | null>(null);
-  const prefetchedIds = useRef<Set<string>>(new Set());
-
-  // Mutable refs to prevent stale closure bugs in audio events & track retries
-  const currentTrackRef = useRef<Track | null>(null);
-  const retryCountRef = useRef<number>(0);
   const handleNextRef = useRef<() => void>(() => {});
-  const handleTogglePlayRef = useRef<() => void>(() => {});
   const handlePrevRef = useRef<() => void>(() => {});
+
+  const {
+    currentTrack,
+    isPlaying,
+    isBuffering,
+    setIsBuffering,
+    currentTime,
+    duration,
+    volume,
+    audioRef,
+    preloadAudioRef,
+    preloadTrackRef,
+    playTrack,
+    togglePlay,
+    seek,
+    setVolume,
+  } = useAudioPlayer({
+    onNext: () => handleNextRef.current(),
+    onPrev: () => handlePrevRef.current(),
+    onError: setErrorMessage,
+  });
+
+  const prefetchedIds = useRef<Set<string>>(new Set());
 
   const handlePrefetchTrack = (track: Track) => {
     if (!track.id || prefetchedIds.current.has(track.id)) return;
@@ -94,104 +102,10 @@ export default function App() {
     localStorage.setItem("sonara_theme", theme);
   }, [theme]);
 
-  // Audio element setup (mount once)
-  useEffect(() => {
-    const audio = new Audio();
-    audio.preload = "auto";
-    audio.volume = volume;
-    audioRef.current = audio;
-
-    audio.ontimeupdate = () => {
-      setCurrentTime(audio.currentTime);
-    };
-
-    audio.onloadedmetadata = () => {
-      setDuration(audio.duration || 0);
-      setIsBuffering(false);
-    };
-
-    audio.onwaiting = () => {
-      setIsBuffering(true);
-    };
-
-    audio.onplaying = () => {
-      setIsBuffering(false);
-      setIsPlaying(true);
-    };
-
-    audio.onpause = () => {
-      setIsPlaying(false);
-    };
-
-    // Auto-advance to next song on completion using fresh ref
-    audio.onended = () => {
-      handleNextRef.current();
-    };
-
-    audio.onerror = async () => {
-      const activeTrack = currentTrackRef.current;
-      // Exactly 1 retry bypassing the cache before surfacing failure
-      if (activeTrack && retryCountRef.current === 0) {
-        retryCountRef.current += 1;
-        setIsBuffering(true);
-        setErrorMessage("Playback error: refreshing stream URL...");
-        try {
-          const freshUrl: string = await invoke("get_stream_url", {
-            id: activeTrack.id,
-            bypassCache: true,
-          });
-          if (audioRef.current && typeof freshUrl === "string" && freshUrl.length > 0) {
-            audioRef.current.src = freshUrl;
-            await audioRef.current.play();
-            setErrorMessage(null);
-            return;
-          }
-        } catch (retryErr) {
-          console.error("Audio stream retry failed:", retryErr);
-        }
-      }
-
-      setIsBuffering(false);
-      setIsPlaying(false);
-      setErrorMessage("Stream playback failed. The audio stream could not be loaded. Please choose another track.");
-    };
-
-    return () => {
-      audio.pause();
-      audio.src = "";
-    };
-  }, []);
-
-  // Pre-load audio engine initialization
-  useEffect(() => {
-    const pAudio = new Audio();
-    pAudio.preload = "auto";
-    preloadAudioRef.current = pAudio;
-    return () => {
-      pAudio.src = "";
-    };
-  }, []);
-
   // Initial load
   useEffect(() => {
     performSearch("Top Hits 2026", "youtube");
   }, []);
-
-  // Windows MediaSession integration
-  useEffect(() => {
-    if ("mediaSession" in navigator && currentTrack) {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: currentTrack.title,
-        artist: currentTrack.artist,
-        artwork: [{ src: currentTrack.thumbnail }],
-      });
-
-      navigator.mediaSession.setActionHandler("play", () => handleTogglePlayRef.current());
-      navigator.mediaSession.setActionHandler("pause", () => handleTogglePlayRef.current());
-      navigator.mediaSession.setActionHandler("nexttrack", () => handleNextRef.current());
-      navigator.mediaSession.setActionHandler("previoustrack", () => handlePrevRef.current());
-    }
-  }, [currentTrack]);
 
   const performSearch = async (queryText: string, searchSource: "youtube" | "spotify") => {
     setLoading(true);
@@ -227,39 +141,15 @@ export default function App() {
   };
 
   const handlePlayTrack = async (track: Track, preserveQueue = false) => {
-    if (!audioRef.current) return;
-
     if (currentTrack?.id === track.id) {
-      handleTogglePlay();
+      togglePlay();
       return;
     }
 
     markAsPlayed(track);
-    currentTrackRef.current = track;
-    retryCountRef.current = 0;
-    setCurrentTrack(track);
-    setIsBuffering(true);
-    setErrorMessage(null);
 
     try {
-      let streamUrl: string;
-      // If preloadAudioRef has this exact track buffered already, reuse it immediately for zero-wait play!
-      if (
-        preloadAudioRef.current &&
-        preloadAudioRef.current.src &&
-        preloadTrackRef.current?.id === track.id
-      ) {
-        streamUrl = preloadAudioRef.current.src;
-        audioRef.current.src = streamUrl;
-      } else {
-        streamUrl = await invoke("get_stream_url", { id: track.id });
-        audioRef.current.src = streamUrl;
-      }
-
-      audioRef.current.currentTime = 0;
-      await audioRef.current.play();
-      setIsPlaying(true);
-      setDuration(track.duration || 0);
+      await playTrack(track);
 
       // Only rebuild entire genre mix when clicking a fresh song from Search/Home (preserveQueue is false)
       if (!preserveQueue) {
@@ -346,33 +236,8 @@ export default function App() {
           }).catch(() => {});
         }
       }
-    } catch (err: any) {
-      console.error("Playback error:", err);
-      setIsBuffering(false);
-      setIsPlaying(false);
-      setErrorMessage(typeof err === "string" ? err : "Failed to stream track.");
-    }
-  };
-
-  const handleTogglePlay = () => {
-    if (!audioRef.current || !currentTrack) return;
-    if (isPlaying) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play().catch(console.error);
-    }
-  };
-
-  const handleSeek = (time: number) => {
-    if (!audioRef.current) return;
-    audioRef.current.currentTime = time;
-    setCurrentTime(time);
-  };
-
-  const handleVolumeChange = (vol: number) => {
-    setVolume(vol);
-    if (audioRef.current) {
-      audioRef.current.volume = vol;
+    } catch {
+      // Playback errors handled in useAudioPlayer
     }
   };
 
@@ -483,7 +348,6 @@ export default function App() {
 
   // Keep refs synchronized on every render
   handleNextRef.current = handleNext;
-  handleTogglePlayRef.current = handleTogglePlay;
   handlePrevRef.current = handlePrev;
 
   const handleShuffleDefaultChange = (val: boolean) => {
@@ -608,9 +472,9 @@ export default function App() {
         volume={volume}
         isShuffle={isShuffle}
         isFavorite={currentTrack ? isFavorite(currentTrack.id) : false}
-        onTogglePlay={handleTogglePlay}
-        onSeek={handleSeek}
-        onVolumeChange={handleVolumeChange}
+        onTogglePlay={togglePlay}
+        onSeek={seek}
+        onVolumeChange={setVolume}
         onNext={handleNext}
         onPrev={handlePrev}
         onToggleShuffle={() => setIsShuffle((prev) => !prev)}

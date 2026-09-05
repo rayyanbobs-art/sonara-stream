@@ -8,9 +8,12 @@ mod recommend;
 use tauri::Manager;
 
 fn main() {
-    if std::env::var("SONARA_TRACE").map(|v| v == "1").unwrap_or(false) {
+    if std::env::var("SONARA_TRACE").map(|v| v == "1").unwrap_or(false)
+        || std::env::var("SONARA_PERF").map(|v| v == "1").unwrap_or(false)
+        || cfg!(debug_assertions)
+    {
         let _ = tracing_subscriber::fmt()
-            .with_env_filter("sonara_stream=trace")
+            .with_env_filter("sonara_stream=info")
             .try_init();
     }
 
@@ -20,7 +23,8 @@ fn main() {
         .setup(|app| {
             if let Ok(app_data) = app.path().app_data_dir() {
                 let manager = ytdlp_updater::init_manager(app_data.clone());
-                recommend::init_recommendations(app_data);
+                recommend::init_recommendations(app_data.clone());
+                youtube::init_search_cache(app_data);
                 // Background update check on startup (non-blocking, delayed by 3s to not affect initial render)
                 tauri::async_runtime::spawn(async move {
                     tokio::time::sleep(std::time::Duration::from_secs(3)).await;

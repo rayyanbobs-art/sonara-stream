@@ -11,9 +11,10 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
+use tokio::io::AsyncReadExt;
 
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -34,6 +35,7 @@ static SEARCH_CACHE: OnceLock<Mutex<SearchCacheMap>> = OnceLock::new();
 static IN_FLIGHT: OnceLock<Mutex<InFlightMap>> = OnceLock::new();
 static SHARED_HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 static YTDLP_SEMAPHORE: OnceLock<tokio::sync::Semaphore> = OnceLock::new();
+static APP_DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 pub fn get_ytdlp_semaphore() -> &'static tokio::sync::Semaphore {
     YTDLP_SEMAPHORE.get_or_init(|| tokio::sync::Semaphore::new(3))
@@ -105,6 +107,9 @@ fn insert_search_cache(key: String, value: Vec<Track>) {
         Duration::from_secs(1800),
         30,
     );
+    tokio::spawn(async {
+        tokio::task::spawn_blocking(persist_search_cache_to_disk);
+    });
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -116,6 +121,83 @@ pub struct Track {
     pub thumbnail: String,
     pub source: String,
     pub signature: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct PersistedSearchItem {
+    tracks: Vec<Track>,
+    saved_unix: u64,
+}
+
+type PersistedSearchCache = HashMap<String, PersistedSearchItem>;
+
+pub fn init_search_cache(app_data_dir: PathBuf) {
+    let _ = APP_DATA_DIR.set(app_data_dir.clone());
+    load_search_cache_from_disk(&app_data_dir);
+}
+
+fn load_search_cache_from_disk(app_data_dir: &Path) {
+    let cache_file = app_data_dir.join("search_cache.json");
+    if !cache_file.exists() {
+        return;
+    }
+    let data = match std::fs::read_to_string(&cache_file) {
+        Ok(d) => d,
+        Err(_) => return,
+    };
+    let items: PersistedSearchCache = match serde_json::from_str(&data) {
+        Ok(i) => i,
+        Err(_) => return,
+    };
+    let now_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    if let Ok(mut guard) = get_search_cache().lock() {
+        for (query, item) in items {
+            if now_unix >= item.saved_unix && (now_unix - item.saved_unix) < 1800 {
+                let elapsed_secs = now_unix - item.saved_unix;
+                if let Some(instant) = Instant::now().checked_sub(Duration::from_secs(elapsed_secs)) {
+                    guard.insert(query, (item.tracks, instant));
+                }
+            }
+        }
+    }
+}
+
+pub fn persist_search_cache_to_disk() {
+    if let Some(app_data_dir) = APP_DATA_DIR.get() {
+        let cache_file = app_data_dir.join("search_cache.json");
+        let now_unix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        let mut to_persist: PersistedSearchCache = HashMap::new();
+        if let Ok(guard) = get_search_cache().lock() {
+            for (query, (tracks, inst)) in guard.iter() {
+                if inst.elapsed() < Duration::from_secs(1800) {
+                    let elapsed = inst.elapsed().as_secs();
+                    let saved_unix = now_unix.saturating_sub(elapsed);
+                    to_persist.insert(
+                        query.clone(),
+                        PersistedSearchItem {
+                            tracks: tracks.clone(),
+                            saved_unix,
+                        },
+                    );
+                }
+            }
+        }
+
+        if let Ok(json_str) = serde_json::to_string(&to_persist) {
+            let temp_file = app_data_dir.join("search_cache.json.tmp");
+            if std::fs::write(&temp_file, json_str).is_ok() {
+                let _ = std::fs::rename(&temp_file, &cache_file);
+            }
+        }
+    }
 }
 
 pub fn get_bundled_ytdlp_path() -> PathBuf {
@@ -262,21 +344,43 @@ pub fn is_extraction_failure(err: &str) -> bool {
         || lower.contains("unsupported url")
 }
 
+#[derive(Deserialize)]
+struct YtDlpThumbnail {
+    #[serde(default)]
+    url: String,
+}
+
+#[derive(Deserialize)]
+struct YtDlpSearchResult {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    uploader: Option<String>,
+    #[serde(default)]
+    duration: Option<f64>,
+    #[serde(default)]
+    thumbnails: Option<Vec<YtDlpThumbnail>>,
+}
+
 // Invokes external yt-dlp binary to search YouTube; subject to YouTube ToS and breakage on UI/API changes.
-pub(crate) async fn execute_ytdlp_search(search_arg: &str, binary: &PathBuf) -> Result<Vec<Track>, String> {
+pub(crate) async fn execute_ytdlp_search(search_arg: &str, binary: &Path) -> Result<Vec<Track>, String> {
+    let sem_start = Instant::now();
     let _permit = get_ytdlp_semaphore()
         .acquire()
         .await
         .map_err(|e| format!("Failed to acquire yt-dlp permit: {}", e))?;
+    let sem_wait_ms = sem_start.elapsed().as_millis();
 
     let mut cmd = tokio::process::Command::new(binary);
     #[cfg(windows)]
     cmd.creation_flags(CREATE_NO_WINDOW);
     cmd.kill_on_drop(true);
 
-    let output_res = tokio::time::timeout(
-        Duration::from_secs(15),
-        cmd.args([
+    let spawn_time = Instant::now();
+    let mut child = cmd
+        .args([
             "--dump-json",
             "--flat-playlist",
             "--no-warnings",
@@ -285,17 +389,36 @@ pub(crate) async fn execute_ytdlp_search(search_arg: &str, binary: &PathBuf) -> 
             "--",
             search_arg,
         ])
-        .output(),
-    )
-    .await;
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to execute yt-dlp at {:?}: {}", binary, e))?;
 
-    let output = match output_res {
-        Ok(res) => res.map_err(|e| format!("Failed to execute yt-dlp at {:?}: {}", binary, e))?,
-        Err(_) => return Err("yt-dlp search timed out after 15s".into()),
+    let mut stdout = child.stdout.take().ok_or("Failed to open child stdout")?;
+    let mut stderr = child.stderr.take().ok_or("Failed to open child stderr")?;
+
+    let mut first_buf = [0u8; 1];
+    let first_byte_res = tokio::time::timeout(Duration::from_secs(15), stdout.read(&mut first_buf)).await;
+    let first_byte_time = Instant::now();
+    let spawn_to_first_byte_ms = first_byte_time.duration_since(spawn_time).as_millis();
+
+    let mut stdout_rest = Vec::new();
+    let mut stderr_bytes = Vec::new();
+    let (_, _, status_res) = tokio::join!(
+        stdout.read_to_end(&mut stdout_rest),
+        stderr.read_to_end(&mut stderr_bytes),
+        child.wait()
+    );
+
+    let status = match status_res {
+        Ok(s) => s,
+        Err(e) => return Err(format!("yt-dlp child wait failed: {}", e)),
     };
 
-    if !output.status.success() {
-        let err = String::from_utf8_lossy(&output.stderr);
+    let first_byte_to_exit_ms = Instant::now().duration_since(first_byte_time).as_millis();
+
+    if !status.success() {
+        let err = String::from_utf8_lossy(&stderr_bytes);
         if is_extraction_failure(&err) {
             if let Some(manager) = crate::ytdlp_updater::get_manager() {
                 manager.record_failure();
@@ -308,22 +431,28 @@ pub(crate) async fn execute_ytdlp_search(search_arg: &str, binary: &PathBuf) -> 
         manager.record_success();
     }
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parse_start = Instant::now();
+    let mut full_stdout = Vec::with_capacity(1 + stdout_rest.len());
+    if let Ok(Ok(n)) = first_byte_res {
+        if n > 0 {
+            full_stdout.push(first_buf[0]);
+        }
+    }
+    full_stdout.extend_from_slice(&stdout_rest);
+    let stdout = String::from_utf8_lossy(&full_stdout);
     let mut tracks = Vec::new();
 
     for line in stdout.lines() {
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(line) {
-            let id = json["id"].as_str().unwrap_or("").to_string();
-            let title = json["title"].as_str().unwrap_or("").to_string();
-            let artist = json["uploader"].as_str().unwrap_or("Unknown Artist").to_string();
-            let duration = json["duration"].as_f64().unwrap_or(0.0) as u64;
+        if let Ok(item) = serde_json::from_str::<YtDlpSearchResult>(line) {
+            let id = item.id.trim().to_string();
+            let title = item.title.trim().to_string();
+            let artist = item.uploader.unwrap_or_else(|| "Unknown Artist".to_string());
+            let duration = item.duration.unwrap_or(0.0) as u64;
 
             let mut thumbnail = String::new();
-            if let Some(thumbs) = json["thumbnails"].as_array() {
-                if let Some(first) = thumbs.first() {
-                    if let Some(url) = first["url"].as_str() {
-                        thumbnail = url.to_string();
-                    }
+            if let Some(thumbs) = item.thumbnails {
+                if let Some(first) = thumbs.into_iter().next() {
+                    thumbnail = first.url;
                 }
             }
             if thumbnail.is_empty() {
@@ -344,6 +473,19 @@ pub(crate) async fn execute_ytdlp_search(search_arg: &str, binary: &PathBuf) -> 
             }
         }
     }
+
+    let json_parse_time_us = parse_start.elapsed().as_micros();
+
+    tracing::info!(
+        target: "sonara_stream::search",
+        semaphore_wait_ms = sem_wait_ms,
+        spawn_to_first_byte_ms = spawn_to_first_byte_ms,
+        first_byte_to_exit_ms = first_byte_to_exit_ms,
+        json_parse_time_us = json_parse_time_us,
+        tracks_count = tracks.len(),
+        query = %search_arg,
+        "ytdlp_search_metrics"
+    );
 
     Ok(tracks)
 }
@@ -401,12 +543,14 @@ pub async fn search_youtube(query: String) -> Result<Vec<Track>, String> {
     if let Ok(mut guard) = get_search_cache().lock() {
         if let Some((cached_tracks, instant)) = guard.get(&q) {
             if instant.elapsed() < Duration::from_secs(1800) {
+                tracing::info!(target: "sonara_stream::cache", event = "search_cache_hit", query = %q);
                 return Ok(cached_tracks.clone());
             } else {
                 guard.remove(&q);
             }
         }
     }
+    tracing::info!(target: "sonara_stream::cache", event = "search_cache_miss", query = %q);
 
     let binary = get_ytdlp_path();
     let search_arg = format!("ytsearch25:{}", sanitized_query);
@@ -474,6 +618,18 @@ struct ITunesResponse {
 pub async fn get_genre_mix(artist: String, title: String) -> Result<Vec<Track>, String> {
     let clean_artist = artist.trim();
     let clean_title = title.trim();
+
+    let mix_cache_key = format!("genremix:{}:{}", clean_artist.to_lowercase(), clean_title.to_lowercase());
+    if let Ok(mut guard) = get_search_cache().lock() {
+        if let Some((cached, inst)) = guard.get(&mix_cache_key) {
+            if inst.elapsed() < Duration::from_secs(3600) {
+                tracing::info!(target: "sonara_stream::cache", event = "genremix_cache_hit", key = %mix_cache_key);
+                return Ok(cached.clone());
+            } else {
+                guard.remove(&mix_cache_key);
+            }
+        }
+    }
 
     let client = get_http_client();
 
@@ -564,6 +720,8 @@ pub async fn get_genre_mix(artist: String, title: String) -> Result<Vec<Track>, 
         }
     }
 
+    insert_search_cache(mix_cache_key, mix_tracks.clone());
+
     Ok(mix_tracks)
 }
 
@@ -595,6 +753,7 @@ pub async fn resolve_stream_url_internal(
         if let Ok(mut guard) = get_stream_cache().lock() {
             if let Some((url, instant)) = guard.get(&clean_id) {
                 if instant.elapsed() < STREAM_CACHE_TTL {
+                    tracing::info!(target: "sonara_stream::cache", event = "stream_cache_hit", id = %clean_id);
                     return Ok(url.clone());
                 } else {
                     guard.remove(&clean_id);
@@ -604,6 +763,7 @@ pub async fn resolve_stream_url_internal(
     } else if let Ok(mut guard) = get_stream_cache().lock() {
         guard.remove(&clean_id);
     }
+    tracing::info!(target: "sonara_stream::cache", event = "stream_cache_miss", id = %clean_id);
 
     // Check if another async task is already resolving this exact ID
     let maybe_rx = {
@@ -624,10 +784,12 @@ pub async fn resolve_stream_url_internal(
 
     let id_clone = clean_id.clone();
     let task = tokio::spawn(async move {
+        let sem_start = Instant::now();
         let _permit = get_ytdlp_semaphore()
             .acquire()
             .await
             .map_err(|e| format!("Failed to acquire yt-dlp permit: {}", e))?;
+        let sem_wait_ms = sem_start.elapsed().as_millis();
 
         let binary = get_ytdlp_path();
         let video_url = if let Some(search_term) = id_clone.strip_prefix("search:") {
@@ -648,7 +810,8 @@ pub async fn resolve_stream_url_internal(
         cmd.creation_flags(CREATE_NO_WINDOW);
         cmd.kill_on_drop(true);
 
-        let output = cmd
+        let spawn_time = Instant::now();
+        let mut child = cmd
             .args([
                 "-f",
                 "18/ba/b",
@@ -664,12 +827,36 @@ pub async fn resolve_stream_url_internal(
                 "--",
                 &video_url,
             ])
-            .output()
-            .await
-            .map_err(|e| format!("Failed to resolve stream URL: {}", e))?;
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("Failed to spawn yt-dlp: {}", e))?;
 
-        if !output.status.success() {
-            let err = String::from_utf8_lossy(&output.stderr);
+        let mut stdout = child.stdout.take().ok_or("Failed to open stdout")?;
+        let mut stderr = child.stderr.take().ok_or("Failed to open stderr")?;
+
+        let mut first_buf = [0u8; 1];
+        let first_byte_res = tokio::time::timeout(Duration::from_secs(15), stdout.read(&mut first_buf)).await;
+        let first_byte_time = Instant::now();
+        let spawn_to_first_byte_ms = first_byte_time.duration_since(spawn_time).as_millis();
+
+        let mut stdout_rest = Vec::new();
+        let mut stderr_bytes = Vec::new();
+        let (_, _, status_res) = tokio::join!(
+            stdout.read_to_end(&mut stdout_rest),
+            stderr.read_to_end(&mut stderr_bytes),
+            child.wait()
+        );
+
+        let status = match status_res {
+            Ok(s) => s,
+            Err(e) => return Err(format!("yt-dlp child wait failed: {}", e)),
+        };
+
+        let first_byte_to_exit_ms = Instant::now().duration_since(first_byte_time).as_millis();
+
+        if !status.success() {
+            let err = String::from_utf8_lossy(&stderr_bytes);
             if is_extraction_failure(&err) {
                 if let Some(manager) = crate::ytdlp_updater::get_manager() {
                     let rolled_back = manager.record_failure();
@@ -702,7 +889,17 @@ pub async fn resolve_stream_url_internal(
             return Err(format!("Stream resolution failed: {}", err));
         }
 
-        let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let parse_start = Instant::now();
+        let mut full_stdout = Vec::with_capacity(1 + stdout_rest.len());
+        if let Ok(Ok(n)) = first_byte_res {
+            if n > 0 {
+                full_stdout.push(first_buf[0]);
+            }
+        }
+        full_stdout.extend_from_slice(&stdout_rest);
+        let url = String::from_utf8_lossy(&full_stdout).trim().to_string();
+        let line_parse_us = parse_start.elapsed().as_micros();
+
         if url.is_empty() {
             return Err("Resolved stream URL was empty".into());
         }
@@ -711,7 +908,17 @@ pub async fn resolve_stream_url_internal(
             manager.record_success();
         }
 
-        insert_stream_cache(id_clone, url.clone());
+        insert_stream_cache(id_clone.clone(), url.clone());
+
+        tracing::info!(
+            target: "sonara_stream::stream",
+            semaphore_wait_ms = sem_wait_ms,
+            spawn_to_first_byte_ms = spawn_to_first_byte_ms,
+            first_byte_to_exit_ms = first_byte_to_exit_ms,
+            line_parse_us = line_parse_us,
+            id = %id_clone,
+            "ytdlp_stream_metrics"
+        );
 
         Ok(url)
     });
@@ -736,6 +943,7 @@ pub async fn resolve_stream_url_internal(
             Ok(inner_res) => inner_res,
             Err(join_err) => {
                 if join_err.is_cancelled() {
+                    tracing::info!(target: "sonara_stream::stream", event = "stream_task_cancelled", id = %clean_id);
                     Err("Stream resolution was cancelled".into())
                 } else {
                     Err(format!("Stream resolution failed: {}", join_err))
@@ -744,6 +952,7 @@ pub async fn resolve_stream_url_internal(
         },
         Err(_) => {
             abort_handle.abort();
+            tracing::info!(target: "sonara_stream::stream", event = "stream_timed_out", id = %clean_id);
             Err(format!("Stream resolution timed out after {:?}", timeout_duration))
         }
     };
@@ -767,6 +976,7 @@ pub fn cancel_stream_request(id: String) -> bool {
             if entry.tx.receiver_count() == 0 {
                 entry.abort_handle.abort();
                 flight_guard.remove(&clean_id);
+                tracing::info!(target: "sonara_stream::stream", event = "stream_request_cancelled", id = %clean_id);
                 return true;
             }
         }
@@ -775,7 +985,13 @@ pub fn cancel_stream_request(id: String) -> bool {
 }
 
 #[tauri::command]
-pub async fn get_stream_url(id: String, bypass_cache: Option<bool>) -> Result<String, String> {
+pub async fn get_stream_url(id: String, bypass_cache: Option<bool>, generation: Option<u64>) -> Result<String, String> {
+    tracing::info!(
+        target: "sonara_stream::stream",
+        event = "get_stream_url",
+        id = %id,
+        generation = ?generation
+    );
     resolve_stream_url_internal(id, bypass_cache, Duration::from_secs(20)).await
 }
 
@@ -1046,7 +1262,7 @@ mod tests {
         let track_id = search_res[0].id.clone();
 
         let cold_start = Instant::now();
-        let cold_url = get_stream_url(track_id.clone(), Some(true)).await;
+        let cold_url = get_stream_url(track_id.clone(), Some(true), None).await;
         let cold_elapsed = cold_start.elapsed();
         assert!(cold_url.is_ok(), "Failed to get cold stream URL");
         println!(
@@ -1056,7 +1272,7 @@ mod tests {
         );
 
         let cached_start = Instant::now();
-        let cached_url = get_stream_url(track_id.clone(), Some(false)).await;
+        let cached_url = get_stream_url(track_id.clone(), Some(false), None).await;
         let cached_elapsed = cached_start.elapsed();
         assert!(cached_url.is_ok(), "Failed to get cached stream URL");
         println!(

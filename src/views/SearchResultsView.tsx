@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { Play, Pause, ChevronDown, ChevronUp, Layers } from "lucide-react";
 import { Track } from "../types";
+import { getOptimizedThumbnail } from "../utils/thumbnail";
 
 interface SearchResultsViewProps {
   query: string;
@@ -25,7 +26,7 @@ interface GroupedSong {
   allVersions: Track[];
 }
 
-export const SearchResultsView: React.FC<SearchResultsViewProps> = ({
+export const SearchResultsView: React.FC<SearchResultsViewProps> = React.memo(({
   query,
   rawResults,
   currentTrack,
@@ -123,9 +124,11 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({
             >
               <div className="card-thumb-wrap">
                 <img
-                  src={primaryTrack.thumbnail}
+                  src={getOptimizedThumbnail(primaryTrack.thumbnail, "card")}
                   alt={primaryTrack.title}
                   className="card-thumb"
+                  loading="lazy"
+                  decoding="async"
                 />
                 <button
                   type="button"
@@ -241,4 +244,4 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({
       </div>
     </div>
   );
-};
+});

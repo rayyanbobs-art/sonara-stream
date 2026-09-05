@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@tanstack/react-virtual": "^3.14.10",
     "@tauri-apps/api": "^2.2.0",
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.11.0",
@@ -27,6 +28,7 @@
     "@types/react-dom": "^19.0.3",
     "@vitejs/plugin-react": "^5.2.0",
     "jsdom": "^30.0.1",
+    "rollup-plugin-visualizer": "^7.1.1",
     "typescript": "^7.0.2",
     "vite": "^6.1.0",
     "vitest": "^5.0.0"

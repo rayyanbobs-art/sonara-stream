@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Track } from "../types";
 
 export function useFavorites() {
@@ -12,18 +12,29 @@ export function useFavorites() {
   });
 
   useEffect(() => {
-    localStorage.setItem("sonara_favorites", JSON.stringify(favorites));
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem("sonara_favorites", JSON.stringify(favorites));
+      } catch (e) {
+        console.warn("Failed to persist favorites:", e);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
   }, [favorites]);
 
-  const isFavorite = (id: string) => favorites.some((f) => f.id === id);
+  const favoritesSet = useMemo(() => new Set(favorites.map((f) => f.id)), [favorites]);
 
-  const toggleFavorite = (track: Track) => {
-    if (isFavorite(track.id)) {
-      setFavorites((prev) => prev.filter((f) => f.id !== track.id));
-    } else {
-      setFavorites((prev) => [...prev, track]);
-    }
-  };
+  const isFavorite = useCallback(
+    (id: string) => favoritesSet.has(id),
+    [favoritesSet]
+  );
+
+  const toggleFavorite = useCallback((track: Track) => {
+    setFavorites((prev) => {
+      const exists = prev.some((f) => f.id === track.id);
+      return exists ? prev.filter((f) => f.id !== track.id) : [...prev, track];
+    });
+  }, []);
 
   return {
     favorites,

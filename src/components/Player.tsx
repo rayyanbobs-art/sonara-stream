@@ -89,6 +89,8 @@ export const Player: React.FC<PlayerProps> = ({
                 src={currentTrack.thumbnail}
                 alt={currentTrack.title}
                 className="player-track-art"
+                loading="lazy"
+                decoding="async"
               />
               <div className="player-track-labels">
                 <div className="player-track-name" title={currentTrack.title}>

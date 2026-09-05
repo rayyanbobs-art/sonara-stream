@@ -18,16 +18,17 @@ interface SidebarProps {
   playlistCount?: number;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({
+const libraryItems = [
+  { id: "home" as NavTab, label: "Home", icon: Home },
+  { id: "songs" as NavTab, label: "Songs", icon: Music },
+  { id: "favorites" as NavTab, label: "Favorites", icon: Heart },
+];
+
+export const Sidebar: React.FC<SidebarProps> = React.memo(({
   activeTab,
   onTabChange,
   onSelectMix,
 }) => {
-  const libraryItems = [
-    { id: "home" as NavTab, label: "Home", icon: Home },
-    { id: "songs" as NavTab, label: "Songs", icon: Music },
-    { id: "favorites" as NavTab, label: "Favorites", icon: Heart },
-  ];
 
   return (
     <aside className="sonara-sidebar">
@@ -105,4 +106,4 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
     </aside>
   );
-};
+});

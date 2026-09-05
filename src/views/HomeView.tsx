@@ -1,6 +1,7 @@
 import React from "react";
 import { Play, Pause, Headphones } from "lucide-react";
 import { Track } from "../types";
+import { getOptimizedThumbnail } from "../utils/thumbnail";
 
 interface HomeViewProps {
   tracks: Track[];
@@ -21,7 +22,16 @@ const formatDuration = (secs: number): string => {
   return `${m}:${s.toString().padStart(2, "0")}`;
 };
 
-export const HomeView: React.FC<HomeViewProps> = ({
+const VIBES = [
+  "Trending Hits",
+  "Lofi Beats",
+  "Pop Songs 2026",
+  "Rock Classics",
+  "Electronic & Dance",
+  "Synthwave",
+];
+
+export const HomeView: React.FC<HomeViewProps> = React.memo(({
   tracks,
   title = "Made from your listening",
   lastPlayedTrack,
@@ -32,14 +42,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onVibeClick,
   loading,
 }) => {
-  const vibes = [
-    "Trending Hits",
-    "Lofi Beats",
-    "Pop Songs 2026",
-    "Rock Classics",
-    "Electronic & Dance",
-    "Synthwave",
-  ];
+  const vibes = VIBES;
 
   const featured = currentTrack || lastPlayedTrack;
 
@@ -129,7 +132,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 onMouseEnter={() => onPrefetchTrack?.(track)}
               >
                 <div className="card-thumb-wrap">
-                  <img src={track.thumbnail} alt={track.title} className="card-thumb" />
+                  <img
+                    src={getOptimizedThumbnail(track.thumbnail, "card")}
+                    alt={track.title}
+                    className="card-thumb"
+                    loading="lazy"
+                    decoding="async"
+                  />
                   <button
                     type="button"
                     className={`card-play-overlay ${isCurrent ? "visible" : ""}`}
@@ -166,4 +175,4 @@ export const HomeView: React.FC<HomeViewProps> = ({
       )}
     </div>
   );
-};
+});

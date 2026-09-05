@@ -29,7 +29,9 @@ interface HeaderProps {
   onBack: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({
+import { perf } from "../utils/perf";
+
+export const Header: React.FC<HeaderProps> = React.memo(({
   query,
   onQueryChange,
   onSearch,
@@ -42,6 +44,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
+  const keystrokeTimeRef = useRef<number>(0);
 
   // Fetch search suggestions debounced
   useEffect(() => {
@@ -57,6 +60,9 @@ export const Header: React.FC<HeaderProps> = ({
         setSuggestions(results);
         setShowSuggestions(results.length > 0);
         setSelectedIndex(-1);
+        if (keystrokeTimeRef.current > 0) {
+          perf.recordKeystroke(Math.round(performance.now() - keystrokeTimeRef.current));
+        }
       } catch {
         setSuggestions([]);
       }
@@ -125,7 +131,10 @@ export const Header: React.FC<HeaderProps> = ({
             <input
               type="text"
               value={query}
-              onChange={(e) => onQueryChange(e.target.value)}
+              onChange={(e) => {
+                keystrokeTimeRef.current = performance.now();
+                onQueryChange(e.target.value);
+              }}
               onFocus={() => {
                 if (suggestions.length > 0) setShowSuggestions(true);
               }}
@@ -192,4 +201,4 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
     </header>
   );
-};
+});

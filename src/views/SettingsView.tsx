@@ -11,15 +11,19 @@ interface SettingsViewProps {
   onAccentChange: (a: AccentColor) => void;
   shuffleDefault: boolean;
   onShuffleDefaultChange: (s: boolean) => void;
+  perfOverlay?: boolean;
+  onPerfOverlayChange?: (enabled: boolean) => void;
 }
 
-export const SettingsView: React.FC<SettingsViewProps> = ({
+export const SettingsView: React.FC<SettingsViewProps> = React.memo(({
   theme,
   onThemeChange,
   accent,
   onAccentChange,
   shuffleDefault,
   onShuffleDefaultChange,
+  perfOverlay,
+  onPerfOverlayChange,
 }) => {
   const [ytdlpStatus, setYtdlpStatus] = useState<{
     version: string;
@@ -291,6 +295,27 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         )}
       </div>
 
+      {/* Developer & Performance Card */}
+      <div className="settings-card">
+        <div className="card-header-block">
+          <h4>Developer & Diagnostics</h4>
+          <p>Real-time performance budgets overlay and latency monitors</p>
+        </div>
+
+        <div className="setting-toggle-row">
+          <div>
+            <div className="toggle-title">Performance Budgets Overlay (B1–B11)</div>
+            <div className="toggle-subtitle">Display a live HUD showing cold start, keystroke latency, playback start times, and FPS</div>
+          </div>
+          <input
+            type="checkbox"
+            checked={perfOverlay ?? false}
+            onChange={(e) => onPerfOverlayChange?.(e.target.checked)}
+            className="settings-checkbox"
+          />
+        </div>
+      </div>
+
       {/* About Card */}
       <div className="settings-card about-card">
         <div className="card-header-block">
@@ -328,4 +353,4 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       </div>
     </div>
   );
-};
+});

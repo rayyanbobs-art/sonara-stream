@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Track } from "../types";
+import { perf } from "../utils/perf";
 
 interface UseAudioPlayerOptions {
   onEnded?: () => void;
@@ -30,6 +31,9 @@ export function useAudioPlayer(options: UseAudioPlayerOptions = {}) {
   const retryCountRef = useRef<number>(0);
   const playGenerationRef = useRef<number>(0);
   const repeatModeRef = useRef<"off" | "all" | "one">(repeatMode);
+  const clickStartTimeRef = useRef<number>(0);
+  const isCacheHitRef = useRef<boolean>(false);
+  const isPrefetchRef = useRef<boolean>(false);
 
   // Fresh callbacks in refs to avoid stale closures in audio events
   const onEndedRef = useRef(onEnded);
@@ -76,6 +80,11 @@ export function useAudioPlayer(options: UseAudioPlayerOptions = {}) {
     audio.onplaying = () => {
       setIsBuffering(false);
       setIsPlaying(true);
+      if (clickStartTimeRef.current > 0) {
+        const elapsed = Math.round(performance.now() - clickStartTimeRef.current);
+        perf.recordPlaybackStart(elapsed, isCacheHitRef.current, isPrefetchRef.current);
+        clickStartTimeRef.current = 0;
+      }
     };
 
     audio.onpause = () => {
@@ -256,6 +265,10 @@ export function useAudioPlayer(options: UseAudioPlayerOptions = {}) {
       }
     }
 
+    clickStartTimeRef.current = performance.now();
+    isCacheHitRef.current = false;
+    isPrefetchRef.current = false;
+
     try {
       let streamUrl: string;
       if (
@@ -263,9 +276,14 @@ export function useAudioPlayer(options: UseAudioPlayerOptions = {}) {
         preloadAudioRef.current.src &&
         preloadTrackRef.current?.id === track.id
       ) {
+        isPrefetchRef.current = true;
         streamUrl = preloadAudioRef.current.src;
       } else {
+        const tInvokeStart = performance.now();
         streamUrl = await invoke("get_stream_url", { id: track.id });
+        if (performance.now() - tInvokeStart < 80) {
+          isCacheHitRef.current = true;
+        }
       }
 
       // If a newer generation started while waiting for streamUrl, discard this result

@@ -1,6 +1,7 @@
 import React from "react";
 import { Play, Pause, Music, Clock } from "lucide-react";
 import { Track } from "../types";
+import { getOptimizedThumbnail } from "../utils/thumbnail";
 
 interface TrackListProps {
   tracks: Track[];
@@ -17,7 +18,7 @@ const formatDuration = (seconds: number): string => {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 };
 
-export const TrackList: React.FC<TrackListProps> = ({
+export const TrackList: React.FC<TrackListProps> = React.memo(({
   tracks,
   currentTrack,
   isPlaying,
@@ -60,7 +61,13 @@ export const TrackList: React.FC<TrackListProps> = ({
             onClick={() => onSelectTrack(track)}
           >
             <div className="track-thumb-wrap">
-              <img src={track.thumbnail} alt={track.title} className="track-thumb" />
+              <img
+                src={getOptimizedThumbnail(track.thumbnail, "list")}
+                alt={track.title}
+                className="track-thumb"
+                loading="lazy"
+                decoding="async"
+              />
               <div className={`thumb-overlay ${isCurrent ? "visible" : ""}`}>
                 {isCurrent && isPlaying ? <Pause size={18} /> : <Play size={18} fill="currentColor" />}
               </div>
@@ -87,4 +94,4 @@ export const TrackList: React.FC<TrackListProps> = ({
       })}
     </div>
   );
-};
+});

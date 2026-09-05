@@ -1,6 +1,7 @@
 import React from "react";
 import { X, Radio, Music, Play, Sparkles } from "lucide-react";
 import { Track } from "../types";
+import { getOptimizedThumbnail } from "../utils/thumbnail";
 
 interface UpNextDrawerProps {
   isOpen: boolean;
@@ -19,7 +20,7 @@ const formatDuration = (secs: number) => {
   return `${m}:${s.toString().padStart(2, "0")}`;
 };
 
-export const UpNextDrawer: React.FC<UpNextDrawerProps> = ({
+export const UpNextDrawer: React.FC<UpNextDrawerProps> = React.memo(({
   isOpen,
   onClose,
   currentTrack,
@@ -83,9 +84,11 @@ export const UpNextDrawer: React.FC<UpNextDrawerProps> = ({
                         )}
                       </span>
                       <img
-                        src={track.thumbnail || "https://i.ytimg.com/vi/placeholder/hqdefault.jpg"}
+                        src={getOptimizedThumbnail(track.thumbnail, "list")}
                         alt={track.title}
                         className="upnext-row-thumb"
+                        loading="lazy"
+                        decoding="async"
                       />
                       <div className="upnext-row-meta">
                         <span className="upnext-track-title" title={track.title}>
@@ -112,4 +115,4 @@ export const UpNextDrawer: React.FC<UpNextDrawerProps> = ({
       </div>
     </div>
   );
-};
+});

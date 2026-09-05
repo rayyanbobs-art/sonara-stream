@@ -278,8 +278,8 @@ body {
   left: 14px;
   right: 14px;
   height: 52px;
-  background: rgba(18, 20, 26, 0.75);
-  backdrop-filter: blur(16px);
+  background: rgba(18, 20, 26, 0.82);
+  backdrop-filter: blur(10px);
   border: 1px solid var(--border);
   border-radius: 20px;
   display: flex;
@@ -365,8 +365,8 @@ body {
   top: 42px;
   left: 0;
   right: 0;
-  background: rgba(21, 24, 33, 0.95);
-  backdrop-filter: blur(20px);
+  background: rgba(21, 24, 33, 0.96);
+  backdrop-filter: blur(10px);
   border: 1px solid var(--border-light);
   border-radius: 16px;
   padding: 6px;
@@ -1037,8 +1037,8 @@ body {
   left: 14px;
   right: 14px;
   height: 76px;
-  background: rgba(18, 20, 26, 0.85);
-  backdrop-filter: blur(24px);
+  background: rgba(18, 20, 26, 0.90);
+  backdrop-filter: blur(12px);
   border: 1px solid var(--border);
   border-radius: 20px;
   padding: 0 16px;
@@ -1642,8 +1642,8 @@ body {
   right: 14px;
   bottom: 98px;
   width: 350px;
-  background: rgba(18, 20, 26, 0.94);
-  backdrop-filter: blur(28px);
+  background: rgba(18, 20, 26, 0.95);
+  backdrop-filter: blur(12px);
   border: 1px solid var(--border);
   border-radius: 20px;
   display: flex;
@@ -1876,5 +1876,111 @@ body {
 .sonara-layout.light .upnext-play-btn {
   color: #111827;
 }
+
+/* Performance Overlay (SONARA_PERF) */
+.sonara-perf-overlay {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  width: 290px;
+  background: rgba(14, 16, 21, 0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.65);
+  z-index: 9999;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  overflow: hidden;
+  color: #e2e8f0;
+}
+
+.sonara-perf-overlay.minimized {
+  width: auto;
+}
+
+.perf-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.perf-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+}
+
+.perf-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.perf-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.perf-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.perf-grid {
+  padding: 6px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.perf-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.perf-row .metric-id {
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.perf-row .metric-budget {
+  font-size: 10px;
+  color: #64748b;
+}
+
+.perf-row .metric-val {
+  font-weight: 700;
+}
+
+.perf-row.hit .metric-val {
+  color: #22c55e;
+}
+
+.perf-row.miss .metric-val {
+  color: #ef4444;
+}
+
+.perf-row.dim .metric-val {
+  color: #475569;
+}
+
 
 

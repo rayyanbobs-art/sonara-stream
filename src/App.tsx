@@ -1,5 +1,6 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AlertCircle } from "lucide-react";
 import { check, Update } from "@tauri-apps/plugin-updater";
 import { UpdateBanner } from "./components/UpdateBanner";
@@ -10,12 +11,17 @@ import { UpNextDrawer } from "./components/UpNextDrawer";
 import { HomeView } from "./views/HomeView";
 import { SongsView } from "./views/SongsView";
 import { FavoritesView } from "./views/FavoritesView";
-import { SettingsView } from "./views/SettingsView";
 import { SearchResultsView } from "./views/SearchResultsView";
+
+const SettingsView = React.lazy(() =>
+  import("./views/SettingsView").then((m) => ({ default: m.SettingsView }))
+);
 import { Track, NavTab, AccentColor } from "./types";
 import { useFavorites } from "./hooks/useFavorites";
 import { useAudioPlayer } from "./hooks/useAudioPlayer";
 import { useQueue } from "./hooks/useQueue";
+import { PerfOverlay } from "./components/PerfOverlay";
+import { perf } from "./utils/perf";
 import "./App.css";
 
 export default function App() {
@@ -48,6 +54,47 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [availableUpdate, setAvailableUpdate] = useState<Update | null>(null);
+  const [showPerfOverlay, setShowPerfOverlay] = useState<boolean>(() => {
+    return localStorage.getItem("sonara_perf_overlay") === "true";
+  });
+
+  // B9: Button feedback measurement (< 16ms target)
+  useEffect(() => {
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest?.("button, [role='button'], .track-card, .track-item, .vibe-chip")) {
+        const start = performance.now();
+        requestAnimationFrame(() => {
+          const elapsed = Math.round(performance.now() - start);
+          perf.recordButtonFeedback(elapsed);
+        });
+      }
+    };
+    window.addEventListener("pointerdown", onPointerDown, { passive: true });
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, []);
+
+  // B10: Memory tracking
+  useEffect(() => {
+    const checkMem = () => {
+      const mem = (performance as any)?.memory;
+      if (mem?.usedJSHeapSize) {
+        perf.recordMemory(Math.round(mem.usedJSHeapSize / (1024 * 1024)));
+      }
+    };
+    checkMem();
+    const interval = setInterval(checkMem, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Reveal window once React has mounted (zero white flash)
+  useEffect(() => {
+    try {
+      getCurrentWindow().show().catch(() => {});
+    } catch {
+      // Running in browser/vitest environment
+    }
+  }, []);
 
   useEffect(() => {
     const checkAppUpdate = async () => {
@@ -93,14 +140,28 @@ export default function App() {
     onError: setErrorMessage,
   });
 
-  const currentPool =
-    activeTab === "search"
-      ? searchResults
-      : activeTab === "songs"
-      ? (allDiscoveredTracks.length > 0 ? allDiscoveredTracks : recommendations)
-      : activeTab === "favorites"
-      ? favorites
-      : recommendations;
+  const currentTrackRef = useRef<Track | null>(currentTrack);
+  useEffect(() => {
+    currentTrackRef.current = currentTrack;
+  }, [currentTrack]);
+
+  const songsList = useMemo(
+    () => (allDiscoveredTracks.length > 0 ? allDiscoveredTracks : recommendations),
+    [allDiscoveredTracks, recommendations]
+  );
+
+  const currentPool = useMemo(() => {
+    switch (activeTab) {
+      case "search":
+        return searchResults;
+      case "songs":
+        return songsList;
+      case "favorites":
+        return favorites;
+      default:
+        return recommendations;
+    }
+  }, [activeTab, searchResults, songsList, favorites, recommendations]);
 
   const {
     upNextMix,
@@ -122,7 +183,7 @@ export default function App() {
     activeTab,
     tracks: currentPool,
     favorites,
-    onPlayTrack: (track, preserveQueue) => handlePlayTrackRef.current(track, preserveQueue),
+    onPlayTrack: useCallback((track: Track, preserveQueue?: boolean) => handlePlayTrackRef.current(track, preserveQueue), []),
     audioRef,
     preloadAudioRef,
     preloadTrackRef,
@@ -143,13 +204,13 @@ export default function App() {
     localStorage.setItem("sonara_theme", theme);
   }, [theme]);
 
-  const mergeDiscoveredTracks = (newTracks: Track[]) => {
+  const mergeDiscoveredTracks = useCallback((newTracks: Track[]) => {
     setAllDiscoveredTracks((prev) => {
       const seen = new Set(prev.map((t) => t.signature || t.id));
       const additions = newTracks.filter((t) => !seen.has(t.signature || t.id));
       return additions.length > 0 ? [...prev, ...additions] : prev;
     });
-  };
+  }, []);
 
   // Initial load: Fetch personalized recommendations from Rust engine
   useEffect(() => {
@@ -169,27 +230,61 @@ export default function App() {
         console.warn("Failed to load initial recommendations:", err);
       } finally {
         setLoading(false);
+        // B1: Cold start to interactive UI with recommendations visible
+        perf.recordColdStart(Math.round(performance.now()));
       }
     };
     loadRecommendations();
-  }, []);
+  }, [handlePrefetchTrack, mergeDiscoveredTracks]);
 
-  const performSearch = async (queryText: string, searchSource: "youtube" | "spotify") => {
+  const handlePlayTrack = useCallback(async (track: Track, preserveQueue = false) => {
+    if (currentTrackRef.current?.id === track.id) {
+      togglePlay();
+      return;
+    }
+
+    setLastPlayedTrack(track);
+    try {
+      localStorage.setItem("sonara_last_played", JSON.stringify(track));
+    } catch {
+      // Ignore local storage error
+    }
+
+    markAsPlayed(track);
+
+    try {
+      await playTrack(track);
+      updateQueueForTrack(track, preserveQueue);
+    } catch {
+      // Playback errors handled in useAudioPlayer
+    }
+  }, [togglePlay, markAsPlayed, playTrack, updateQueueForTrack]);
+
+  handlePlayTrackRef.current = handlePlayTrack;
+
+  const performSearch = useCallback(async (queryText: string, searchSource: "youtube" | "spotify") => {
     const cleanQuery = queryText.trim();
     if (!cleanQuery) return;
 
     setLoading(true);
     setErrorMessage(null);
+    const searchStartTime = performance.now();
 
     try {
       if (cleanQuery.includes("spotify.com")) {
         const resolved: Track = await invoke("resolve_spotify_track", { url: cleanQuery });
+        const elapsed = Math.round(performance.now() - searchStartTime);
+        perf.recordFirstResult(elapsed);
+        perf.recordAllResults(elapsed);
         setSearchResults([resolved]);
         mergeDiscoveredTracks([resolved]);
         handlePlayTrack(resolved);
       } else {
         const q = searchSource === "spotify" ? `${cleanQuery} audio` : cleanQuery;
         const results: Track[] = await invoke("search_youtube", { query: q });
+        const elapsed = Math.round(performance.now() - searchStartTime);
+        perf.recordFirstResult(elapsed);
+        perf.recordAllResults(elapsed);
         const formatted = results.map((t) => ({ ...t, source: searchSource }));
         setSearchResults(formatted);
         mergeDiscoveredTracks(formatted);
@@ -215,32 +310,63 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [mergeDiscoveredTracks, handlePlayTrack, handlePrefetchTrack]);
 
-  const handlePlayTrack = async (track: Track, preserveQueue = false) => {
-    if (currentTrack?.id === track.id) {
-      togglePlay();
-      return;
+  const handleTabChange = useCallback((tab: NavTab) => {
+    setActiveTab(tab);
+    setErrorMessage(null);
+  }, []);
+
+  const handleSelectMix = useCallback((mix: string) => {
+    setSearchQuery(mix);
+    performSearch(mix, "youtube");
+    setActiveTab("search");
+  }, [performSearch]);
+
+  const handleHeaderSearch = useCallback((customQuery?: string) => {
+    const q = customQuery || searchQuery;
+    if (!q.trim()) return;
+    performSearch(q, source);
+    setActiveTab("search");
+  }, [searchQuery, source, performSearch]);
+
+  const handleBackToHome = useCallback(() => {
+    setActiveTab("home");
+  }, []);
+
+  const handleVibeClick = useCallback((vibe: string) => {
+    setSearchQuery(vibe);
+    performSearch(vibe, "youtube");
+    setActiveTab("search");
+  }, [performSearch]);
+
+  const handleCloseQueue = useCallback(() => {
+    setIsQueueOpen(false);
+  }, [setIsQueueOpen]);
+
+  const handleDrawerPlayTrack = useCallback((track: Track) => {
+    handlePlayTrack(track);
+    setUpNextMix((prev) => prev.filter((t) => t.id !== track.id));
+  }, [handlePlayTrack, setUpNextMix]);
+
+  const handlePlayerToggleFavorite = useCallback(() => {
+    if (currentTrackRef.current) {
+      toggleFavorite(currentTrackRef.current);
     }
+  }, [toggleFavorite]);
 
-    setLastPlayedTrack(track);
-    try {
-      localStorage.setItem("sonara_last_played", JSON.stringify(track));
-    } catch {
-      // Ignore local storage error
-    }
+  const isCurrentFavorite = useMemo(
+    () => (currentTrack ? isFavorite(currentTrack.id) : false),
+    [currentTrack, isFavorite]
+  );
 
-    markAsPlayed(track);
+  const handleClearError = useCallback(() => {
+    setErrorMessage(null);
+  }, []);
 
-    try {
-      await playTrack(track);
-      updateQueueForTrack(track, preserveQueue);
-    } catch {
-      // Playback errors handled in useAudioPlayer
-    }
-  };
-
-  handlePlayTrackRef.current = handlePlayTrack;
+  const handleDismissUpdate = useCallback(() => {
+    setAvailableUpdate(null);
+  }, []);
 
   const isTauri = typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__);
 
@@ -249,15 +375,8 @@ export default function App() {
       {/* Sidebar */}
       <Sidebar
         activeTab={activeTab}
-        onTabChange={(tab) => {
-          setActiveTab(tab);
-          setErrorMessage(null);
-        }}
-        onSelectMix={(mix) => {
-          setSearchQuery(mix);
-          performSearch(mix, "youtube");
-          setActiveTab("search");
-        }}
+        onTabChange={handleTabChange}
+        onSelectMix={handleSelectMix}
       />
 
       {/* Main Container */}
@@ -286,23 +405,18 @@ export default function App() {
         <Header
           query={searchQuery}
           onQueryChange={setSearchQuery}
-          onSearch={(customQuery) => {
-            const q = customQuery || searchQuery;
-            if (!q.trim()) return;
-            performSearch(q, source);
-            setActiveTab("search");
-          }}
+          onSearch={handleHeaderSearch}
           source={source}
           onSourceChange={setSource}
           loading={loading}
-          onBack={() => setActiveTab("home")}
+          onBack={handleBackToHome}
         />
 
         {errorMessage && (
           <div className="error-toast">
             <AlertCircle size={15} />
             <span>{errorMessage}</span>
-            <button type="button" onClick={() => setErrorMessage(null)}>✕</button>
+            <button type="button" onClick={handleClearError}>✕</button>
           </div>
         )}
 
@@ -316,11 +430,7 @@ export default function App() {
               isPlaying={isPlaying}
               onPlayTrack={handlePlayTrack}
               onPrefetchTrack={handlePrefetchTrack}
-              onVibeClick={(vibe) => {
-                setSearchQuery(vibe);
-                performSearch(vibe, "youtube");
-                setActiveTab("search");
-              }}
+              onVibeClick={handleVibeClick}
               loading={loading}
             />
           )}
@@ -339,14 +449,14 @@ export default function App() {
 
           {activeTab === "songs" && (
             <SongsView
-              tracks={allDiscoveredTracks.length > 0 ? allDiscoveredTracks : recommendations}
+              tracks={songsList}
               currentTrack={currentTrack}
               isPlaying={isPlaying}
               onPlayTrack={handlePlayTrack}
               onPrefetchTrack={handlePrefetchTrack}
               onToggleFavorite={toggleFavorite}
               isFavorite={isFavorite}
-              onBrowse={() => setActiveTab("home")}
+              onBrowse={handleBackToHome}
             />
           )}
 
@@ -358,19 +468,26 @@ export default function App() {
               onPlayTrack={handlePlayTrack}
               onPrefetchTrack={handlePrefetchTrack}
               onToggleFavorite={toggleFavorite}
-              onBrowse={() => setActiveTab("home")}
+              onBrowse={handleBackToHome}
             />
           )}
 
           {activeTab === "settings" && (
-            <SettingsView
-              theme={theme}
-              onThemeChange={setTheme}
-              accent={accentColor}
-              onAccentChange={setAccentColor}
-              shuffleDefault={shuffleDefault}
-              onShuffleDefaultChange={handleShuffleDefaultChange}
-            />
+            <React.Suspense fallback={null}>
+              <SettingsView
+                theme={theme}
+                onThemeChange={setTheme}
+                accent={accentColor}
+                onAccentChange={setAccentColor}
+                shuffleDefault={shuffleDefault}
+                onShuffleDefaultChange={handleShuffleDefaultChange}
+                perfOverlay={showPerfOverlay}
+                onPerfOverlayChange={(enabled) => {
+                  setShowPerfOverlay(enabled);
+                  localStorage.setItem("sonara_perf_overlay", enabled ? "true" : "false");
+                }}
+              />
+            </React.Suspense>
           )}
         </div>
       </div>
@@ -384,7 +501,7 @@ export default function App() {
         duration={duration}
         volume={volume}
         isShuffle={isShuffle}
-        isFavorite={currentTrack ? isFavorite(currentTrack.id) : false}
+        isFavorite={isCurrentFavorite}
         onTogglePlay={togglePlay}
         onSeek={seek}
         onVolumeChange={setVolume}
@@ -393,7 +510,7 @@ export default function App() {
         onToggleShuffle={toggleShuffle}
         repeatMode={repeatMode}
         onToggleRepeat={toggleRepeat}
-        onToggleFavorite={() => currentTrack && toggleFavorite(currentTrack)}
+        onToggleFavorite={handlePlayerToggleFavorite}
         onToggleQueue={toggleQueue}
         isQueueOpen={isQueueOpen}
       />
@@ -401,22 +518,28 @@ export default function App() {
       {/* Up Next Genre Mix Drawer */}
       <UpNextDrawer
         isOpen={isQueueOpen}
-        onClose={() => setIsQueueOpen(false)}
+        onClose={handleCloseQueue}
         currentTrack={currentTrack}
         upNextTracks={upNextMix}
-        onPlayTrack={(track) => {
-          handlePlayTrack(track);
-          setUpNextMix((prev) => prev.filter((t) => t.id !== track.id));
-        }}
+        onPlayTrack={handleDrawerPlayTrack}
         onPrefetchTrack={handlePrefetchTrack}
         isPlaying={isPlaying}
+      />
+
+      {/* Real-time Performance Budget HUD Overlay */}
+      <PerfOverlay
+        visible={showPerfOverlay}
+        onClose={() => {
+          setShowPerfOverlay(false);
+          localStorage.setItem("sonara_perf_overlay", "false");
+        }}
       />
 
       {availableUpdate && (
         <UpdateBanner
           update={availableUpdate}
           isPlaying={isPlaying}
-          onDismiss={() => setAvailableUpdate(null)}
+          onDismiss={handleDismissUpdate}
         />
       )}
     </div>

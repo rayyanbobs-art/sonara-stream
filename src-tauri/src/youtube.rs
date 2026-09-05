@@ -1,12 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
-
-#[cfg(windows)]
-use std::os::windows::process::CommandExt;
 
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -146,13 +142,15 @@ pub fn get_title_signature(title: &str, artist: &str) -> std::collections::BTree
     words
 }
 
-fn execute_ytdlp_search(search_arg: &str, binary: &PathBuf) -> Result<Vec<Track>, String> {
-    let mut cmd = Command::new(binary);
+async fn execute_ytdlp_search(search_arg: &str, binary: &PathBuf) -> Result<Vec<Track>, String> {
+    let mut cmd = tokio::process::Command::new(binary);
     #[cfg(windows)]
     cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd.kill_on_drop(true);
 
-    let output = cmd
-        .args([
+    let output_res = tokio::time::timeout(
+        Duration::from_secs(15),
+        cmd.args([
             "--dump-json",
             "--flat-playlist",
             "--no-warnings",
@@ -161,8 +159,14 @@ fn execute_ytdlp_search(search_arg: &str, binary: &PathBuf) -> Result<Vec<Track>
             "--",
             search_arg,
         ])
-        .output()
-        .map_err(|e| format!("Failed to execute yt-dlp at {:?}: {}", binary, e))?;
+        .output(),
+    )
+    .await;
+
+    let output = match output_res {
+        Ok(res) => res.map_err(|e| format!("Failed to execute yt-dlp at {:?}: {}", binary, e))?,
+        Err(_) => return Err("yt-dlp search timed out after 15s".into()),
+    };
 
     if !output.status.success() {
         let err = String::from_utf8_lossy(&output.stderr);
@@ -268,58 +272,54 @@ pub async fn search_youtube(query: String) -> Result<Vec<Track>, String> {
         }
     }
 
-    tokio::task::spawn_blocking(move || {
-        let binary = get_ytdlp_path();
-        let search_arg = format!("ytsearch25:{}", sanitized_query);
+    let binary = get_ytdlp_path();
+    let search_arg = format!("ytsearch25:{}", sanitized_query);
 
-        let raw_tracks = execute_ytdlp_search(&search_arg, &binary)?;
+    let raw_tracks = execute_ytdlp_search(&search_arg, &binary).await?;
 
-        // Deduplicate songs based on clean keyword signatures (no repetitive uploads)
-        let mut seen_signatures = std::collections::HashSet::new();
-        let mut unique_tracks = Vec::new();
+    // Deduplicate songs based on clean keyword signatures (no repetitive uploads)
+    let mut seen_signatures = std::collections::HashSet::new();
+    let mut unique_tracks = Vec::new();
 
-        for track in raw_tracks {
-            let sig = get_title_signature(&track.title, &track.artist);
-            if !sig.is_empty() && !seen_signatures.contains(&sig) {
-                seen_signatures.insert(sig);
-                unique_tracks.push(track);
-            }
+    for track in raw_tracks {
+        let sig = get_title_signature(&track.title, &track.artist);
+        if !sig.is_empty() && !seen_signatures.contains(&sig) {
+            seen_signatures.insert(sig);
+            unique_tracks.push(track);
         }
+    }
 
-        // If after deduplication we have fewer than 7 distinct tracks (e.g. searching a single song name),
-        // enrich the playlist with more distinct hits from that artist / genre
-        if unique_tracks.len() < 7 {
-            let fallback_artist = if let Some(first) = unique_tracks.first() {
-                if first.artist != "Unknown Artist" && !first.artist.is_empty() {
-                    first.artist.clone()
-                } else {
-                    sanitized_query.clone()
-                }
+    // If after deduplication we have fewer than 7 distinct tracks (e.g. searching a single song name),
+    // enrich the playlist with more distinct hits from that artist / genre
+    if unique_tracks.len() < 7 {
+        let fallback_artist = if let Some(first) = unique_tracks.first() {
+            if first.artist != "Unknown Artist" && !first.artist.is_empty() {
+                first.artist.clone()
             } else {
                 sanitized_query.clone()
-            };
+            }
+        } else {
+            sanitized_query.clone()
+        };
 
-            let expand_arg = format!("ytsearch15:{} greatest hits", fallback_artist);
-            if let Ok(extra_tracks) = execute_ytdlp_search(&expand_arg, &binary) {
-                for track in extra_tracks {
-                    let sig = get_title_signature(&track.title, &track.artist);
-                    if !sig.is_empty() && !seen_signatures.contains(&sig) {
-                        seen_signatures.insert(sig);
-                        unique_tracks.push(track);
-                    }
-                    if unique_tracks.len() >= 15 {
-                        break;
-                    }
+        let expand_arg = format!("ytsearch15:{} greatest hits", fallback_artist);
+        if let Ok(extra_tracks) = execute_ytdlp_search(&expand_arg, &binary).await {
+            for track in extra_tracks {
+                let sig = get_title_signature(&track.title, &track.artist);
+                if !sig.is_empty() && !seen_signatures.contains(&sig) {
+                    seen_signatures.insert(sig);
+                    unique_tracks.push(track);
+                }
+                if unique_tracks.len() >= 15 {
+                    break;
                 }
             }
         }
+    }
 
-        insert_search_cache(q, unique_tracks.clone());
+    insert_search_cache(q, unique_tracks.clone());
 
-        Ok(unique_tracks)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    Ok(unique_tracks)
 }
 
 #[tauri::command]
@@ -327,35 +327,31 @@ pub async fn get_related_tracks(artist: String, title: String) -> Result<Vec<Tra
     let clean_artist = artist.trim().trim_start_matches('-').to_string();
     let clean_title = title.trim().trim_start_matches('-').to_string();
 
-    tokio::task::spawn_blocking(move || {
-        let binary = get_ytdlp_path();
-        let query_term = if !clean_artist.is_empty() && clean_artist != "Unknown Artist" {
-            format!("ytsearch15:{} songs", clean_artist)
-        } else {
-            format!("ytsearch15:{} mix", clean_title)
-        };
+    let binary = get_ytdlp_path();
+    let query_term = if !clean_artist.is_empty() && clean_artist != "Unknown Artist" {
+        format!("ytsearch15:{} songs", clean_artist)
+    } else {
+        format!("ytsearch15:{} mix", clean_title)
+    };
 
-        let raw = execute_ytdlp_search(&query_term, &binary)?;
-        let mut seen = std::collections::HashSet::new();
-        let target_sig = get_title_signature(&clean_title, &clean_artist);
-        seen.insert(target_sig);
+    let raw = execute_ytdlp_search(&query_term, &binary).await?;
+    let mut seen = std::collections::HashSet::new();
+    let target_sig = get_title_signature(&clean_title, &clean_artist);
+    seen.insert(target_sig);
 
-        let mut related = Vec::new();
-        for t in raw {
-            let sig = get_title_signature(&t.title, &t.artist);
-            if !sig.is_empty() && !seen.contains(&sig) {
-                seen.insert(sig);
-                related.push(t);
-            }
-            if related.len() >= 10 {
-                break;
-            }
+    let mut related = Vec::new();
+    for t in raw {
+        let sig = get_title_signature(&t.title, &t.artist);
+        if !sig.is_empty() && !seen.contains(&sig) {
+            seen.insert(sig);
+            related.push(t);
         }
+        if related.len() >= 10 {
+            break;
+        }
+    }
 
-        Ok(related)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    Ok(related)
 }
 
 #[derive(Debug, Deserialize)]
@@ -473,7 +469,7 @@ pub async fn get_genre_mix(artist: String, title: String) -> Result<Vec<Track>, 
 }
 
 #[tauri::command]
-pub async fn get_stream_url(id: String) -> Result<String, String> {
+pub async fn get_stream_url(id: String, bypass_cache: Option<bool>) -> Result<String, String> {
     let clean_id = id.trim().to_string();
     if clean_id.is_empty() || clean_id.len() > 300 {
         return Err("Invalid track identifier".into());
@@ -490,17 +486,28 @@ pub async fn get_stream_url(id: String) -> Result<String, String> {
         }
     }
 
-    if let Ok(guard) = get_stream_cache().lock() {
-        if let Some((url, instant)) = guard.get(&clean_id) {
-            if instant.elapsed() < Duration::from_secs(4 * 3600) {
-                return Ok(url.clone());
+    const STREAM_CACHE_TTL: Duration = Duration::from_secs(3600); // 1-hour TTL
+    let should_bypass = bypass_cache.unwrap_or(false);
+
+    if !should_bypass {
+        if let Ok(mut guard) = get_stream_cache().lock() {
+            if let Some((url, instant)) = guard.get(&clean_id) {
+                if instant.elapsed() < STREAM_CACHE_TTL {
+                    return Ok(url.clone());
+                } else {
+                    guard.remove(&clean_id);
+                }
             }
         }
+    } else if let Ok(mut guard) = get_stream_cache().lock() {
+        guard.remove(&clean_id);
     }
 
     // Check if another async task is already resolving this exact ID
     let mut rx = {
-        let mut flight_guard = get_in_flight().lock().unwrap();
+        let mut flight_guard = get_in_flight()
+            .lock()
+            .map_err(|_| "In-flight mutex poisoned".to_string())?;
         if let Some(tx) = flight_guard.get(&clean_id) {
             Some(tx.subscribe())
         } else {
@@ -517,7 +524,7 @@ pub async fn get_stream_url(id: String) -> Result<String, String> {
     }
 
     let id_clone = clean_id.clone();
-    let result: Result<String, String> = tokio::task::spawn_blocking(move || {
+    let stream_resolve_task = async move {
         let binary = get_ytdlp_path();
         let video_url = if id_clone.starts_with("search:") {
             let search_term = id_clone[7..].trim_start_matches('-');
@@ -530,9 +537,10 @@ pub async fn get_stream_url(id: String) -> Result<String, String> {
             format!("https://www.youtube.com/watch?v={}", safe_id)
         };
 
-        let mut cmd = Command::new(&binary);
+        let mut cmd = tokio::process::Command::new(&binary);
         #[cfg(windows)]
         cmd.creation_flags(CREATE_NO_WINDOW);
+        cmd.kill_on_drop(true);
 
         let output = cmd
             .args([
@@ -551,6 +559,7 @@ pub async fn get_stream_url(id: String) -> Result<String, String> {
                 &video_url,
             ])
             .output()
+            .await
             .map_err(|e| format!("Failed to resolve stream URL: {}", e))?;
 
         if !output.status.success() {
@@ -566,11 +575,15 @@ pub async fn get_stream_url(id: String) -> Result<String, String> {
         insert_stream_cache(id_clone, url.clone());
 
         Ok(url)
-    })
-    .await
-    .map_err(|e| e.to_string())?;
+    };
 
-    // Broadcast result to any pending waiters and remove from in-flight
+    // Enforce 20s timeout on stream resolution
+    let result = match tokio::time::timeout(Duration::from_secs(20), stream_resolve_task).await {
+        Ok(res) => res,
+        Err(_) => Err("Stream resolution timed out after 20s".into()),
+    };
+
+    // CRITICAL: Always remove from in-flight (even on timeout) and notify waiters
     if let Ok(mut flight_guard) = get_in_flight().lock() {
         if let Some(tx) = flight_guard.remove(&clean_id) {
             let _ = tx.send(result.clone());

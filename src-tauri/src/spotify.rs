@@ -54,3 +54,36 @@ pub async fn resolve_spotify_track(url: String) -> Result<Track, String> {
         Err("Could not find matching stream for Spotify track".into())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_invalid_spotify_url_rejected() {
+        let res = resolve_spotify_track("https://malicious.com/track/123".into()).await;
+        assert!(res.is_err());
+        let err = res.unwrap_err();
+        assert!(err.contains("Invalid Spotify track URL"));
+    }
+
+    #[tokio::test]
+    async fn test_spotify_oembed_live_resolution() {
+        let binary = crate::youtube::get_ytdlp_path();
+        if !binary.exists() {
+            println!("Skipping live Spotify test: yt-dlp binary is absent");
+            return;
+        }
+
+        // Rick Astley - Never Gonna Give You Up public Spotify track
+        let spotify_url = "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT";
+        let res = resolve_spotify_track(spotify_url.into()).await;
+        if let Ok(track) = res {
+            assert_eq!(track.source, "spotify");
+            assert!(!track.title.is_empty());
+            assert!(!track.id.is_empty());
+            assert!(!track.signature.is_empty());
+        }
+    }
+}
+

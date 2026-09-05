@@ -203,7 +203,15 @@ export default function App() {
       }
     } catch (err: unknown) {
       console.error(err);
-      setErrorMessage(typeof err === "string" ? err : "Failed to load music. Check internet.");
+      const isTauri = typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__);
+      if (!isTauri) {
+        setErrorMessage(
+          "Running in web browser. Please use the native Sonara Stream desktop app window on your taskbar."
+        );
+      } else {
+        const msg = err instanceof Error ? err.message : typeof err === "string" ? err : "";
+        setErrorMessage(msg || "Failed to load music. Check internet connection.");
+      }
     } finally {
       setLoading(false);
     }
@@ -234,6 +242,8 @@ export default function App() {
 
   handlePlayTrackRef.current = handlePlayTrack;
 
+  const isTauri = typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__);
+
   return (
     <div className={`sonara-layout ${theme}`}>
       {/* Sidebar */}
@@ -252,6 +262,27 @@ export default function App() {
 
       {/* Main Container */}
       <div className="sonara-main-area">
+        {!isTauri && (
+          <div
+            style={{
+              background: "rgba(245, 184, 0, 0.15)",
+              borderBottom: "1px solid rgba(245, 184, 0, 0.3)",
+              color: "var(--accent)",
+              padding: "7px 16px",
+              fontSize: "12px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              fontWeight: 500,
+            }}
+          >
+            <AlertCircle size={14} />
+            <span>
+              You are viewing Sonara Stream in a web browser. Native streaming and search require the <strong>Sonara Stream desktop window</strong>.
+            </span>
+          </div>
+        )}
         <Header
           query={searchQuery}
           onQueryChange={setSearchQuery}

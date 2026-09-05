@@ -1,5 +1,4 @@
 use serde::Deserialize;
-use std::time::Duration;
 use crate::youtube::Track;
 
 #[derive(Debug, Deserialize)]
@@ -17,10 +16,7 @@ pub async fn resolve_spotify_track(url: String) -> Result<Track, String> {
         return Err("Invalid Spotify track URL. Only open.spotify.com/track/ links are permitted.".into());
     }
 
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(4))
-        .build()
-        .map_err(|e| e.to_string())?;
+    let client = crate::youtube::get_http_client();
 
     let oembed_url = format!("https://open.spotify.com/oembed?url={}", urlencoding::encode(clean_url));
 

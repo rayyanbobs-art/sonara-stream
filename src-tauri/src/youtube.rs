@@ -26,6 +26,19 @@ type InFlightMap = HashMap<String, InFlightSender>;
 static STREAM_CACHE: OnceLock<Mutex<StreamCacheMap>> = OnceLock::new();
 static SEARCH_CACHE: OnceLock<Mutex<SearchCacheMap>> = OnceLock::new();
 static IN_FLIGHT: OnceLock<Mutex<InFlightMap>> = OnceLock::new();
+static SHARED_HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+
+pub fn get_http_client() -> &'static reqwest::Client {
+    SHARED_HTTP_CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(Duration::from_secs(10))
+            .connect_timeout(Duration::from_secs(4))
+            .pool_idle_timeout(Duration::from_secs(90))
+            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) SonaraStream/0.1.0")
+            .build()
+            .unwrap_or_default()
+    })
+}
 
 fn get_stream_cache() -> &'static Mutex<StreamCacheMap> {
     STREAM_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
@@ -94,7 +107,7 @@ pub struct Track {
     pub signature: String,
 }
 
-pub fn get_ytdlp_path() -> PathBuf {
+pub fn get_bundled_ytdlp_path() -> PathBuf {
     // 1. Check relative to binary
     if let Ok(mut exe_path) = std::env::current_exe() {
         exe_path.pop();
@@ -121,6 +134,21 @@ pub fn get_ytdlp_path() -> PathBuf {
 
     // 3. Fallback to PATH
     PathBuf::from("yt-dlp.exe")
+}
+
+pub fn get_ytdlp_path() -> PathBuf {
+    let (path, _guard) = get_ytdlp_lease();
+    path
+}
+
+pub fn get_ytdlp_lease() -> (PathBuf, Option<crate::ytdlp_updater::LiveChildGuard>) {
+    if let Some(manager) = crate::ytdlp_updater::get_manager() {
+        let (path, guard) = manager.acquire_lease();
+        if path.exists() {
+            return (path, Some(guard));
+        }
+    }
+    (get_bundled_ytdlp_path(), None)
 }
 
 pub fn get_title_signature(title: &str, artist: &str) -> std::collections::BTreeSet<String> {
@@ -178,6 +206,23 @@ pub fn get_title_signature_string(title: &str, artist: &str) -> String {
     words.into_iter().collect::<Vec<_>>().join(" ")
 }
 
+pub fn is_extraction_failure(err: &str) -> bool {
+    let lower = err.to_lowercase();
+    if lower.contains("timed out") || lower.contains("connection refused") || lower.contains("no such host") {
+        return false;
+    }
+    lower.contains("bot")
+        || lower.contains("sign in")
+        || lower.contains("extractor")
+        || lower.contains("js player")
+        || lower.contains("unable to extract")
+        || lower.contains("signature")
+        || lower.contains("nsig")
+        || lower.contains("n-sig")
+        || lower.contains("video unavailable")
+        || lower.contains("unsupported url")
+}
+
 // Invokes external yt-dlp binary to search YouTube; subject to YouTube ToS and breakage on UI/API changes.
 async fn execute_ytdlp_search(search_arg: &str, binary: &PathBuf) -> Result<Vec<Track>, String> {
     let mut cmd = tokio::process::Command::new(binary);
@@ -207,7 +252,16 @@ async fn execute_ytdlp_search(search_arg: &str, binary: &PathBuf) -> Result<Vec<
 
     if !output.status.success() {
         let err = String::from_utf8_lossy(&output.stderr);
+        if is_extraction_failure(&err) {
+            if let Some(manager) = crate::ytdlp_updater::get_manager() {
+                manager.record_failure();
+            }
+        }
         return Err(format!("yt-dlp search failed: {}", err));
+    }
+
+    if let Some(manager) = crate::ytdlp_updater::get_manager() {
+        manager.record_success();
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -262,10 +316,7 @@ pub async fn get_search_suggestions(query: String) -> Result<Vec<String>, String
         urlencoding::encode(q)
     );
 
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_millis(1500))
-        .build()
-        .map_err(|e| e.to_string())?;
+    let client = get_http_client();
 
     let res = client.get(&url).send().await.map_err(|e| e.to_string())?;
     let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
@@ -418,10 +469,7 @@ pub async fn get_genre_mix(artist: String, title: String) -> Result<Vec<Track>, 
     let clean_artist = artist.trim();
     let clean_title = title.trim();
 
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_millis(3500))
-        .build()
-        .map_err(|e| e.to_string())?;
+    let client = get_http_client();
 
     let search_term = if !clean_artist.is_empty() && clean_artist != "Unknown Artist" {
         format!("{} {}", clean_artist, clean_title)
@@ -614,12 +662,45 @@ pub async fn resolve_stream_url_internal(
 
         if !output.status.success() {
             let err = String::from_utf8_lossy(&output.stderr);
+            if is_extraction_failure(&err) {
+                if let Some(manager) = crate::ytdlp_updater::get_manager() {
+                    let rolled_back = manager.record_failure();
+                    if rolled_back {
+                        let (new_binary, _new_lease) = get_ytdlp_lease();
+                        if new_binary != binary {
+                            let mut retry_cmd = tokio::process::Command::new(&new_binary);
+                            #[cfg(windows)]
+                            retry_cmd.creation_flags(CREATE_NO_WINDOW);
+                            retry_cmd.kill_on_drop(true);
+                            if let Ok(retry_output) = retry_cmd.args([
+                                "-f", "18/ba/b", "--get-url", "--no-playlist", "--skip-download",
+                                "--no-warnings", "--no-cache-dir", "--socket-timeout", "4",
+                                "--extractor-args", "youtube:player_client=android;player_skip=webpage,configs",
+                                "--", &video_url
+                            ]).output().await {
+                                if retry_output.status.success() {
+                                    let url = String::from_utf8_lossy(&retry_output.stdout).trim().to_string();
+                                    if !url.is_empty() {
+                                        insert_stream_cache(id_clone, url.clone());
+                                        manager.record_success();
+                                        return Ok(url);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             return Err(format!("Stream resolution failed: {}", err));
         }
 
         let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
         if url.is_empty() {
             return Err("Resolved stream URL was empty".into());
+        }
+
+        if let Some(manager) = crate::ytdlp_updater::get_manager() {
+            manager.record_success();
         }
 
         insert_stream_cache(id_clone, url.clone());

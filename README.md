@@ -69,8 +69,19 @@ powershell -ExecutionPolicy Bypass -File scripts/fetch-ytdlp.ps1
 *Note: During build, `src-tauri/build.rs` strictly fails the build if the binary is absent or if its SHA-256 hash does not match the pinned release, preventing execution of unverified binaries.*
 
 ### Updating yt-dlp
-When upstream YouTube changes require updating the pinned `yt-dlp` sidecar release:
 
+Sonara Stream maintains extraction reliability through two complementary update paths:
+
+#### Path 1: Automatic Runtime Self-Updater (For Users)
+The desktop application autonomously manages the `yt-dlp` streaming engine at runtime without requiring full app reinstallation:
+- **How it works**: On startup (and periodically rate-limited to once every 6 hours), Sonara checks `https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest`.
+- **Integrity Verification**: It downloads `yt-dlp.exe` alongside `SHA2-256SUMS` to a temporary directory in app data, hashes the binary, and strictly validates that its SHA-256 matches the release checksum. Any mismatch immediately purges the files without touching active state.
+- **Atomic Activation**: On hash verification, the binary is moved into `%APPDATA%/com.sonara.stream/binaries/yt-dlp-{version}.exe` and safely activated once in-flight child processes complete.
+- **Automatic Rollback**: If consecutive extraction errors reach 3 on a downloaded binary, Sonara automatically rolls back to the previous stable binary (or falls back to the bundled sidecar) and blacklists the faulty version.
+- **User Control**: Automatic updates can be toggled on/off at any time in **Settings**, where users can also trigger a manual "Check for Engine Updates" action.
+
+#### Path 2: Maintainer Pinned Sidecar Bump (For Releases)
+When creating new Sonara releases with a fresh bundled sidecar baseline:
 1. **Download the new release executable**:
    ```powershell
    Invoke-WebRequest -Uri "https://github.com/yt-dlp/yt-dlp/releases/download/<NEW_TAG>/yt-dlp.exe" -OutFile "src-tauri/binaries/yt-dlp-x86_64-pc-windows-msvc.exe"
@@ -129,6 +140,7 @@ Sonara Stream runs entirely on your local machine and collects no telemetry, ana
 | **`suggestqueries.google.com`** | Frontend Webview (`fetch`) | Providing real-time autocomplete search suggestions as you type in the search bar. | Typed query strings directly sent from the search input field. |
 | **`itunes.apple.com`** (`*.mzstatic.com`) | Rust backend (`reqwest`) & Webview `<img>` | Identifying song genre and fetching diverse auto-mix recommendations; loading album artwork. | URL-encoded track title, artist name, and detected genre keyword; thumbnail image requests sent to Apple CDN (`*.mzstatic.com`). |
 | **Spotify** (`open.spotify.com/oembed`, `*.scdn.co`, `*.spotifycdn.com`) | Rust backend (`reqwest`) & Webview `<img>` | Resolving track title, artist name, and cover artwork when a Spotify link is pasted. | The public Spotify track URL pasted by the user sent to Spotify's oEmbed endpoint; artwork image requests sent to Spotify CDN. |
+| **GitHub Releases** (`api.github.com`, `objects.githubusercontent.com`) | Rust backend (`reqwest`) | Checking for latest `yt-dlp` updates, downloading release checksums (`SHA2-256SUMS`), and fetching verified binary updates. | Standard HTTPS GET requests for release assets and version tags; no personal or user data sent. |
 
 ---
 

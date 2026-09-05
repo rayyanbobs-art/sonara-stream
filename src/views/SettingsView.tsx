@@ -1,5 +1,6 @@
-﻿import React from "react";
-import { Radio, Sparkles } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { Radio, Sparkles, RefreshCw } from "lucide-react";
 import { AccentColor } from "../types";
 
 interface SettingsViewProps {
@@ -19,6 +20,51 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   shuffleDefault,
   onShuffleDefaultChange,
 }) => {
+  const [ytdlpStatus, setYtdlpStatus] = useState<{
+    version: string;
+    source: string;
+    last_check_unix: number;
+    auto_update_enabled: boolean;
+    consecutive_failures: number;
+  } | null>(null);
+  const [checkingYtdlp, setCheckingYtdlp] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    invoke("get_ytdlp_status")
+      .then((status: any) => setYtdlpStatus(status))
+      .catch((err) => console.error("Failed to fetch yt-dlp status:", err));
+  }, []);
+
+  const handleCheckYtdlp = async () => {
+    setCheckingYtdlp(true);
+    setToastMessage("Checking GitHub for yt-dlp updates...");
+    try {
+      const newVersion: string | null = await invoke("check_ytdlp_update", { forced: true });
+      const updatedStatus: any = await invoke("get_ytdlp_status");
+      setYtdlpStatus(updatedStatus);
+      if (newVersion) {
+        setToastMessage(`Updated to yt-dlp ${newVersion}!`);
+      } else {
+        setToastMessage(`Already on latest yt-dlp (${updatedStatus.version})`);
+      }
+    } catch (err: any) {
+      setToastMessage(`Update check failed: ${err?.message || err}`);
+    } finally {
+      setCheckingYtdlp(false);
+      setTimeout(() => setToastMessage(null), 4000);
+    }
+  };
+
+  const handleToggleAutoUpdate = async (enabled: boolean) => {
+    try {
+      await invoke("set_ytdlp_auto_update", { enabled });
+      setYtdlpStatus((prev) => prev ? { ...prev, auto_update_enabled: enabled } : null);
+    } catch (e) {
+      console.error("Failed to toggle auto-update:", e);
+    }
+  };
+
   const colors: { id: AccentColor; hex: string; name: string }[] = [
     { id: "purple", hex: "#8b5cf6", name: "Purple" },
     { id: "red", hex: "#ef4444", name: "Red" },
@@ -99,6 +145,64 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             onChange={(e) => onShuffleDefaultChange(e.target.checked)}
             className="settings-checkbox"
           />
+        </div>
+      </div>
+
+      {/* Streaming Engine & Updates Card */}
+      <div className="settings-card">
+        <div className="card-header-block">
+          <h4>Streaming Engine (`yt-dlp`)</h4>
+          <p>Local extractor status, integrity verification, and automatic updates</p>
+        </div>
+
+        <div className="about-stats-grid" style={{ marginBottom: "16px" }}>
+          <div className="about-stat-row">
+            <span>⚡ Active Version</span>
+            <strong>{ytdlpStatus ? ytdlpStatus.version : "Loading..."}</strong>
+          </div>
+          <div className="about-stat-row">
+            <span>🛡️ Binary Source</span>
+            <strong>{ytdlpStatus ? (ytdlpStatus.source === "bundled" ? "Bundled Sidecar (SHA-256 Pinned)" : "Verified Auto-Updated") : "..."}</strong>
+          </div>
+          <div className="about-stat-row">
+            <span>🕒 Last Checked</span>
+            <strong>
+              {ytdlpStatus && ytdlpStatus.last_check_unix > 0
+                ? new Date(ytdlpStatus.last_check_unix * 1000).toLocaleString()
+                : "Never"}
+            </strong>
+          </div>
+        </div>
+
+        <div className="setting-toggle-row">
+          <div>
+            <div className="toggle-title">Automatic Updates</div>
+            <div className="toggle-subtitle">Periodically check GitHub Releases and verify SHA-256 before activating</div>
+          </div>
+          <input
+            type="checkbox"
+            checked={ytdlpStatus?.auto_update_enabled ?? true}
+            onChange={(e) => handleToggleAutoUpdate(e.target.checked)}
+            className="settings-checkbox"
+          />
+        </div>
+
+        <div style={{ marginTop: "16px", display: "flex", alignItems: "center", gap: "12px" }}>
+          <button
+            type="button"
+            className="search-btn"
+            onClick={handleCheckYtdlp}
+            disabled={checkingYtdlp}
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px", cursor: checkingYtdlp ? "not-allowed" : "pointer" }}
+          >
+            <RefreshCw size={14} className={checkingYtdlp ? "spin" : ""} />
+            {checkingYtdlp ? "Checking Releases..." : "Check for Engine Updates"}
+          </button>
+          {toastMessage && (
+            <span style={{ fontSize: "13px", color: "var(--accent)", fontWeight: 500 }}>
+              {toastMessage}
+            </span>
+          )}
         </div>
       </div>
 

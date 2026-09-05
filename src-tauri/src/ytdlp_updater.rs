@@ -457,7 +457,9 @@ impl YtDlpManager {
             }
             hasher.update(&buffer[..count]);
         }
-        Ok(format!("{:x}", hasher.finalize()))
+        let result = hasher.finalize();
+        let hash_hex: String = result.iter().map(|b| format!("{:02x}", b)).collect();
+        Ok(hash_hex)
     }
 }
 

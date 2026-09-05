@@ -44,7 +44,7 @@ fn verify_sidecar_checksum() {
     }
 
     let result = hasher.finalize();
-    let actual_hash = format!("{:x}", result);
+    let actual_hash: String = result.iter().map(|b| format!("{:02x}", b)).collect();
 
     if actual_hash != EXPECTED_YTDLP_SHA256 {
         panic!(

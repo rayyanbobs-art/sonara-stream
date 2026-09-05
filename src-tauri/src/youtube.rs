@@ -1007,5 +1007,53 @@ mod tests {
             }
         }
     }
+
+    #[tokio::test]
+    #[ignore = "Live measurement test requiring network access and local yt-dlp binary"]
+    async fn test_live_latency_measurements() {
+        let queries = vec![
+            "woh lamhe woh baatein".to_string(),
+            "trending hits".to_string(),
+            "lofi beats".to_string(),
+        ];
+
+        for q in queries {
+            let start = Instant::now();
+            let results = search_youtube(q.clone()).await;
+            let elapsed = start.elapsed();
+            assert!(results.is_ok(), "Search failed for query: {}", q);
+            let tracks = results.unwrap();
+            println!(
+                "[LATENCY] Search \"{}\" -> {} results in {:.2}ms",
+                q,
+                tracks.len(),
+                elapsed.as_secs_f64() * 1000.0
+            );
+        }
+
+        let search_res = search_youtube("woh lamhe woh baatein".to_string()).await.unwrap();
+        assert!(!search_res.is_empty());
+        let track_id = search_res[0].id.clone();
+
+        let cold_start = Instant::now();
+        let cold_url = get_stream_url(track_id.clone(), Some(true)).await;
+        let cold_elapsed = cold_start.elapsed();
+        assert!(cold_url.is_ok(), "Failed to get cold stream URL");
+        println!(
+            "[LATENCY] Stream URL (Cold) for {} -> {:.2}ms",
+            track_id,
+            cold_elapsed.as_secs_f64() * 1000.0
+        );
+
+        let cached_start = Instant::now();
+        let cached_url = get_stream_url(track_id.clone(), Some(false)).await;
+        let cached_elapsed = cached_start.elapsed();
+        assert!(cached_url.is_ok(), "Failed to get cached stream URL");
+        println!(
+            "[LATENCY] Stream URL (Cached/Prebuffered) for {} -> {:.2}ms",
+            track_id,
+            cached_elapsed.as_secs_f64() * 1000.0
+        );
+    }
 }
 

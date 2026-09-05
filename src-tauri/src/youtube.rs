@@ -1,3 +1,14 @@
+//! YouTube audio search and streaming extraction service.
+//!
+//! DISCLAIMER & ARCHITECTURAL DEPENDENCY:
+//! This service relies on invoking an external `yt-dlp` executable to query
+//! YouTube endpoints and extract progressive audio stream URLs directly into memory.
+//! This mechanism is subject to YouTube's Terms of Service and applicable copyright laws.
+//! Because YouTube continuously updates player clients, internal obfuscation tokens,
+//! and bot-detection heuristics, stream extraction is fragile and may experience
+//! intermittent breakage whenever YouTube alters internal protocols until `yt-dlp`
+//! releases a corresponding patch.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -142,6 +153,7 @@ pub fn get_title_signature(title: &str, artist: &str) -> std::collections::BTree
     words
 }
 
+// Invokes external yt-dlp binary to search YouTube; subject to YouTube ToS and breakage on UI/API changes.
 async fn execute_ytdlp_search(search_arg: &str, binary: &PathBuf) -> Result<Vec<Track>, String> {
     let mut cmd = tokio::process::Command::new(binary);
     #[cfg(windows)]
@@ -537,6 +549,8 @@ pub async fn get_stream_url(id: String, bypass_cache: Option<bool>) -> Result<St
             format!("https://www.youtube.com/watch?v={}", safe_id)
         };
 
+        // Shells out to external yt-dlp to extract raw media stream URL.
+        // Dependent on YouTube's player JS & cipher formats; subject to YouTube ToS.
         let mut cmd = tokio::process::Command::new(&binary);
         #[cfg(windows)]
         cmd.creation_flags(CREATE_NO_WINDOW);

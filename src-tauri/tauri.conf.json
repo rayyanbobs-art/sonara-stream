@@ -24,13 +24,11 @@
       }
     ],
     "security": {
-      // Note: style-src 'unsafe-inline' is intentional for Tailwind/Vite
       "csp": "default-src 'self' ipc: http://ipc.localhost; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; media-src 'self' https://*.googlevideo.com blob:; img-src 'self' https://*.ytimg.com https://*.mzstatic.com https://*.scdn.co https://*.spotifycdn.com data: blob:; connect-src 'self' ipc: http://ipc.localhost https://suggestqueries.google.com https://itunes.apple.com https://open.spotify.com;"
     }
   },
   "bundle": {
     "active": true,
-    "createUpdaterArtifacts": true,
     "targets": ["nsis"],
     "icon": [
       "icons/32x32.png",
@@ -40,16 +38,5 @@
       "icons/icon.ico"
     ],
     "externalBin": ["binaries/yt-dlp"]
-  },
-  "plugins": {
-    "updater": {
-      "pubkey": "TODO: Paste public key from `pnpm tauri signer generate`",
-      "endpoints": [
-        "https://github.com/rayyanbobs-art/sonara-stream/releases/latest/download/latest.json"
-      ],
-      "windows": {
-        "installMode": "passive"
-      }
-    }
   }
 }

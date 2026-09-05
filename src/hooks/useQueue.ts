@@ -10,6 +10,7 @@ interface UseQueueProps {
   favorites: Track[];
   onPlayTrack: (track: Track, preserveQueue?: boolean) => Promise<void>;
   onSelectTrack?: (track: Track) => void;
+  audioRef?: React.RefObject<HTMLAudioElement | null>;
   preloadAudioRef?: React.RefObject<HTMLAudioElement | null>;
   preloadTrackRef?: React.RefObject<Track | null>;
 }
@@ -21,6 +22,7 @@ export function useQueue({
   favorites,
   onPlayTrack,
   onSelectTrack,
+  audioRef,
   preloadAudioRef,
   preloadTrackRef,
 }: UseQueueProps) {
@@ -36,6 +38,7 @@ export function useQueue({
 
   const prefetchedIds = useRef<Set<string>>(new Set());
   const recentlyPlayedSignatures = useRef<Set<string>>(new Set());
+  const historyRef = useRef<Track[]>([]);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Keep fresh references to avoid stale closure issues
@@ -104,18 +107,19 @@ export function useQueue({
   }, []);
 
   const updateQueueForTrack = useCallback((track: Track, preserveQueue: boolean) => {
-    // Only rebuild entire genre mix when clicking a fresh song from Search/Home (preserveQueue is false)
     if (!preserveQueue) {
-      invoke<Track[]>("get_genre_mix", { artist: track.artist, title: track.title })
+      // Build radio mix from recommendation engine when clicking a fresh song
+      invoke<Track[]>("build_radio", { seedTrack: track, limit: 20 })
         .then((mix: Track[]) => {
           if (Array.isArray(mix) && mix.length > 0) {
             const freshMix = mix.filter(
               (m: Track) => !isSameSong(m, track) && !isRecentlyPlayed(m)
             );
-            setUpNextMix(freshMix);
+            const finalMix = freshMix.length > 0 ? freshMix : mix.filter((m) => !isSameSong(m, track));
+            setUpNextMix(finalMix);
 
             // Pre-fetch the first 3 songs of the mix immediately in the background
-            freshMix.slice(0, 3).forEach((mTrack: Track) => {
+            finalMix.slice(0, 3).forEach((mTrack: Track) => {
               if (!prefetchedIds.current.has(mTrack.id)) {
                 prefetchedIds.current.add(mTrack.id);
                 invoke("get_stream_url", { id: mTrack.id }).catch(() => {});
@@ -123,13 +127,13 @@ export function useQueue({
             });
 
             // Pre-buffer the 1st song of the genre mix into preload audio element
-            if (freshMix.length > 0) {
-              invoke("get_stream_url", { id: freshMix[0].id })
+            if (finalMix.length > 0) {
+              invoke("get_stream_url", { id: finalMix[0].id })
                 .then((nextUrl) => {
                   if (preloadAudioRef?.current && typeof nextUrl === "string") {
                     preloadAudioRef.current.src = nextUrl;
                     if (preloadTrackRef) {
-                      preloadTrackRef.current = freshMix[0];
+                      preloadTrackRef.current = finalMix[0];
                     }
                   }
                 })
@@ -137,12 +141,12 @@ export function useQueue({
             }
           }
         })
-        .catch((err) => console.error("Genre mix error:", err));
+        .catch((err) => console.error("Radio mix generation error:", err));
     } else {
-      // preserveQueue is TRUE (auto-advancing): keep queue and top up if low (< 4 tracks)
+      // preserveQueue is TRUE (auto-advancing): keep queue and top up if low (< 5 tracks)
       setUpNextMix((currentMix) => {
-        if (currentMix.length < 4) {
-          invoke<Track[]>("get_genre_mix", { artist: track.artist, title: track.title })
+        if (currentMix.length < 5) {
+          invoke<Track[]>("build_radio", { seedTrack: track, limit: 15 })
             .then((moreMix: Track[]) => {
               if (Array.isArray(moreMix) && moreMix.length > 0) {
                 setUpNextMix((prev) => {
@@ -205,6 +209,10 @@ export function useQueue({
 
   const triggerDebouncedPlay = useCallback((track: Track, preserveQueue: boolean) => {
     currentTrackRef.current = track;
+    historyRef.current.push(track);
+    if (historyRef.current.length > 50) {
+      historyRef.current.shift();
+    }
     onSelectTrackRef.current?.(track);
 
     if (debounceTimeoutRef.current) {
@@ -223,7 +231,7 @@ export function useQueue({
     const currentTab = activeTabRef.current;
     const shuffle = isShuffleRef.current;
 
-    // 1. YouTube Music-style Genre Autoplay: Prioritize upcoming tracks from the genre mix
+    // 1. Prioritize upcoming tracks from queue with a DIFFERENT song signature
     if (currentTab !== "favorites" && currentMix.length > 0) {
       let candidateIdx = -1;
       if (shuffle) {
@@ -240,20 +248,20 @@ export function useQueue({
         );
       }
 
-      // If all tracks were marked as recently played, take any track that is not the same song
+      // If all unplayed items share current song or are played, take any track with DIFFERENT song
       if (candidateIdx === -1) {
         candidateIdx = currentMix.findIndex((t) => !isSameSong(t, activeCurrent));
       }
 
       if (candidateIdx !== -1) {
         const nextTrack = currentMix[candidateIdx];
-        // Advance queue: drop this track and any skipped before it
         setUpNextMix((prev) => prev.filter((_, idx) => idx > candidateIdx));
         triggerDebouncedPlay(nextTrack, true /* PRESERVE QUEUE! */);
         return;
       }
     }
 
+    // 2. Check active tab list for a track with a DIFFERENT song signature
     const list = currentTab === "favorites" ? favoritesRef.current : tracksRef.current;
     if (list.length > 0) {
       if (shuffle) {
@@ -267,7 +275,7 @@ export function useQueue({
         }
       }
 
-      // Sequential: pick next distinct unplayed track
+      // Sequential: pick next distinct track with DIFFERENT song
       const currIdx = list.findIndex((t) => t.id === activeCurrent.id);
       let nextTrack: Track | null = null;
 
@@ -279,22 +287,60 @@ export function useQueue({
         }
       }
 
+      if (!nextTrack) {
+        for (let i = 1; i < list.length; i++) {
+          const candidate = list[(currIdx + i) % list.length];
+          if (!isSameSong(candidate, activeCurrent)) {
+            nextTrack = candidate;
+            break;
+          }
+        }
+      }
+
       if (nextTrack) {
         triggerDebouncedPlay(nextTrack, true);
         return;
       }
     }
 
-    // 3. Queue / Playlist exhausted: Fetch FRESH never-before-played related tracks!
+    // 3. Queue / Playlist exhausted OR every item in queue shares current signature:
+    // Build radio from the Rust recommendation engine. Show a brief loading state — never a silent no-op.
+    try {
+      onSelectTrackRef.current?.({
+        ...activeCurrent,
+        title: `${activeCurrent.title} (Loading Radio...)`,
+      });
+
+      const radioTracks: Track[] = await invoke("build_radio", {
+        seedTrack: activeCurrent,
+        limit: 20,
+      });
+
+      const freshTracks = radioTracks.filter(
+        (r) => !isSameSong(r, activeCurrent) && !isRecentlyPlayed(r)
+      );
+      const usable = freshTracks.length > 0
+        ? freshTracks
+        : radioTracks.filter((r) => !isSameSong(r, activeCurrent));
+
+      if (usable.length > 0) {
+        const next = usable[0];
+        setUpNextMix(usable.slice(1));
+        triggerDebouncedPlay(next, true);
+        return;
+      }
+    } catch (err) {
+      console.error("Radio build error in handleNext:", err);
+    }
+
+    // 4. Fallback if build_radio returned empty: get_related_tracks
     try {
       const related: Track[] = await invoke("get_related_tracks", {
         artist: activeCurrent.artist,
         title: activeCurrent.title,
       });
 
-      const freshTracks = related.filter(
-        (r) => !isSameSong(r, activeCurrent) && !isRecentlyPlayed(r)
-      );
+      const freshTracks = related.filter((r) => !isSameSong(r, activeCurrent));
       if (freshTracks.length > 0) {
         const next = freshTracks[0];
         setUpNextMix(freshTracks.slice(1));
@@ -304,26 +350,35 @@ export function useQueue({
     } catch (err) {
       console.error("Autoplay radio error:", err);
     }
-
-    // 4. Fallback: pick any track from list that is not the same song
-    const fallbackList = currentTab === "favorites" ? favoritesRef.current : tracksRef.current;
-    if (fallbackList.length > 1) {
-      const candidate = fallbackList.find((t) => !isSameSong(t, activeCurrent));
-      if (candidate) {
-        triggerDebouncedPlay(candidate, true);
-        return;
-      }
-    }
   }, [isRecentlyPlayed, triggerDebouncedPlay]);
 
   const handlePrev = useCallback(() => {
     const activeCurrent = currentTrackRef.current;
+    if (!activeCurrent) return;
+
+    // 1. If playback position > 3s, restart current track
+    if (audioRef?.current && audioRef.current.currentTime > 3) {
+      audioRef.current.currentTime = 0;
+      return;
+    }
+
+    // 2. Otherwise navigate to the previous track in history
+    if (historyRef.current.length > 1) {
+      historyRef.current.pop(); // Remove current track
+      const prevTrack = historyRef.current.pop(); // Take previous track
+      if (prevTrack) {
+        triggerDebouncedPlay(prevTrack, false);
+        return;
+      }
+    }
+
+    // Fallback: active tab list
     const list = activeTabRef.current === "favorites" ? favoritesRef.current : tracksRef.current;
-    if (!activeCurrent || list.length === 0) return;
+    if (list.length === 0) return;
     const idx = list.findIndex((t) => t.id === activeCurrent.id);
     const prevIdx = (idx - 1 + list.length) % list.length;
     triggerDebouncedPlay(list[prevIdx], false);
-  }, [triggerDebouncedPlay]);
+  }, [audioRef, triggerDebouncedPlay]);
 
   return {
     upNextMix,

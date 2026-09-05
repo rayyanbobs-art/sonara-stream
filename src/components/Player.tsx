@@ -6,13 +6,14 @@ import {
   SkipForward,
   Shuffle,
   Repeat,
+  Repeat1,
   Volume2,
   VolumeX,
   Heart,
   Radio,
   ListMusic,
 } from "lucide-react";
-import { Track } from "../types";
+import { Track, RepeatMode } from "../types";
 
 interface PlayerProps {
   currentTrack: Track | null;
@@ -22,6 +23,7 @@ interface PlayerProps {
   duration: number;
   volume: number;
   isShuffle: boolean;
+  repeatMode?: RepeatMode;
   isFavorite: boolean;
   onTogglePlay: () => void;
   onSeek: (time: number) => void;
@@ -29,6 +31,7 @@ interface PlayerProps {
   onNext: () => void;
   onPrev: () => void;
   onToggleShuffle: () => void;
+  onToggleRepeat?: () => void;
   onToggleFavorite: () => void;
   onToggleQueue?: () => void;
   isQueueOpen?: boolean;
@@ -167,11 +170,13 @@ export const Player: React.FC<PlayerProps> = ({
 
             <button
               type="button"
-              className="ctrl-icon-btn"
-              title="Repeat"
-              aria-label="Repeat"
+              className={`ctrl-icon-btn ${repeatMode && repeatMode !== "off" ? "active" : ""}`}
+              onClick={onToggleRepeat}
+              title={`Repeat: ${repeatMode === "one" ? "One" : repeatMode === "all" ? "All" : "Off"}`}
+              aria-label={`Repeat mode: ${repeatMode === "one" ? "One" : repeatMode === "all" ? "All" : "Off"}`}
+              aria-pressed={repeatMode && repeatMode !== "off"}
             >
-              <Repeat size={15} />
+              {repeatMode === "one" ? <Repeat1 size={15} /> : <Repeat size={15} />}
             </button>
           </div>
 

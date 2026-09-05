@@ -63,6 +63,9 @@ export default function App() {
     currentTime,
     duration,
     volume,
+    repeatMode,
+    toggleRepeat,
+    audioRef,
     preloadAudioRef,
     preloadTrackRef,
     playTrack,
@@ -100,6 +103,7 @@ export default function App() {
       setCurrentTrack(track);
       setIsBuffering(true);
     },
+    audioRef,
     preloadAudioRef,
     preloadTrackRef,
   });
@@ -294,6 +298,8 @@ export default function App() {
         onNext={handleNext}
         onPrev={handlePrev}
         onToggleShuffle={toggleShuffle}
+        repeatMode={repeatMode}
+        onToggleRepeat={toggleRepeat}
         onToggleFavorite={() => currentTrack && toggleFavorite(currentTrack)}
         onToggleQueue={toggleQueue}
         isQueueOpen={isQueueOpen}

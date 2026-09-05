@@ -18,6 +18,9 @@ export function useAudioPlayer(options: UseAudioPlayerOptions = {}) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolumeState] = useState(0.85);
+  const [repeatMode, setRepeatMode] = useState<"off" | "all" | "one">(() => {
+    return (localStorage.getItem("sonara_repeat_mode") as "off" | "all" | "one") || "off";
+  });
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const preloadAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -26,6 +29,7 @@ export function useAudioPlayer(options: UseAudioPlayerOptions = {}) {
   const currentTrackRef = useRef<Track | null>(null);
   const retryCountRef = useRef<number>(0);
   const playGenerationRef = useRef<number>(0);
+  const repeatModeRef = useRef<"off" | "all" | "one">(repeatMode);
 
   // Fresh callbacks in refs to avoid stale closures in audio events
   const onEndedRef = useRef(onEnded);
@@ -38,7 +42,16 @@ export function useAudioPlayer(options: UseAudioPlayerOptions = {}) {
     onNextRef.current = onNext;
     onPrevRef.current = onPrev;
     onErrorRef.current = onError;
+    repeatModeRef.current = repeatMode;
   });
+
+  const toggleRepeat = useCallback(() => {
+    setRepeatMode((prev) => {
+      const next = prev === "off" ? "all" : prev === "all" ? "one" : "off";
+      localStorage.setItem("sonara_repeat_mode", next);
+      return next;
+    });
+  }, []);
 
   // Audio element setup (mount once)
   useEffect(() => {
@@ -70,6 +83,25 @@ export function useAudioPlayer(options: UseAudioPlayerOptions = {}) {
     };
 
     audio.onended = () => {
+      if (currentTrackRef.current) {
+        Promise.resolve(
+          invoke("record_play_event", {
+            track: currentTrackRef.current,
+            completed: true,
+            skippedBeforeSeconds: null,
+          })
+        ).catch(() => {});
+      }
+
+      // Repeat-one only applies to natural track end
+      if (repeatModeRef.current === "one") {
+        if (audioRef.current) {
+          audioRef.current.currentTime = 0;
+          audioRef.current.play().catch(console.error);
+        }
+        return;
+      }
+
       if (onEndedRef.current) {
         onEndedRef.current();
       } else if (onNextRef.current) {
@@ -208,7 +240,20 @@ export function useAudioPlayer(options: UseAudioPlayerOptions = {}) {
 
     // Cancel superseded backend stream request if any
     if (previousTrack && previousTrack.id !== track.id) {
-      invoke("cancel_stream_request", { id: previousTrack.id }).catch(() => {});
+      Promise.resolve(invoke("cancel_stream_request", { id: previousTrack.id })).catch(() => {});
+      // Record skip signal if previous track played less than 30s
+      if (audioRef.current) {
+        const playedSecs = Math.floor(audioRef.current.currentTime);
+        if (playedSecs < 30) {
+          Promise.resolve(
+            invoke("record_play_event", {
+              track: previousTrack,
+              completed: false,
+              skippedBeforeSeconds: playedSecs,
+            })
+          ).catch(() => {});
+        }
+      }
     }
 
     try {
@@ -283,6 +328,8 @@ export function useAudioPlayer(options: UseAudioPlayerOptions = {}) {
     duration,
     setDuration,
     volume,
+    repeatMode,
+    toggleRepeat,
     audioRef,
     preloadAudioRef,
     preloadTrackRef,

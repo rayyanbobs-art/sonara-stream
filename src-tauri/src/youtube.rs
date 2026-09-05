@@ -715,6 +715,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_timed_out_ytdlp_removes_in_flight_entry() {
+        let binary = get_ytdlp_path();
+        if !binary.exists() {
+            println!(
+                "Skipping test_timed_out_ytdlp_removes_in_flight_entry: yt-dlp binary is absent at {:?}",
+                binary
+            );
+            return;
+        }
+
         let test_id = "test_timeout_removal_id".to_string();
 
         // Ensure in-flight is clean initially
@@ -723,7 +732,7 @@ mod tests {
             guard.remove(&test_id);
         }
 
-        // Call with an impossibly short timeout (1 microsecond) so it times out
+        // Call with an ultra-short timeout (1 microsecond) so it times out
         let res = resolve_stream_url_internal(test_id.clone(), Some(true), Duration::from_micros(1)).await;
         assert!(res.is_err());
         let err_msg = res.unwrap_err();
@@ -738,15 +747,25 @@ mod tests {
             );
         }
 
-        // Verify a subsequent call for the same ID proceeds and creates its own channel without deadlock
-        let second_channel_inserted = {
-            let mut guard = get_in_flight().lock().unwrap();
-            assert!(!guard.contains_key(&test_id));
-            let (tx, _) = tokio::sync::broadcast::channel(2);
-            guard.insert(test_id.clone(), tx);
-            true
-        };
-        assert!(second_channel_inserted);
+        // Actually call resolve_stream_url_internal again for the same ID and assert it proceeds past in-flight check
+        let second_call_res = tokio::time::timeout(
+            Duration::from_secs(2),
+            resolve_stream_url_internal(test_id.clone(), Some(true), Duration::from_micros(1)),
+        )
+        .await;
+
+        assert!(
+            second_call_res.is_ok(),
+            "Second call must not deadlock waiting on abandoned in-flight channel"
+        );
+        let res2 = second_call_res.unwrap();
+        assert!(res2.is_err());
+        let err2 = res2.unwrap_err();
+        assert!(
+            err2.contains("timed out"),
+            "Second call must proceed past in-flight check to execution task, got: {}",
+            err2
+        );
 
         // Cleanup
         let mut guard = get_in_flight().lock().unwrap();

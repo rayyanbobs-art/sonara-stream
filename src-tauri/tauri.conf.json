@@ -24,7 +24,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' ipc: http://ipc.localhost; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; media-src 'self' https://*.googlevideo.com blob:; img-src 'self' https://i.ytimg.com https://*.ytimg.com https://*.mzstatic.com https://is*.mzstatic.com https://*.scdn.co https://*.spotifycdn.com data: blob:; connect-src 'self' ipc: http://ipc.localhost https://suggestqueries.google.com https://itunes.apple.com https://open.spotify.com;"
+      "csp": "default-src 'self' ipc: http://ipc.localhost; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; media-src 'self' https://*.googlevideo.com blob:; img-src 'self' https://*.ytimg.com https://*.mzstatic.com https://*.scdn.co https://*.spotifycdn.com data: blob:; connect-src 'self' ipc: http://ipc.localhost https://suggestqueries.google.com https://itunes.apple.com https://open.spotify.com;"
     }
   },
   "bundle": {

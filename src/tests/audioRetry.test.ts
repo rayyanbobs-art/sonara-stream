@@ -157,5 +157,76 @@ describe("useAudioPlayer error retry behavior", () => {
       "Stream playback failed. The audio stream could not be loaded. Please choose another track."
     );
   });
+
+  it("resets retryCount on playTrack so playing track B after track A error also retries with bypassCache", async () => {
+    const errorCallback = vi.fn();
+    window.HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
+    window.HTMLMediaElement.prototype.pause = vi.fn();
+
+    const trackA: Track = {
+      id: "track-A",
+      title: "Track A",
+      artist: "Artist A",
+      duration: 180,
+      thumbnail: "https://example.com/a.jpg",
+      source: "youtube",
+      signature: "artist a track a",
+    };
+
+    const trackB: Track = {
+      id: "track-B",
+      title: "Track B",
+      artist: "Artist B",
+      duration: 200,
+      thumbnail: "https://example.com/b.jpg",
+      source: "youtube",
+      signature: "artist b track b",
+    };
+
+    const { result } = renderHook(() =>
+      useAudioPlayer({
+        onError: errorCallback,
+      })
+    );
+
+    // 1. Play Track A
+    mockInvoke.mockResolvedValueOnce("https://stream.youtube.com/track-a");
+    await act(async () => {
+      await result.current.playTrack(trackA);
+    });
+
+    // 2. Track A onerror -> retries with bypassCache: true
+    mockInvoke.mockResolvedValueOnce("https://stream.youtube.com/track-a-retry");
+    await act(async () => {
+      if (result.current.audioRef.current?.onerror) {
+        await (result.current.audioRef.current.onerror as any)(new Event("error"));
+      }
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith("get_stream_url", {
+      id: trackA.id,
+      bypassCache: true,
+    });
+
+    // 3. Play Track B
+    mockInvoke.mockResolvedValueOnce("https://stream.youtube.com/track-b");
+    await act(async () => {
+      await result.current.playTrack(trackB);
+    });
+
+    // 4. Track B onerror -> must retry with bypassCache: true because retryCount was reset
+    mockInvoke.mockResolvedValueOnce("https://stream.youtube.com/track-b-retry");
+    await act(async () => {
+      if (result.current.audioRef.current?.onerror) {
+        await (result.current.audioRef.current.onerror as any)(new Event("error"));
+      }
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith("get_stream_url", {
+      id: trackB.id,
+      bypassCache: true,
+    });
+  });
 });
+
 

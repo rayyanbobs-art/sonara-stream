@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { AlertCircle } from "lucide-react";
+import { check, Update } from "@tauri-apps/plugin-updater";
+import { UpdateBanner } from "./components/UpdateBanner";
 import { Sidebar } from "./components/Sidebar";
 import { Header } from "./components/Header";
 import { Player } from "./components/Player";
@@ -30,6 +32,25 @@ export default function App() {
   const [source, setSource] = useState<"youtube" | "spotify">("youtube");
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [availableUpdate, setAvailableUpdate] = useState<Update | null>(null);
+
+  useEffect(() => {
+    const checkAppUpdate = async () => {
+      const autoUpdate = localStorage.getItem("sonara_app_autoupdate") !== "false";
+      if (!autoUpdate) return;
+      try {
+        const update = await check();
+        if (update && update.available) {
+          setAvailableUpdate(update);
+        }
+      } catch (err) {
+        console.debug("Tauri app update check:", err);
+      }
+    };
+
+    const timer = setTimeout(checkAppUpdate, 3000);
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleNextRef = useRef<() => void>(() => {});
   const handlePrevRef = useRef<() => void>(() => {});
@@ -287,6 +308,14 @@ export default function App() {
         onPrefetchTrack={handlePrefetchTrack}
         isPlaying={isPlaying}
       />
+
+      {availableUpdate && (
+        <UpdateBanner
+          update={availableUpdate}
+          isPlaying={isPlaying}
+          onDismiss={() => setAvailableUpdate(null)}
+        />
+      )}
     </div>
   );
 }

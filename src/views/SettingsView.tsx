@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Radio, Sparkles, RefreshCw } from "lucide-react";
+import { check } from "@tauri-apps/plugin-updater";
+import { Radio, Sparkles, RefreshCw, ArrowUpCircle } from "lucide-react";
 import { AccentColor } from "../types";
 
 interface SettingsViewProps {
@@ -28,6 +29,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     consecutive_failures: number;
   } | null>(null);
   const [checkingYtdlp, setCheckingYtdlp] = useState(false);
+  const [checkingApp, setCheckingApp] = useState(false);
+  const [appAutoUpdate, setAppAutoUpdate] = useState<boolean>(() => {
+    return localStorage.getItem("sonara_app_autoupdate") !== "false";
+  });
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -62,6 +67,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       setYtdlpStatus((prev) => prev ? { ...prev, auto_update_enabled: enabled } : null);
     } catch (e) {
       console.error("Failed to toggle auto-update:", e);
+    }
+  };
+
+  const handleToggleAppAutoUpdate = (enabled: boolean) => {
+    setAppAutoUpdate(enabled);
+    localStorage.setItem("sonara_app_autoupdate", enabled ? "true" : "false");
+  };
+
+  const handleCheckAppUpdate = async () => {
+    setCheckingApp(true);
+    setToastMessage("Checking for Sonara Stream app updates...");
+    try {
+      const update = await check();
+      if (update?.available) {
+        setToastMessage(`New version available: v${update.version}! Relaunch via update banner.`);
+      } else {
+        setToastMessage("Sonara Stream is already on the latest version.");
+      }
+    } catch (err: any) {
+      setToastMessage(`App update check failed: ${err?.message || err}`);
+    } finally {
+      setCheckingApp(false);
+      setTimeout(() => setToastMessage(null), 5000);
     }
   };
 
@@ -198,12 +226,46 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <RefreshCw size={14} className={checkingYtdlp ? "spin" : ""} />
             {checkingYtdlp ? "Checking Releases..." : "Check for Engine Updates"}
           </button>
-          {toastMessage && (
-            <span style={{ fontSize: "13px", color: "var(--accent)", fontWeight: 500 }}>
-              {toastMessage}
-            </span>
-          )}
         </div>
+
+        <div style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid var(--border)" }}>
+          <div className="card-header-block" style={{ marginBottom: "12px" }}>
+            <h4>Desktop Application Updates</h4>
+            <p>Sonara Stream desktop player release channel</p>
+          </div>
+
+          <div className="setting-toggle-row">
+            <div>
+              <div className="toggle-title">App Auto-Check on Startup</div>
+              <div className="toggle-subtitle">Non-blockingly notify when a new desktop release is published</div>
+            </div>
+            <input
+              type="checkbox"
+              checked={appAutoUpdate}
+              onChange={(e) => handleToggleAppAutoUpdate(e.target.checked)}
+              className="settings-checkbox"
+            />
+          </div>
+
+          <div style={{ marginTop: "16px", display: "flex", alignItems: "center", gap: "12px" }}>
+            <button
+              type="button"
+              className="search-btn"
+              onClick={handleCheckAppUpdate}
+              disabled={checkingApp}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px", cursor: checkingApp ? "not-allowed" : "pointer" }}
+            >
+              <ArrowUpCircle size={14} className={checkingApp ? "spin" : ""} />
+              {checkingApp ? "Checking App Releases..." : "Check for App Updates"}
+            </button>
+          </div>
+        </div>
+
+        {toastMessage && (
+          <div style={{ marginTop: "14px", fontSize: "13px", color: "var(--accent)", fontWeight: 500 }}>
+            {toastMessage}
+          </div>
+        )}
       </div>
 
       {/* About Card */}

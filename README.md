@@ -97,6 +97,37 @@ When creating new Sonara releases with a fresh bundled sidecar baseline:
    - Run `cargo test --manifest-path src-tauri/Cargo.toml`
    - Run `pnpm tauri build`
 
+#### Path 3: Desktop Application Updates (Tauri Updater)
+Sonara Stream desktop updates are built with `@tauri-apps/plugin-updater` and cryptographically signed with minisign keys:
+- **Non-blocking Notification**: On startup (or via manual check in **Settings**), Sonara queries GitHub Releases for `latest.json`. If a newer version is available, a non-intrusive update banner displays release details and download progress.
+- **Playback Protection**: An update will never interrupt active audio playback. Users can restart at their convenience or dismiss the notification.
+- **Signer Key Setup (For Maintainers)**:
+  1. Generate a Tauri signer private/public keypair:
+     ```bash
+     pnpm tauri signer generate -w ~/.tauri/sonara.key
+     ```
+  2. Set the generated public key in `src-tauri/tauri.conf.json`:
+     ```json
+     "plugins": {
+       "updater": {
+         "pubkey": "<MINISIGN_PUBLIC_KEY>"
+       }
+     }
+     ```
+  3. Store the private key and password in repository GitHub Secrets:
+     - `TAURI_SIGNING_PRIVATE_KEY`: Content of `~/.tauri/sonara.key`
+     - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: Password supplied during key creation
+- **Consequences of Private Key Loss**:
+  Tauri updater binaries verify release archives against the hardcoded minisign public key. If the private signing key is lost, future updates cannot be verified or applied automatically by existing desktop installations; users will be required to download and install a fresh installer manually.
+- **Windows SmartScreen Notice**:
+  Minisign code signing secures in-app update archives against tampering. However, it does **not** bypass Microsoft Defender SmartScreen untrusted publisher warnings when running newly downloaded Windows `.msi` or `.exe` installers. Bypassing SmartScreen requires an EV (Extended Validation) code-signing certificate or sufficient download reputation accumulated over time.
+
+#### Path 4: Repository Dependency Maintenance (Dependabot)
+- Automated weekly pull requests scan and update `npm` (`package.json`) and `cargo` (`src-tauri/Cargo.toml`) dependencies.
+- Minor and patch updates are grouped into consolidated PRs to minimize noise, while major version upgrades receive individual pull requests.
+- Every PR automatically executes the full CI test suite defined in `.github/workflows/ci.yml`.
+- **Scope Distinction**: Dependabot manages compile-time repository dependencies. It does not touch runtime `yt-dlp` binaries (managed by Path 1) or user application installs (managed by Path 3).
+
 ### Setup & Run
 ```bash
 # Clone the repository
@@ -140,7 +171,8 @@ Sonara Stream runs entirely on your local machine and collects no telemetry, ana
 | **`suggestqueries.google.com`** | Frontend Webview (`fetch`) | Providing real-time autocomplete search suggestions as you type in the search bar. | Typed query strings directly sent from the search input field. |
 | **`itunes.apple.com`** (`*.mzstatic.com`) | Rust backend (`reqwest`) & Webview `<img>` | Identifying song genre and fetching diverse auto-mix recommendations; loading album artwork. | URL-encoded track title, artist name, and detected genre keyword; thumbnail image requests sent to Apple CDN (`*.mzstatic.com`). |
 | **Spotify** (`open.spotify.com/oembed`, `*.scdn.co`, `*.spotifycdn.com`) | Rust backend (`reqwest`) & Webview `<img>` | Resolving track title, artist name, and cover artwork when a Spotify link is pasted. | The public Spotify track URL pasted by the user sent to Spotify's oEmbed endpoint; artwork image requests sent to Spotify CDN. |
-| **GitHub Releases** (`api.github.com`, `objects.githubusercontent.com`) | Rust backend (`reqwest`) | Checking for latest `yt-dlp` updates, downloading release checksums (`SHA2-256SUMS`), and fetching verified binary updates. | Standard HTTPS GET requests for release assets and version tags; no personal or user data sent. |
+| **GitHub Releases (`yt-dlp`)** (`api.github.com`, `objects.githubusercontent.com`) | Rust backend (`reqwest`) | Checking for latest `yt-dlp` updates, downloading release checksums (`SHA2-256SUMS`), and fetching verified binary updates. | Standard HTTPS GET requests for release assets and version tags; no personal or user data sent. |
+| **GitHub Releases (Sonara App)** (`github.com/rayyanbobs-art/sonara-stream`) | Rust backend (`tauri-plugin-updater`) | Checking for newer application releases (`latest.json`), downloading signed installer updates. | Standard HTTPS GET requests for version manifest and update bundles; no telemetry sent. |
 
 ---
 

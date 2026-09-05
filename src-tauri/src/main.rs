@@ -14,6 +14,8 @@ fn main() {
     }
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             if let Ok(app_data) = app.path().app_data_dir() {
                 let manager = ytdlp_updater::init_manager(app_data);

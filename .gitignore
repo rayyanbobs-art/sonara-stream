@@ -27,3 +27,6 @@ Thumbs.db
 # Tauri generated schemas
 src-tauri/gen/schemas/
 
+# TypeScript cache
+*.tsbuildinfo
+

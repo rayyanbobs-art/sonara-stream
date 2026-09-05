@@ -1,8 +1,6 @@
-﻿# 🎵 Sonara Stream
+# 🎵 Sonara Stream
 
-> A sleek, ultra-fast desktop music streaming player built with **Rust**, **Tauri 2**, and **React**. Stream millions of songs from YouTube and Spotify directly into memory with zero local disk writes and near-zero playback latency.
-
-![Sonara Stream](https://raw.githubusercontent.com/rayyanbobs-art/sonara-stream/main/public/app-banner.png)
+> A sleek, ultra-fast desktop music player built with **Rust**, **Tauri 2**, and **React**. Stream music directly into memory with zero local disk writes and near-zero playback latency.
 
 ---
 
@@ -14,9 +12,19 @@
 - **📑 "Up Next" Queue Drawer**: Slide-out panel displaying upcoming tracks in the current mix with album artwork, live animated visualizer equalizer, and one-click track jumping.
 - **🔄 Anti-Loop Protection**: Intelligent session history tracking and queue preservation prevents repetitive 2-song loops and duplicate covers/remixes.
 - **🔍 Real-Time Autocomplete Search**: Sub-25ms search suggestions with full keyboard navigation (`↑`/`↓` and `Enter`).
+- **🎧 Spotify Link Resolution**: Paste Spotify track URLs (`open.spotify.com/track/...`) to automatically resolve title, artist, and album artwork via Spotify's public oEmbed API, then match and stream high-quality audio from YouTube (*note: audio is always streamed from YouTube, not from Spotify servers*).
 - **🎨 Glassmorphic Sonara Aesthetic**: Floating rounded sidebar, floating search bar, custom accent colors (Gold, Emerald, Blue, Purple, Red), and Dark / Light theme support.
 - **🎛️ Windows Media Session Integration**: Full support for keyboard hardware media keys (`Play/Pause`, `Next`, `Previous`) and Windows system volume overlay.
 - **🪶 Featherweight Footprint**: Native compiled Rust binary (~5 MB) using only ~35 MB of RAM (unlike heavy Electron apps consuming 400 MB+).
+
+---
+
+## ⚠️ Known Limitations & Risks
+
+- **yt-dlp Scraping Dependency & ToS**: Stream URLs and media extraction rely on an embedded `yt-dlp` executable querying public YouTube endpoints. Streaming or extracting content from YouTube may be subject to YouTube's Terms of Service and applicable copyright laws. Playback is susceptible to breakage whenever YouTube updates internal player protocols or anti-bot defenses until `yt-dlp` releases a corresponding extractor patch.
+- **Windows-Only Scope**: The current build target, media keys integration, and sidecar resolution are tailored specifically for Windows (`x86_64-pc-windows-msvc`). Cross-platform support (macOS/Linux) is planned for future iterations.
+- **Unsigned Installer / SmartScreen**: Pre-built Windows binaries are currently self-signed or unsigned open-source binaries. Windows SmartScreen may present an unrecognized app warning ("Windows protected your PC") on first run. Click *More info* -> *Run anyway*.
+- **Local Storage Only for Favorites**: Liked tracks and app settings (theme, accent color) are persisted exclusively in browser `localStorage` on your machine. There is no cloud synchronization or account login.
 
 ---
 
@@ -47,9 +55,21 @@ See the full [CHANGELOG.md](./CHANGELOG.md) for version details.
 ## 🛠️ Development & Building
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) & [pnpm](https://pnpm.io/)
+- [Node.js](https://nodejs.org/) (v18+) & [pnpm](https://pnpm.io/)
 - [Rust Toolchain](https://rustup.rs/) (`stable-x86_64-pc-windows-msvc`)
 - Visual Studio Build Tools (C++ workload)
+
+### Sidecar Binary Setup (`yt-dlp`)
+Tauri expects the sidecar executable to match the target triple (`yt-dlp-x86_64-pc-windows-msvc.exe`). Because sidecar binaries are excluded from Git to keep the repository lightweight, you must obtain `yt-dlp.exe` before running `pnpm tauri dev`:
+
+```powershell
+# Create the binaries directory if needed
+mkdir -p src-tauri/binaries
+
+# Download pinned yt-dlp release (2026.08.19)
+Invoke-WebRequest -Uri "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp.exe" -OutFile "src-tauri/binaries/yt-dlp-x86_64-pc-windows-msvc.exe"
+```
+*Note: During build, `src-tauri/build.rs` automatically verifies the SHA-256 hash of this sidecar to protect against corrupted or tampered downloads.*
 
 ### Setup & Run
 ```bash
@@ -70,4 +90,4 @@ pnpm tauri build
 ---
 
 ## 📜 License
-MIT License.
+[MIT License](./LICENSE). Copyright (c) 2026 rayyanbobs-art.

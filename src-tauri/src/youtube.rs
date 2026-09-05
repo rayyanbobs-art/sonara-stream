@@ -385,47 +385,9 @@ pub async fn search_youtube(query: String) -> Result<Vec<Track>, String> {
 
     let raw_tracks = execute_ytdlp_search(&search_arg, &binary).await?;
 
-    // Deduplicate songs based on clean keyword signatures (no repetitive uploads)
-    let mut seen_signatures = std::collections::HashSet::new();
-    let mut unique_tracks = Vec::new();
+    insert_search_cache(q, raw_tracks.clone());
 
-    for track in raw_tracks {
-        if !track.signature.is_empty() && !seen_signatures.contains(&track.signature) {
-            seen_signatures.insert(track.signature.clone());
-            unique_tracks.push(track);
-        }
-    }
-
-    // If after deduplication we have fewer than 7 distinct tracks (e.g. searching a single song name),
-    // enrich the playlist with more distinct hits from that artist / genre
-    if unique_tracks.len() < 7 {
-        let fallback_artist = if let Some(first) = unique_tracks.first() {
-            if first.artist != "Unknown Artist" && !first.artist.is_empty() {
-                first.artist.clone()
-            } else {
-                sanitized_query.clone()
-            }
-        } else {
-            sanitized_query.clone()
-        };
-
-        let expand_arg = format!("ytsearch15:{} greatest hits", fallback_artist);
-        if let Ok(extra_tracks) = execute_ytdlp_search(&expand_arg, &binary).await {
-            for track in extra_tracks {
-                if !track.signature.is_empty() && !seen_signatures.contains(&track.signature) {
-                    seen_signatures.insert(track.signature.clone());
-                    unique_tracks.push(track);
-                }
-                if unique_tracks.len() >= 15 {
-                    break;
-                }
-            }
-        }
-    }
-
-    insert_search_cache(q, unique_tracks.clone());
-
-    Ok(unique_tracks)
+    Ok(raw_tracks)
 }
 
 #[tauri::command]

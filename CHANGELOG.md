@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [0.3.1] - 2026-09-05
+
+### ⚡ Instant UI & Re-Render Elimination
+- **Playback Tick Decoupling**: Decoupled high-frequency audio progress updates (`ontimeupdate`) from parent container state, eliminating re-renders of inactive views during playback.
+- **Component Memoization**: Wrapped `Sidebar`, `Header`, `HomeView`, `SongsView`, `FavoritesView`, `TrackList`, and `UpNextDrawer` in `React.memo` with stabilized prop callbacks.
+- **List Virtualization**: Windowed track lists in `SongsView` and `FavoritesView` with `@tanstack/react-virtual`, maintaining smooth 60fps scrolling across large song libraries.
+- **Debounced Storage**: Debounced `localStorage` serialization for favorites with a 300ms trailing edge to prevent main-thread storage pauses.
+
+### 🚀 Backend & Disk Caching
+- **Disk-Persisted Search Cache**: Persisted search results and genre mixes to `search_cache.json` with atomic writes and 1800s TTL, cutting repeat search time from 5.03s to **< 1 ms**.
+- **Typed Serde Deserialization**: Direct struct parsing for `yt-dlp` output (`YtDlpSearchResult`), achieving 47.5% faster parsing with zero intermediate heap allocations.
+- **Fat Link-Time Optimization**: Enabled `lto = "fat"` in release profiles for aggressive cross-crate optimizations and reduced binary footprint.
+
+### 🖼️ Asset & Startup Optimization
+- **Zero-Flash Startup**: Set Tauri window to hidden on launch (`"visible": false`) and invoked `getCurrentWindow().show()` after React mounts, eliminating the white startup flash.
+- **Lightweight Thumbnails**: Switched default artwork resolution to `mqdefault.jpg` (~15 KB vs ~50 KB) with native `loading="lazy"` and `decoding="async"`.
+- **Code Splitting**: Extracted `SettingsView` into an on-demand chunk via `React.lazy` and `Suspense`, shaving ~9.2 kB off the critical initial JavaScript bundle.
+
+### 📊 Real-Time Diagnostic HUD
+- **Live Performance HUD**: Added an optional telemetry overlay (`Ctrl+Shift+P` or via Settings) tracking render counts, search latency, stream extraction duration, cache hits, and heap utilization in real time.
+
+---
+
 ## [0.2.1] - 2026-09-05
 
 ### 🎵 Autoplay & Queue Deduplication

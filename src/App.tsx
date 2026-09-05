@@ -11,6 +11,7 @@ import { HomeView } from "./views/HomeView";
 import { SongsView } from "./views/SongsView";
 import { FavoritesView } from "./views/FavoritesView";
 import { SettingsView } from "./views/SettingsView";
+import { SearchResultsView } from "./views/SearchResultsView";
 import { Track, NavTab, AccentColor } from "./types";
 import { useFavorites } from "./hooks/useFavorites";
 import { useAudioPlayer } from "./hooks/useAudioPlayer";
@@ -25,7 +26,21 @@ export default function App() {
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     return (localStorage.getItem("sonara_theme") as "dark" | "light") || "dark";
   });
-  const [tracks, setTracks] = useState<Track[]>([]);
+
+  // Decoupled state: Home recommendations vs Active Search Results
+  const [recommendations, setRecommendations] = useState<Track[]>([]);
+  const [recommendationTitle, setRecommendationTitle] = useState<string>("Made from your listening");
+  const [searchResults, setSearchResults] = useState<Track[]>([]);
+  const [allDiscoveredTracks, setAllDiscoveredTracks] = useState<Track[]>([]);
+  const [lastPlayedTrack, setLastPlayedTrack] = useState<Track | null>(() => {
+    try {
+      const saved = localStorage.getItem("sonara_last_played");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
   const { favorites, isFavorite, toggleFavorite } = useFavorites();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -78,6 +93,15 @@ export default function App() {
     onError: setErrorMessage,
   });
 
+  const currentPool =
+    activeTab === "search"
+      ? searchResults
+      : activeTab === "songs"
+      ? (allDiscoveredTracks.length > 0 ? allDiscoveredTracks : recommendations)
+      : activeTab === "favorites"
+      ? favorites
+      : recommendations;
+
   const {
     upNextMix,
     setUpNextMix,
@@ -96,13 +120,9 @@ export default function App() {
   } = useQueue({
     currentTrack,
     activeTab,
-    tracks,
+    tracks: currentPool,
     favorites,
     onPlayTrack: (track, preserveQueue) => handlePlayTrackRef.current(track, preserveQueue),
-    onSelectTrack: (track) => {
-      setCurrentTrack(track);
-      setIsBuffering(true);
-    },
     audioRef,
     preloadAudioRef,
     preloadTrackRef,
@@ -123,29 +143,60 @@ export default function App() {
     localStorage.setItem("sonara_theme", theme);
   }, [theme]);
 
-  // Initial load
+  const mergeDiscoveredTracks = (newTracks: Track[]) => {
+    setAllDiscoveredTracks((prev) => {
+      const seen = new Set(prev.map((t) => t.signature || t.id));
+      const additions = newTracks.filter((t) => !seen.has(t.signature || t.id));
+      return additions.length > 0 ? [...prev, ...additions] : prev;
+    });
+  };
+
+  // Initial load: Fetch personalized recommendations from Rust engine
   useEffect(() => {
-    performSearch("Top Hits 2026", "youtube");
+    const loadRecommendations = async () => {
+      setLoading(true);
+      try {
+        const res: { title: string; tracks: Track[] } = await invoke("get_recommendations", { limit: 24 });
+        if (res && Array.isArray(res.tracks) && res.tracks.length > 0) {
+          setRecommendations(res.tracks);
+          if (res.title) setRecommendationTitle(res.title);
+          mergeDiscoveredTracks(res.tracks);
+          res.tracks.slice(0, 4).forEach((t) => {
+            handlePrefetchTrack(t);
+          });
+        }
+      } catch (err) {
+        console.warn("Failed to load initial recommendations:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadRecommendations();
   }, []);
 
   const performSearch = async (queryText: string, searchSource: "youtube" | "spotify") => {
+    const cleanQuery = queryText.trim();
+    if (!cleanQuery) return;
+
     setLoading(true);
     setErrorMessage(null);
 
     try {
-      if (queryText.includes("spotify.com")) {
-        const resolved: Track = await invoke("resolve_spotify_track", { url: queryText });
-        setTracks([resolved]);
+      if (cleanQuery.includes("spotify.com")) {
+        const resolved: Track = await invoke("resolve_spotify_track", { url: cleanQuery });
+        setSearchResults([resolved]);
+        mergeDiscoveredTracks([resolved]);
         handlePlayTrack(resolved);
       } else {
-        const q = searchSource === "spotify" ? `${queryText} audio` : queryText;
+        const q = searchSource === "spotify" ? `${cleanQuery} audio` : cleanQuery;
         const results: Track[] = await invoke("search_youtube", { query: q });
         const formatted = results.map((t) => ({ ...t, source: searchSource }));
-        setTracks(formatted);
+        setSearchResults(formatted);
+        mergeDiscoveredTracks(formatted);
 
-        // Predictive zero-latency pre-fetching for top tracks
+        // Prefetch top search results
         if (formatted.length > 0) {
-          formatted.slice(0, 6).forEach((t) => {
+          formatted.slice(0, 4).forEach((t) => {
             handlePrefetchTrack(t);
           });
         }
@@ -162,6 +213,13 @@ export default function App() {
     if (currentTrack?.id === track.id) {
       togglePlay();
       return;
+    }
+
+    setLastPlayedTrack(track);
+    try {
+      localStorage.setItem("sonara_last_played", JSON.stringify(track));
+    } catch {
+      // Ignore local storage error
     }
 
     markAsPlayed(track);
@@ -185,7 +243,11 @@ export default function App() {
           setActiveTab(tab);
           setErrorMessage(null);
         }}
-        playlistCount={3}
+        onSelectMix={(mix) => {
+          setSearchQuery(mix);
+          performSearch(mix, "youtube");
+          setActiveTab("search");
+        }}
       />
 
       {/* Main Container */}
@@ -195,8 +257,9 @@ export default function App() {
           onQueryChange={setSearchQuery}
           onSearch={(customQuery) => {
             const q = customQuery || searchQuery;
+            if (!q.trim()) return;
             performSearch(q, source);
-            setActiveTab("songs");
+            setActiveTab("search");
           }}
           source={source}
           onSourceChange={setSource}
@@ -215,7 +278,9 @@ export default function App() {
         <div className="sonara-content-scroll">
           {activeTab === "home" && (
             <HomeView
-              tracks={tracks}
+              tracks={recommendations}
+              title={recommendationTitle}
+              lastPlayedTrack={lastPlayedTrack}
               currentTrack={currentTrack}
               isPlaying={isPlaying}
               onPlayTrack={handlePlayTrack}
@@ -223,30 +288,27 @@ export default function App() {
               onVibeClick={(vibe) => {
                 setSearchQuery(vibe);
                 performSearch(vibe, "youtube");
+                setActiveTab("search");
               }}
+              loading={loading}
+            />
+          )}
+
+          {activeTab === "search" && (
+            <SearchResultsView
+              query={searchQuery}
+              rawResults={searchResults}
+              currentTrack={currentTrack}
+              isPlaying={isPlaying}
+              onPlayTrack={handlePlayTrack}
+              onPrefetchTrack={handlePrefetchTrack}
               loading={loading}
             />
           )}
 
           {activeTab === "songs" && (
             <SongsView
-              tracks={tracks}
-              currentTrack={currentTrack}
-              isPlaying={isPlaying}
-              onPlayTrack={handlePlayTrack}
-              onPrefetchTrack={handlePrefetchTrack}
-              onToggleFavorite={toggleFavorite}
-              isFavorite={isFavorite}
-              onBrowse={() => {
-                performSearch("Top Hits", "youtube");
-                setActiveTab("home");
-              }}
-            />
-          )}
-
-          {(activeTab === "artists" || activeTab === "albums") && (
-            <SongsView
-              tracks={tracks}
+              tracks={allDiscoveredTracks.length > 0 ? allDiscoveredTracks : recommendations}
               currentTrack={currentTrack}
               isPlaying={isPlaying}
               onPlayTrack={handlePlayTrack}

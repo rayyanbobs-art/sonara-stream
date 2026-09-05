@@ -11,6 +11,6 @@ export interface Track {
 
 export type AccentColor = "gold" | "green" | "blue" | "purple" | "red";
 
-export type NavTab = "home" | "songs" | "artists" | "albums" | "favorites" | "settings";
+export type NavTab = "home" | "search" | "songs" | "favorites" | "settings";
 
 export type RepeatMode = "off" | "all" | "one";

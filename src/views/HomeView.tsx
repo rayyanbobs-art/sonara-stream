@@ -1,9 +1,11 @@
 import React from "react";
-import { Play, Pause, Flame, Radio } from "lucide-react";
+import { Play, Pause, Headphones } from "lucide-react";
 import { Track } from "../types";
 
 interface HomeViewProps {
   tracks: Track[];
+  title?: string;
+  lastPlayedTrack?: Track | null;
   currentTrack: Track | null;
   isPlaying: boolean;
   onPlayTrack: (track: Track) => void;
@@ -21,6 +23,8 @@ const formatDuration = (secs: number): string => {
 
 export const HomeView: React.FC<HomeViewProps> = ({
   tracks,
+  title = "Made from your listening",
+  lastPlayedTrack,
   currentTrack,
   isPlaying,
   onPlayTrack,
@@ -36,6 +40,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
     "Electronic & Dance",
     "Synthwave",
   ];
+
+  const featured = currentTrack || lastPlayedTrack;
 
   return (
     <div className="view-container">
@@ -53,73 +59,111 @@ export const HomeView: React.FC<HomeViewProps> = ({
         ))}
       </div>
 
-      {/* Hero Banner */}
-      <div className="home-hero-card">
-        <div className="hero-content">
-          <div className="hero-tag">
-            <Flame size={14} />
-            <span>Featured Streams</span>
+      {/* Continue Listening Banner (Replaces generic banner when a track has been played) */}
+      {featured && (
+        <div
+          className="home-hero-card"
+          style={{ cursor: "pointer" }}
+          onClick={() => onPlayTrack(featured)}
+        >
+          <div className="hero-content">
+            <div className="hero-tag">
+              <Headphones size={14} />
+              <span>Continue Listening</span>
+            </div>
+            <h2>{featured.title}</h2>
+            <p>{featured.artist}</p>
           </div>
-          <h2>Instant Live Stream</h2>
-          <p>
-            Zero downloads. Zero local storage used. Click any song to buffer and play in pure memory.
-          </p>
+          <button
+            type="button"
+            className="empty-action-btn"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              padding: "10px 20px",
+              fontSize: "13px",
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onPlayTrack(featured);
+            }}
+          >
+            {isPlaying && currentTrack?.id === featured.id ? (
+              <>
+                <Pause size={16} />
+                <span>Pause</span>
+              </>
+            ) : (
+              <>
+                <Play size={16} fill="currentColor" />
+                <span>Play Now</span>
+              </>
+            )}
+          </button>
         </div>
-      </div>
+      )}
 
       {/* Section Title */}
       <div className="section-header">
-        <h3>Recommended For You</h3>
-        <span className="section-sub">{tracks.length} tracks ready</span>
+        <h3>{title}</h3>
+        <span className="section-sub">{tracks.length} tracks</span>
       </div>
 
-      {/* Grid of Cards */}
-      <div className="tracks-grid">
-        {tracks.map((track) => {
-          const isCurrent = currentTrack?.id === track.id;
+      {loading && tracks.length === 0 ? (
+        <div className="sonara-empty-panel">
+          <div className="player-buffer-spinner" style={{ width: "32px", height: "32px" }} />
+          <p className="empty-panel-desc">Curating your recommendations...</p>
+        </div>
+      ) : (
+        /* Grid of Cards */
+        <div className="tracks-grid">
+          {tracks.map((track) => {
+            const isCurrent = currentTrack?.id === track.id;
 
-          return (
-            <div
-              key={track.id}
-              className={`track-card ${isCurrent ? "current" : ""}`}
-              onClick={() => onPlayTrack(track)}
-              onMouseEnter={() => onPrefetchTrack?.(track)}
-            >
-              <div className="card-thumb-wrap">
-                <img src={track.thumbnail} alt={track.title} className="card-thumb" />
-                <button
-                  type="button"
-                  className={`card-play-overlay ${isCurrent ? "visible" : ""}`}
-                >
-                  {isCurrent && isPlaying ? (
-                    <Pause size={20} />
-                  ) : (
-                    <Play size={20} fill="currentColor" />
-                  )}
-                </button>
-                <span className={`card-source-tag ${track.source}`}>
-                  {track.source === "spotify" ? "Spotify" : "YouTube"}
-                </span>
-              </div>
+            return (
+              <div
+                key={track.id}
+                className={`track-card ${isCurrent ? "current" : ""}`}
+                onClick={() => onPlayTrack(track)}
+                onMouseEnter={() => onPrefetchTrack?.(track)}
+              >
+                <div className="card-thumb-wrap">
+                  <img src={track.thumbnail} alt={track.title} className="card-thumb" />
+                  <button
+                    type="button"
+                    className={`card-play-overlay ${isCurrent ? "visible" : ""}`}
+                  >
+                    {isCurrent && isPlaying ? (
+                      <Pause size={20} />
+                    ) : (
+                      <Play size={20} fill="currentColor" />
+                    )}
+                  </button>
+                  <span className={`card-source-tag ${track.source}`}>
+                    {track.source === "spotify" ? "Spotify" : "YouTube"}
+                  </span>
+                </div>
 
-              <div className="card-info">
-                <h4 className="card-title" title={track.title}>
-                  {track.title}
-                </h4>
-                <p className="card-artist">{track.artist}</p>
-                <div className="card-meta-row">
-                  <span className="card-duration">{formatDuration(track.duration)}</span>
-                  {isCurrent && isPlaying && (
-                    <div className="now-playing-bars">
-                      <span /><span /><span />
-                    </div>
-                  )}
+                <div className="card-info">
+                  <h4 className="card-title" title={track.title}>
+                    {track.title}
+                  </h4>
+                  <p className="card-artist">{track.artist}</p>
+                  <div className="card-meta-row">
+                    <span className="card-duration">{formatDuration(track.duration)}</span>
+                    {isCurrent && isPlaying && (
+                      <div className="now-playing-bars">
+                        <span /><span /><span />
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };

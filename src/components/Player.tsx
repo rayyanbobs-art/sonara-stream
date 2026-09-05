@@ -58,6 +58,8 @@ export const Player: React.FC<PlayerProps> = ({
   onVolumeChange,
   onNext,
   onPrev,
+  repeatMode = "off",
+  onToggleRepeat,
   onToggleShuffle,
   onToggleFavorite,
   onToggleQueue,

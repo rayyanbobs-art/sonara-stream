@@ -39,7 +39,7 @@ export function useQueue({
   const prefetchedIds = useRef<Set<string>>(new Set());
   const recentlyPlayedSignatures = useRef<Set<string>>(new Set());
   const historyRef = useRef<Track[]>([]);
-  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Keep fresh references to avoid stale closure issues
   const onPlayTrackRef = useRef(onPlayTrack);

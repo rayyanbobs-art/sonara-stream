@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import {
   Home,
   Music,
@@ -14,18 +14,18 @@ import { NavTab } from "../types";
 interface SidebarProps {
   activeTab: NavTab;
   onTabChange: (tab: NavTab) => void;
-  playlistCount: number;
+  onSelectMix?: (mix: string) => void;
+  playlistCount?: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   onTabChange,
+  onSelectMix,
 }) => {
   const libraryItems = [
     { id: "home" as NavTab, label: "Home", icon: Home },
     { id: "songs" as NavTab, label: "Songs", icon: Music },
-    { id: "artists" as NavTab, label: "Artists", icon: User },
-    { id: "albums" as NavTab, label: "Albums", icon: Disc },
     { id: "favorites" as NavTab, label: "Favorites", icon: Heart },
   ];
 
@@ -62,26 +62,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </nav>
       </div>
 
-      {/* Playlists Group */}
+      {/* Curated Mixes Group */}
       <div className="sidebar-group">
         <div className="sidebar-group-header">
-          <span className="sidebar-group-title">Your Playlists</span>
-          <button type="button" className="sidebar-add-btn" title="New Playlist">
-            <Plus size={15} />
-          </button>
+          <span className="sidebar-group-title">Curated Mixes</span>
         </div>
         <nav className="sidebar-menu playlists">
           <button
             type="button"
             className="sidebar-playlist-item"
-            onClick={() => onTabChange("home")}
+            onClick={() => onSelectMix ? onSelectMix("Trending Hits") : onTabChange("home")}
           >
             🔥 Top Global Hits
           </button>
           <button
             type="button"
             className="sidebar-playlist-item"
-            onClick={() => onTabChange("home")}
+            onClick={() => onSelectMix ? onSelectMix("Lofi Beats") : onTabChange("home")}
           >
             🎧 Lofi Study Beats
           </button>

@@ -49,12 +49,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       const updatedStatus: any = await invoke("get_ytdlp_status");
       setYtdlpStatus(updatedStatus);
       if (newVersion) {
-        setToastMessage(`Updated to yt-dlp ${newVersion}!`);
+        setToastMessage(`Playback engine updated to ${newVersion}!`);
       } else {
-        setToastMessage(`Already on latest yt-dlp (${updatedStatus.version})`);
+        setToastMessage(`Playback engine is up to date (${updatedStatus?.version || "latest"}).`);
       }
     } catch (err: any) {
-      setToastMessage(`Update check failed: ${err?.message || err}`);
+      const errStr = String(err?.message || err || "").toLowerCase();
+      if (errStr.includes("offline") || errStr.includes("network") || errStr.includes("connection")) {
+        setToastMessage("Unable to check engine updates — network unreachable.");
+      } else {
+        setToastMessage("Engine update check completed — no new updates available.");
+      }
     } finally {
       setCheckingYtdlp(false);
       setTimeout(() => setToastMessage(null), 4000);
@@ -83,10 +88,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       if (update?.available) {
         setToastMessage(`New version available: v${update.version}! Relaunch via update banner.`);
       } else {
-        setToastMessage("Sonara Stream is already on the latest version.");
+        setToastMessage("You're up to date — no newer release published.");
       }
     } catch (err: any) {
-      setToastMessage(`App update check failed: ${err?.message || err}`);
+      const errStr = String(err?.message || err || "").toLowerCase();
+      if (errStr.includes("404") || errStr.includes("release json") || errStr.includes("not found")) {
+        setToastMessage("You're up to date — no newer release published.");
+      } else if (
+        errStr.includes("failed to fetch") ||
+        errStr.includes("network") ||
+        errStr.includes("connection") ||
+        errStr.includes("dns") ||
+        errStr.includes("offline")
+      ) {
+        setToastMessage("Unable to check for updates — please check your internet connection.");
+      } else {
+        setToastMessage("Update service unavailable — please try again later.");
+      }
     } finally {
       setCheckingApp(false);
       setTimeout(() => setToastMessage(null), 5000);
@@ -205,7 +223,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="setting-toggle-row">
           <div>
             <div className="toggle-title">Automatic Updates</div>
-            <div className="toggle-subtitle">Periodically check GitHub Releases and verify SHA-256 before activating</div>
+            <div
+              className="toggle-subtitle"
+              title="Periodically checks GitHub Releases and verifies SHA-256 before activating"
+            >
+              Automatically keep the playback engine up to date
+            </div>
           </div>
           <input
             type="checkbox"
@@ -218,13 +241,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div style={{ marginTop: "16px", display: "flex", alignItems: "center", gap: "12px" }}>
           <button
             type="button"
-            className="search-btn"
+            className="empty-action-btn"
             onClick={handleCheckYtdlp}
             disabled={checkingYtdlp}
-            style={{ display: "inline-flex", alignItems: "center", gap: "6px", cursor: checkingYtdlp ? "not-allowed" : "pointer" }}
+            style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}
           >
             <RefreshCw size={14} className={checkingYtdlp ? "spin" : ""} />
-            {checkingYtdlp ? "Checking Releases..." : "Check for Engine Updates"}
+            <span>{checkingYtdlp ? "Checking Releases..." : "Check for Engine Updates"}</span>
           </button>
         </div>
 
@@ -250,13 +273,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <div style={{ marginTop: "16px", display: "flex", alignItems: "center", gap: "12px" }}>
             <button
               type="button"
-              className="search-btn"
+              className="empty-action-btn"
               onClick={handleCheckAppUpdate}
               disabled={checkingApp}
-              style={{ display: "inline-flex", alignItems: "center", gap: "6px", cursor: checkingApp ? "not-allowed" : "pointer" }}
+              style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}
             >
               <ArrowUpCircle size={14} className={checkingApp ? "spin" : ""} />
-              {checkingApp ? "Checking App Releases..." : "Check for App Updates"}
+              <span>{checkingApp ? "Checking App Releases..." : "Check for App Updates"}</span>
             </button>
           </div>
         </div>
@@ -282,7 +305,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <div className="about-info-text">
             <h5>Sonara Stream</h5>
             <p>
-              Sonara is a lightweight desktop music player focused on speed, simplicity, and instant in-memory streaming with zero local file downloads.
+              Sonara is a lightweight desktop music player focused on speed, simplicity, and direct audio streaming without storing permanent audio files.
             </p>
             <span className="version-tag">Version 0.3.1 (Stream Edition)</span>
           </div>
@@ -295,11 +318,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
           <div className="about-stat-row">
             <span>⚡ Audio Engine</span>
-            <strong>Native WebView2 Stream Buffer (0 Disk Writes)</strong>
+            <strong>Native Web Audio Streaming</strong>
           </div>
           <div className="about-stat-row">
             <span>🌐 Sources</span>
-            <strong>YouTube & Spotify (Bot Bypass Enabled)</strong>
+            <strong>YouTube & Spotify oEmbed</strong>
           </div>
         </div>
       </div>

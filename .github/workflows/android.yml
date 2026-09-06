@@ -1,7 +1,9 @@
-﻿name: Android Build & Release
+name: Android Build & Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:

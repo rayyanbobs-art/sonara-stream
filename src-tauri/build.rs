@@ -58,7 +58,10 @@ fn verify_sidecar_checksum() {
 }
 
 fn main() {
-    verify_sidecar_checksum();
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    if target_os == "windows" {
+        verify_sidecar_checksum();
+    }
     tauri_build::build();
 }
 

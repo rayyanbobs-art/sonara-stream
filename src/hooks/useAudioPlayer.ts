@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Track } from "../types";
 import { perf } from "../utils/perf";
+import { getOptimizedThumbnail } from "../utils/thumbnail";
 
 interface UseAudioPlayerOptions {
   onEnded?: () => void;
@@ -208,7 +209,7 @@ export function useAudioPlayer(options: UseAudioPlayerOptions = {}) {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: currentTrack.title,
         artist: currentTrack.artist,
-        artwork: [{ src: currentTrack.thumbnail }],
+        artwork: [{ src: getOptimizedThumbnail(currentTrack.thumbnail, "full") }],
       });
 
       navigator.mediaSession.setActionHandler("play", () => togglePlay());

@@ -568,13 +568,13 @@ pub async fn search_innertube(query: &str) -> Result<Vec<Track>, String> {
                                 .unwrap_or("");
                             let duration = parse_duration_str(dur_str);
 
-                            let thumb = v.pointer("/thumbnail/thumbnails/0/url")
-                                .and_then(|u| u.as_str())
-                                .unwrap_or("");
-                            let thumbnail = if thumb.is_empty() {
+                            let thumbnail = if !id.is_empty() {
                                 format!("https://i.ytimg.com/vi/{}/hqdefault.jpg", id)
                             } else {
-                                thumb.to_string()
+                                v.pointer("/thumbnail/thumbnails/0/url")
+                                    .and_then(|u| u.as_str())
+                                    .unwrap_or("")
+                                    .to_string()
                             };
 
                             if !id.is_empty() && !title.is_empty() {
@@ -684,15 +684,17 @@ pub(crate) async fn execute_ytdlp_search(search_arg: &str, binary: &Path) -> Res
             let artist = item.uploader.unwrap_or_else(|| "Unknown Artist".to_string());
             let duration = item.duration.unwrap_or(0.0) as u64;
 
-            let mut thumbnail = String::new();
-            if let Some(thumbs) = item.thumbnails {
-                if let Some(first) = thumbs.into_iter().next() {
-                    thumbnail = first.url;
+            let thumbnail = if !id.is_empty() {
+                format!("https://i.ytimg.com/vi/{}/hqdefault.jpg", id)
+            } else {
+                let mut thumb_str = String::new();
+                if let Some(thumbs) = item.thumbnails {
+                    if let Some(last) = thumbs.into_iter().last() {
+                        thumb_str = last.url;
+                    }
                 }
-            }
-            if thumbnail.is_empty() {
-                thumbnail = format!("https://i.ytimg.com/vi/{}/hqdefault.jpg", id);
-            }
+                thumb_str
+            };
 
             if !id.is_empty() && !title.is_empty() {
                 let signature = get_title_signature_string(&title, &artist);

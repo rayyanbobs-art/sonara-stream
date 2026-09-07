@@ -1,7 +1,8 @@
-﻿import { useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { Track } from "../types";
+import { getOptimizedThumbnail } from "../utils/thumbnail";
 
 interface UseMediaControlsProps {
   currentTrack: Track | null;
@@ -101,7 +102,7 @@ export function useMediaControls({
       title: currentTrack.title,
       artist: currentTrack.artist,
       album: currentTrack.artist,
-      coverUrl: currentTrack.thumbnail,
+      coverUrl: getOptimizedThumbnail(currentTrack.thumbnail, "card"),
       durationSecs: duration || currentTrack.duration,
       isPlaying,
       positionSecs: currentTime,

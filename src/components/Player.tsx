@@ -15,6 +15,7 @@ import {
   Maximize2,
 } from "lucide-react";
 import { Track, RepeatMode } from "../types";
+import { getOptimizedThumbnail } from "../utils/thumbnail";
 
 interface PlayerProps {
   currentTrack: Track | null;
@@ -89,7 +90,7 @@ export const Player: React.FC<PlayerProps> = ({
           {currentTrack ? (
             <div className="player-track-meta">
               <img
-                src={currentTrack.thumbnail}
+                src={getOptimizedThumbnail(currentTrack.thumbnail, "list")}
                 alt={currentTrack.title}
                 className="player-track-art"
                 loading="lazy"

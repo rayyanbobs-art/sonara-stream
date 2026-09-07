@@ -54,12 +54,28 @@ jobs:
         run: cargo clippy -- -D warnings
         working-directory: ./src-tauri
 
+      - name: Prepare signing key
+        shell: bash
+        env:
+          RAW_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          RAW_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            let key = (process.env.RAW_KEY || "").replace(/^\uFEFF/, "").trim();
+            let pass = (process.env.RAW_PASSWORD || "").replace(/^\uFEFF/, "").trim();
+            const keyPath = (process.env.RUNNER_TEMP || ".").replace(/\\/g, "/") + "/tauri_private.key";
+            fs.writeFileSync(keyPath, key, "utf8");
+            fs.appendFileSync(process.env.GITHUB_ENV, `CLEAN_KEY_PATH=${keyPath}\n`);
+            fs.appendFileSync(process.env.GITHUB_ENV, `CLEAN_PASSWORD=${pass}\n`);
+          '
+
       - name: Build Tauri app and generate release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ env.CLEAN_KEY_PATH }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ env.CLEAN_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'Sonara Stream ${{ github.ref_name }}'

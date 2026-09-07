@@ -62,6 +62,7 @@ pub fn run() {
             recommend::get_recommendations,
             recommend::build_radio,
             recommend::record_play_event,
+            recommend::get_listening_history,
             playlist::get_playlists,
             playlist::create_playlist,
             playlist::rename_playlist,

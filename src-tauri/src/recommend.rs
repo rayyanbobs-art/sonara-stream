@@ -468,6 +468,12 @@ pub async fn build_radio(seed_track: Track, limit: Option<usize>) -> Result<Vec<
     Ok(ordered_radio)
 }
 
+#[tauri::command]
+pub fn get_listening_history() -> Result<Vec<PlayHistoryEntry>, String> {
+    let guard = get_history().lock().map_err(|e| e.to_string())?;
+    Ok(guard.clone())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

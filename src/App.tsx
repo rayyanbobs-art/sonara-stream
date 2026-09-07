@@ -9,6 +9,7 @@ import { Player } from "./components/Player";
 import { UpNextDrawer } from "./components/UpNextDrawer";
 import { HomeView } from "./views/HomeView";
 import { SongsView } from "./views/SongsView";
+import { ArtistsView } from "./views/ArtistsView";
 import { FavoritesView } from "./views/FavoritesView";
 import { SearchResultsView } from "./views/SearchResultsView";
 
@@ -30,6 +31,7 @@ import "./App.css";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavTab>("home");
+  const [selectedArtistFilter, setSelectedArtistFilter] = useState<string | null>(null);
   const [isFullscreenNowPlaying, setIsFullscreenNowPlaying] = useState(false);
   const [accentColor, setAccentColor] = useState<AccentColor>(() => {
     return (localStorage.getItem("sonara_accent") as AccentColor) || "gold";
@@ -554,6 +556,20 @@ export default function App() {
               isFavorite={isFavorite}
               onBrowse={handleBackToHome}
               onOpenContextMenu={handleOpenContextMenu}
+              filterArtist={selectedArtistFilter}
+              onClearArtistFilter={() => setSelectedArtistFilter(null)}
+            />
+          )}
+
+          {activeTab === "artists" && (
+            <ArtistsView
+              tracks={songsList}
+              onSelectArtist={(artist) => {
+                setSelectedArtistFilter(artist);
+                setActiveTab("songs");
+              }}
+              onPlayTrack={handlePlayTrack}
+              onBrowse={handleBackToHome}
             />
           )}
 

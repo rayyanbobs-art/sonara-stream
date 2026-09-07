@@ -20,6 +20,7 @@ import { useFavorites } from "./hooks/useFavorites";
 import { useAudioPlayer } from "./hooks/useAudioPlayer";
 import { useQueue } from "./hooks/useQueue";
 import { usePlaylists } from "./hooks/usePlaylists";
+import { useMediaControls } from "./hooks/useMediaControls";
 import { PlaylistView } from "./views/PlaylistView";
 import { TrackContextMenu } from "./components/TrackContextMenu";
 import { NowPlayingModal } from "./components/NowPlayingModal";
@@ -216,6 +217,17 @@ export default function App() {
 
   handleNextRef.current = handleNext;
   handlePrevRef.current = handlePrev;
+
+  useMediaControls({
+    currentTrack,
+    isPlaying,
+    currentTime,
+    duration,
+    onTogglePlay: togglePlay,
+    onNext: handleNext,
+    onPrev: handlePrev,
+    onSeek: seek,
+  });
 
   // Sync accent color to document
   useEffect(() => {

@@ -4,6 +4,7 @@ mod ytdlp_updater;
 mod recommend;
 mod playlist;
 mod lyrics;
+mod media_controls;
 
 use tauri::Manager;
 
@@ -43,6 +44,8 @@ pub fn run() {
                     });
                 }
             }
+
+            let _ = media_controls::init_media_controls(app);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -67,6 +70,9 @@ pub fn run() {
             playlist::remove_track_from_playlist,
             playlist::reorder_playlist_tracks,
             lyrics::get_lyrics,
+            media_controls::update_media_metadata,
+            media_controls::update_playback_state,
+            media_controls::clear_media_controls,
         ])
         .run(tauri::generate_context!())
         .expect("error while running sonara-stream application");

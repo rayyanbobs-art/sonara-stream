@@ -1,4 +1,4 @@
-﻿package com.sonara.stream
+package com.sonara.stream
 
 import android.content.Intent
 import android.os.Build
@@ -9,7 +9,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import app.tauri.plugin.TauriActivity
+import app.tauri.TauriActivity
 
 class MainActivity : TauriActivity() {
     private var webViewInstance: WebView? = null

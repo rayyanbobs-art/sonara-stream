@@ -1,4 +1,4 @@
-﻿import os
+import os
 import shutil
 import re
 import xml.etree.ElementTree as ET
@@ -17,6 +17,14 @@ def configure_android():
         gen_android_dir, "app", "src", "main", "java", "com", "sonara", "stream"
     )
     os.makedirs(target_kotlin_dir, exist_ok=True)
+
+    main_activity_target = os.path.join(target_kotlin_dir, "MainActivity.kt")
+    if os.path.exists(main_activity_target):
+        try:
+            with open(main_activity_target, "r", encoding="utf-8") as f:
+                print("Original MainActivity.kt contents:\n" + f.read())
+        except Exception as e:
+            print("Could not read original MainActivity.kt:", e)
 
     for patch_file in ["MainActivity.kt", "MediaPlaybackService.kt"]:
         src_path = os.path.join(patches_dir, patch_file)

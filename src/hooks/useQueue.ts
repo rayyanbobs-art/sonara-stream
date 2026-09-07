@@ -27,6 +27,7 @@ export function useQueue({
   preloadTrackRef,
 }: UseQueueProps) {
   const [upNextMix, setUpNextMix] = useState<Track[]>([]);
+  const [userQueue, setUserQueue] = useState<Track[]>([]);
   const [isQueueOpen, setIsQueueOpen] = useState(false);
 
   const [shuffleDefault, setShuffleDefault] = useState<boolean>(() => {
@@ -50,6 +51,7 @@ export function useQueue({
   const favoritesRef = useRef(favorites);
   const isShuffleRef = useRef(isShuffle);
   const upNextMixRef = useRef(upNextMix);
+  const userQueueRef = useRef(userQueue);
 
   useEffect(() => {
     onPlayTrackRef.current = onPlayTrack;
@@ -60,6 +62,7 @@ export function useQueue({
     favoritesRef.current = favorites;
     isShuffleRef.current = isShuffle;
     upNextMixRef.current = upNextMix;
+    userQueueRef.current = userQueue;
   });
 
   useEffect(() => {
@@ -223,9 +226,45 @@ export function useQueue({
     }, 200);
   }, []);
 
+  const addToUserQueue = useCallback((track: Track) => {
+    setUserQueue((prev) => [...prev, track]);
+  }, []);
+
+  const playNextInQueue = useCallback((track: Track) => {
+    setUserQueue((prev) => [track, ...prev]);
+  }, []);
+
+  const removeFromUserQueue = useCallback((index: number) => {
+    setUserQueue((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const clearUserQueue = useCallback(() => {
+    setUserQueue([]);
+  }, []);
+
+  const reorderUserQueue = useCallback((fromIndex: number, toIndex: number) => {
+    setUserQueue((prev) => {
+      if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= prev.length || toIndex >= prev.length) {
+        return prev;
+      }
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+  }, []);
+
   const handleNext = useCallback(async () => {
     const activeCurrent = currentTrackRef.current;
     if (!activeCurrent) return;
+
+    // 0. User-added queue takes highest priority
+    if (userQueueRef.current.length > 0) {
+      const nextTrack = userQueueRef.current[0];
+      setUserQueue((prev) => prev.slice(1));
+      triggerDebouncedPlay(nextTrack, true /* PRESERVE QUEUE! */);
+      return;
+    }
 
     const currentMix = upNextMixRef.current;
     const currentTab = activeTabRef.current;
@@ -383,6 +422,13 @@ export function useQueue({
   return {
     upNextMix,
     setUpNextMix,
+    userQueue,
+    setUserQueue,
+    addToUserQueue,
+    playNextInQueue,
+    removeFromUserQueue,
+    clearUserQueue,
+    reorderUserQueue,
     isQueueOpen,
     setIsQueueOpen,
     toggleQueue,

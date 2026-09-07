@@ -158,6 +158,13 @@ export default function App() {
   const {
     upNextMix,
     setUpNextMix,
+    userQueue,
+    setUserQueue,
+    addToUserQueue,
+    playNextInQueue,
+    removeFromUserQueue,
+    clearUserQueue,
+    reorderUserQueue,
     isQueueOpen,
     setIsQueueOpen,
     toggleQueue,
@@ -507,14 +514,18 @@ export default function App() {
         isQueueOpen={isQueueOpen}
       />
 
-      {/* Up Next Genre Mix Drawer */}
+      {/* Slide-in Queue Panel */}
       <UpNextDrawer
         isOpen={isQueueOpen}
         onClose={handleCloseQueue}
         currentTrack={currentTrack}
         upNextTracks={upNextMix}
+        userQueue={userQueue}
         onPlayTrack={handleDrawerPlayTrack}
         onPrefetchTrack={handlePrefetchTrack}
+        onRemoveFromUserQueue={removeFromUserQueue}
+        onClearUserQueue={clearUserQueue}
+        onReorderUserQueue={reorderUserQueue}
         isPlaying={isPlaying}
       />
 

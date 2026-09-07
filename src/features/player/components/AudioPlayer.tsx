@@ -68,8 +68,8 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
   };
 
   const handleFavoriteToggle = () => {
-    if (currentSong && currentSong.id > 0) {
-      mutate({ songId: currentSong.id, isFavorite: !currentSong.is_favorite });
+    if (currentSong) {
+      mutate({ song: currentSong, isFavorite: !currentSong.is_favorite });
     }
   };
 

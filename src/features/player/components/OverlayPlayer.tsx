@@ -1,10 +1,12 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { platform } from "@tauri-apps/plugin-os";
 import { Button } from "@/components/ui/button";
 import {
   ChevronDown,
+  Download,
   Heart,
+  Loader2,
   Music,
   Pause,
   Play,
@@ -17,6 +19,7 @@ import {
   VolumeOff,
   Mic2,
   Disc3,
+  Check,
 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { getFormattedDuration } from "@/lib/helpers";
@@ -27,6 +30,8 @@ import ActionsDropdown from "@/features/songs/components/ActionsDropdown";
 import AddToPlaylistDialog from "@/features/playlists/components/AddToPlaylistDialog";
 import LyricsSection from "@/features/lyrics/components/LyricsSection";
 import { getOptimizedThumbnail } from "@/utils/thumbnail";
+import useDownloadTrack from "@/features/online/hooks/useDownloadTrack";
+import { isOnlineSong } from "@/lib/onlineTrack";
 
 type OverlayPlayerProps = {
   isExpanded: boolean;
@@ -58,6 +63,8 @@ const OverlayPlayer = ({
   toggleFavorite,
 }: OverlayPlayerProps) => {
   const [mobileTab, setMobileTab] = useState<"track" | "lyrics">("track");
+  const downloadMutation = useDownloadTrack();
+  const isOnline = isOnlineSong(song);
 
   const isShuffle = useAppStore((state) => state.isShuffle);
   const setIsShuffle = useAppStore((state) => state.setIsShuffle);
@@ -139,6 +146,23 @@ const OverlayPlayer = ({
           </div>
 
           <div className="flex items-center gap-x-2">
+            {isOnline && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-full"
+                disabled={downloadMutation.isPending || downloadMutation.isSuccess}
+                onClick={() => downloadMutation.mutate({ song })}
+              >
+                {downloadMutation.isPending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : downloadMutation.isSuccess ? (
+                  <Check className="size-4 text-emerald-400" />
+                ) : (
+                  <Download className="size-4" />
+                )}
+              </Button>
+            )}
             <ActionsDropdown song={song}>
               <AddToPlaylistDialog song={song} />
             </ActionsDropdown>

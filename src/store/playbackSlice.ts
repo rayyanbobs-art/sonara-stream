@@ -46,6 +46,8 @@ export interface PlaybackState {
 
   isPlaybackInitialized: boolean;
 
+  updateSongFavorite: (songId: number, isFavorite: boolean, updatedSong?: Song) => void;
+
   initPlaybackFromSettings: () => void;
 }
 
@@ -228,6 +230,67 @@ const createPlaybackSlice: StateCreator<
   setVolume: (v) => set({ volume: v }),
 
   isPlaybackInitialized: false,
+
+  updateSongFavorite: (songId, isFavorite, updatedSong) => {
+    set((state) => {
+      let currentSong = state.currentSong;
+      if (
+        currentSong &&
+        (currentSong.id === songId ||
+          (updatedSong && currentSong.path === updatedSong.path))
+      ) {
+        currentSong = updatedSong || {
+          ...currentSong,
+          is_favorite: isFavorite,
+          favorite_added_at: isFavorite ? Date.now() : null,
+        };
+      }
+
+      const onlineSongsMap = { ...state.onlineSongsMap };
+      if (onlineSongsMap[songId]) {
+        onlineSongsMap[songId] = {
+          ...onlineSongsMap[songId],
+          is_favorite: isFavorite,
+          favorite_added_at: isFavorite ? Date.now() : null,
+        };
+      }
+      if (updatedSong && updatedSong.id !== songId) {
+        delete onlineSongsMap[songId];
+        onlineSongsMap[updatedSong.id] = updatedSong;
+      }
+
+      const updateItem = (item: QueueItem) => {
+        if (
+          item.songId === songId ||
+          (updatedSong && item.song?.path === updatedSong.path)
+        ) {
+          const song =
+            updatedSong ||
+            (item.song ? { ...item.song, is_favorite: isFavorite } : undefined);
+          return {
+            ...item,
+            songId: updatedSong ? updatedSong.id : item.songId,
+            song,
+          };
+        }
+        return item;
+      };
+
+      const currentQueueItem = state.currentQueueItem
+        ? updateItem(state.currentQueueItem)
+        : null;
+      const queue = state.queue.map(updateItem);
+      const playbackQueue = state.playbackQueue.map(updateItem);
+
+      return {
+        currentSong,
+        currentQueueItem,
+        onlineSongsMap,
+        queue,
+        playbackQueue,
+      };
+    });
+  },
 
   initPlaybackFromSettings: () => {
     if (get().isPlaybackInitialized) return;

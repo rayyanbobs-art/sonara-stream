@@ -369,3 +369,92 @@ pub fn get_most_played(conn: &Connection, limit: usize) -> rusqlite::Result<Vec<
     
     song_iter.collect()
 }
+
+// get song by id
+pub fn get_by_id(conn: &Connection, id: i64) -> rusqlite::Result<SongResponse> {
+    let mut stmt = conn.prepare(
+        "
+        SELECT 
+            s.*,
+            a.name AS artist_name,
+            al.name AS album_name,
+            al.cover_path AS album_cover_path,
+            aa.name AS album_artist_name
+        FROM songs s
+        LEFT JOIN artists a ON s.artist_id = a.id
+        LEFT JOIN albums al ON s.album_id = al.id
+        LEFT JOIN artists aa ON al.artist_id = aa.id
+        WHERE s.id = ?1;
+        ",
+    )?;
+    stmt.query_row(params![id], song_from_row)
+}
+
+// get song by path
+pub fn get_by_path(conn: &Connection, path: &str) -> rusqlite::Result<Option<SongResponse>> {
+    let mut stmt = conn.prepare(
+        "
+        SELECT 
+            s.*,
+            a.name AS artist_name,
+            al.name AS album_name,
+            al.cover_path AS album_cover_path,
+            aa.name AS album_artist_name
+        FROM songs s
+        LEFT JOIN artists a ON s.artist_id = a.id
+        LEFT JOIN albums al ON s.album_id = al.id
+        LEFT JOIN artists aa ON al.artist_id = aa.id
+        WHERE s.path = ?1;
+        ",
+    )?;
+    match stmt.query_row(params![path], song_from_row) {
+        Ok(song) => Ok(Some(song)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+// toggle or create favorite for online track
+pub fn toggle_online_favorite(
+    conn: &Connection,
+    id: &str,
+    title: &str,
+    artist: &str,
+    duration: i64,
+    thumbnail: Option<&str>,
+    is_favorite: bool,
+) -> rusqlite::Result<SongResponse> {
+    let online_path = format!("online://youtube/{}", id);
+    if let Some(existing) = get_by_path(conn, &online_path)? {
+        update_favorite_status(conn, existing.id, is_favorite)?;
+        get_by_id(conn, existing.id)
+    } else {
+        let (artist_id, _) = crate::repositories::artist_repository::find_or_create(conn, artist)?;
+        let (album_id, _) = crate::repositories::album_repository::find_or_create(conn, "YouTube Music", artist_id)?;
+        if let Some(thumb) = thumbnail {
+            if !thumb.is_empty() {
+                let _ = crate::repositories::album_repository::update_cover_path(conn, album_id, thumb, "found");
+            }
+        }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        conn.execute(
+            "INSERT INTO songs (title, duration, path, is_favorite, favorite_added_at, track_number, created_at, folder_id, album_id, artist_id, file_modified_at, file_size)
+             VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, NULL, ?7, ?8, ?6, 0)",
+            params![
+                title,
+                duration,
+                online_path,
+                is_favorite as i32,
+                if is_favorite { Some(now) } else { None },
+                now,
+                album_id,
+                artist_id
+            ],
+        )?;
+        let new_id = conn.last_insert_rowid();
+        get_by_id(conn, new_id)
+    }
+}

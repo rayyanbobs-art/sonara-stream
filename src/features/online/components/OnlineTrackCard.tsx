@@ -1,6 +1,8 @@
-import { Play, Pause, Radio } from "lucide-react";
+import { Play, Pause, Radio, Download, Loader2, Check } from "lucide-react";
 import { getFormattedDuration } from "@/lib/helpers";
 import { getOptimizedThumbnail } from "@/utils/thumbnail";
+import useDownloadTrack from "@/features/online/hooks/useDownloadTrack";
+import { onlineTrackToSong } from "@/lib/onlineTrack";
 
 type OnlineTrackCardProps = {
   track: OnlineTrack;
@@ -17,6 +19,8 @@ export const OnlineTrackCard = ({
   onPlay,
   onPrefetch,
 }: OnlineTrackCardProps) => {
+  const downloadMutation = useDownloadTrack();
+
   return (
     <div
       onMouseEnter={onPrefetch}
@@ -80,9 +84,27 @@ export const OnlineTrackCard = ({
         </div>
       </div>
 
-      {/* Duration */}
-      <div className="text-xs font-heading font-medium text-muted-foreground shrink-0 pl-2">
-        {getFormattedDuration(track.duration)}
+      {/* Duration & Download */}
+      <div className="flex items-center gap-2 shrink-0 pl-2">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            downloadMutation.mutate({ song: onlineTrackToSong(track) });
+          }}
+          disabled={downloadMutation.isPending || downloadMutation.isSuccess}
+          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-50"
+        >
+          {downloadMutation.isPending ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : downloadMutation.isSuccess ? (
+            <Check className="size-3.5 text-emerald-400" />
+          ) : (
+            <Download className="size-3.5" />
+          )}
+        </button>
+        <span className="text-xs font-heading font-medium text-muted-foreground">
+          {getFormattedDuration(track.duration)}
+        </span>
       </div>
     </div>
   );

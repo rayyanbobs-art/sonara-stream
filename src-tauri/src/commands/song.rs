@@ -84,3 +84,32 @@ pub fn record_song_play(db: State<DbState>, song_id: i64) -> Result<(), String> 
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     services::song_service::record_song_play(&conn, song_id).map_err(|e| e.to_string())
 }
+
+#[derive(serde::Deserialize)]
+pub struct OnlineFavoriteInput {
+    pub id: String,
+    pub title: String,
+    pub artist: String,
+    pub duration: i64,
+    pub thumbnail: Option<String>,
+    pub is_favorite: bool,
+}
+
+// toggle or create favorite for online track
+#[tauri::command]
+pub fn toggle_online_favorite(
+    db: State<DbState>,
+    input: OnlineFavoriteInput,
+) -> Result<crate::models::song::SongResponse, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    services::song_service::toggle_online_favorite(
+        &conn,
+        &input.id,
+        &input.title,
+        &input.artist,
+        input.duration,
+        input.thumbnail.as_deref(),
+        input.is_favorite,
+    ).map_err(|e| e.to_string())
+}
+

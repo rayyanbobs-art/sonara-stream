@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Optimizes image URLs to request appropriate high-resolution thumbnail variants,
  * saving network bandwidth while preventing blurry previews on high-DPI/mobile displays.
  */
@@ -9,14 +9,12 @@ export function getOptimizedThumbnail(
   if (!url) return "";
 
   // 1. YouTube / Google video thumbnails:
-  // Strip downsampling query parameters (e.g. ?sqp=...) which force tiny previews,
-  // and ensure at least hqdefault.jpg (480x360) or maxresdefault.jpg is requested.
+  // Strip downsampling query parameters (e.g. ?sqp=...) which force tiny previews.
+  // Upgrade default.jpg / mqdefault.jpg to hqdefault.jpg (480x360) which is guaranteed to exist.
+  // Do NOT blindly force maxresdefault.jpg because videos without custom 1080p thumbnails return HTTP 404 with a 120x90 blurry placeholder.
   if (url.includes("ytimg.com") || url.includes("youtube.com")) {
     const cleanUrl = url.split("?")[0];
-    if (variant === "full") {
-      return cleanUrl.replace(/\/(?:default|mqdefault|hqdefault)\.jpg$/, "/maxresdefault.jpg");
-    }
-    return cleanUrl.replace(/\/(?:default|mqdefault)\.jpg$/, "/hqdefault.jpg");
+    return cleanUrl.replace(/\/(?:default|mqdefault)\.(jpg|webp)$/, "/hqdefault.$1");
   }
 
   // 2. Google user content / channel avatars (yt3.ggpht.com, lh3.googleusercontent.com)

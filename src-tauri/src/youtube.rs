@@ -495,6 +495,19 @@ pub async fn resolve_stream_innertube(video_id: &str) -> Result<String, String> 
     Err(format!("InnerTube extraction error: {}", reason))
 }
 
+pub fn clean_youtube_thumbnail(thumb_url: &str, video_id: &str) -> String {
+    if thumb_url.is_empty() {
+        return format!("https://i.ytimg.com/vi/{}/hqdefault.jpg", video_id);
+    }
+    // Remove query parameters (e.g. ?sqp=... or &rs=...) which force YouTube CDN to downsample images
+    let clean = thumb_url.split('?').next().unwrap_or(thumb_url);
+    if clean.ends_with("/default.jpg") || clean.ends_with("/mqdefault.jpg") {
+        clean.replace("/default.jpg", "/hqdefault.jpg").replace("/mqdefault.jpg", "/hqdefault.jpg")
+    } else {
+        clean.to_string()
+    }
+}
+
 pub async fn search_innertube(query: &str) -> Result<Vec<Track>, String> {
     let q = query.trim();
     if q.is_empty() {
@@ -558,14 +571,13 @@ pub async fn search_innertube(query: &str) -> Result<Vec<Track>, String> {
                                 .unwrap_or("");
                             let duration = parse_duration_str(dur_str);
 
-                            let thumb = v.pointer("/thumbnail/thumbnails/0/url")
+                            let thumb = v.pointer("/thumbnail/thumbnails")
+                                .and_then(|t| t.as_array())
+                                .and_then(|arr| arr.last())
+                                .and_then(|t| t.get("url"))
                                 .and_then(|u| u.as_str())
                                 .unwrap_or("");
-                            let thumbnail = if thumb.is_empty() {
-                                format!("https://i.ytimg.com/vi/{}/hqdefault.jpg", id)
-                            } else {
-                                thumb.to_string()
-                            };
+                            let thumbnail = clean_youtube_thumbnail(thumb, id);
 
                             if !id.is_empty() && !title.is_empty() {
                                 let signature = get_title_signature_string(title, artist);
@@ -674,15 +686,13 @@ pub(crate) async fn execute_ytdlp_search(search_arg: &str, binary: &Path) -> Res
             let artist = item.uploader.unwrap_or_else(|| "Unknown Artist".to_string());
             let duration = item.duration.unwrap_or(0.0) as u64;
 
-            let mut thumbnail = String::new();
+            let mut raw_thumb = String::new();
             if let Some(thumbs) = item.thumbnails {
-                if let Some(first) = thumbs.into_iter().next() {
-                    thumbnail = first.url;
+                if let Some(last) = thumbs.into_iter().last() {
+                    raw_thumb = last.url;
                 }
             }
-            if thumbnail.is_empty() {
-                thumbnail = format!("https://i.ytimg.com/vi/{}/hqdefault.jpg", id);
-            }
+            let thumbnail = clean_youtube_thumbnail(&raw_thumb, &id);
 
             if !id.is_empty() && !title.is_empty() {
                 let signature = get_title_signature_string(&title, &artist);

@@ -95,3 +95,15 @@ pub fn get_favorite_songs(
 pub fn record_song_play(conn: &rusqlite::Connection, song_id: i64) -> rusqlite::Result<()> {
     song_repository::record_play(conn, song_id)
 }
+
+pub fn toggle_online_favorite(
+    conn: &rusqlite::Connection,
+    id: &str,
+    title: &str,
+    artist: &str,
+    duration: i64,
+    thumbnail: Option<&str>,
+    is_favorite: bool,
+) -> rusqlite::Result<crate::models::song::SongResponse> {
+    song_repository::toggle_online_favorite(conn, id, title, artist, duration, thumbnail, is_favorite)
+}

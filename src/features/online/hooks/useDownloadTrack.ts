@@ -26,12 +26,14 @@ const useDownloadTrack = () => {
         },
       });
     },
-    onSuccess: () => {
-      toast.success("Song downloaded successfully");
+    onSuccess: (data) => {
+      toast.success(`Downloaded "${data.title}" successfully`);
       queryClient.invalidateQueries({ queryKey: ["songs"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["homeData"], exact: false });
     },
     onError: (err) => {
-      toast.error("Download failed");
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Download failed: ${msg}`);
       console.error("Download error:", err);
     },
   });

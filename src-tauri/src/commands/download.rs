@@ -1,5 +1,6 @@
 use tauri::{AppHandle, Manager, State};
 use std::fs;
+use std::time::Duration;
 use crate::DbState;
 use crate::models::song::SongResponse;
 
@@ -13,7 +14,22 @@ pub struct DownloadTrackInput {
     pub duration: i64,
 }
 
-fn resolve_downloads_dir(app_handle: &AppHandle) -> std::path::PathBuf {
+pub fn sanitize_filename(name: &str, max_len: usize) -> String {
+    let cleaned: String = name
+        .chars()
+        .map(|c| if r#"\/:*?"<>|'#"#.contains(c) || c.is_control() { '_' } else { c })
+        .collect();
+    let trimmed = cleaned.trim().trim_matches('.').trim();
+    if trimmed.is_empty() {
+        "track".to_string()
+    } else if trimmed.chars().count() > max_len {
+        trimmed.chars().take(max_len).collect()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+pub fn resolve_downloads_dir(app_handle: &AppHandle) -> std::path::PathBuf {
     let app_dir = app_handle.path().app_data_dir().unwrap_or_else(|_| {
         #[cfg(target_os = "android")]
         {
@@ -27,48 +43,76 @@ fn resolve_downloads_dir(app_handle: &AppHandle) -> std::path::PathBuf {
     app_dir.join("downloads")
 }
 
+pub fn get_download_http_client() -> reqwest::Client {
+    let roots = webpki_root_certs::TLS_SERVER_ROOT_CERTS
+        .iter()
+        .filter_map(|cert| reqwest::Certificate::from_der(cert.as_ref()).ok());
+
+    reqwest::Client::builder()
+        .tls_certs_only(roots)
+        .timeout(Duration::from_secs(300)) // 5 minutes for full track downloads
+        .connect_timeout(Duration::from_secs(15))
+        .pool_idle_timeout(Duration::from_secs(90))
+        .user_agent("Mozilla/5.0 (Linux; Android 11) SonaraStream/0.6.3")
+        .build()
+        .unwrap_or_default()
+}
+
 #[tauri::command]
 pub async fn download_online_track(
     app_handle: AppHandle,
     db: State<'_, DbState>,
     input: DownloadTrackInput,
 ) -> Result<SongResponse, String> {
-    // 1. Resolve direct stream URL
-    let stream_url = crate::youtube::resolve_stream_url_internal(input.id.clone(), None, std::time::Duration::from_secs(25)).await?;
+    // 1. Resolve direct stream URL with retry
+    let stream_url = crate::youtube::resolve_stream_url_internal(
+        input.id.clone(),
+        Some(true),
+        Duration::from_secs(30),
+    ).await.map_err(|e| format!("Failed to resolve audio stream: {}", e))?;
 
     // 2. Prepare downloads directory
     let downloads_dir = resolve_downloads_dir(&app_handle);
     if !downloads_dir.exists() {
         fs::create_dir_all(&downloads_dir)
-            .map_err(|e| format!("Failed to create downloads directory: {}", e))?;
+            .map_err(|e| format!("Failed to create downloads directory {:?}: {}", downloads_dir, e))?;
     }
 
-    // 3. Clean filenames
-    let safe_artist: String = input.artist
-        .chars()
-        .map(|c| if r#"\/:*?"<>|"#.contains(c) { '_' } else { c })
-        .collect();
-    let safe_title: String = input.title
-        .chars()
-        .map(|c| if r#"\/:*?"<>|"#.contains(c) { '_' } else { c })
-        .collect();
-    let file_base = format!("{} - {} [{}]", safe_artist.trim(), safe_title.trim(), input.id.trim());
+    // 3. Clean filenames to prevent path limit and illegal character failures
+    let safe_artist = sanitize_filename(&input.artist, 50);
+    let safe_title = sanitize_filename(&input.title, 50);
+    let safe_id = sanitize_filename(&input.id, 30);
+    let file_base = format!("{} - {} [{}]", safe_artist, safe_title, safe_id);
     let audio_file_name = format!("{}.m4a", file_base);
     let dest_audio_path = downloads_dir.join(&audio_file_name);
 
-    // 4. Download audio stream
-    let client = crate::youtube::get_http_client();
-    let resp = client
+    // 4. Stream audio directly to disk
+    let client = get_download_http_client();
+    let mut resp = client
         .get(&stream_url)
+        .header("User-Agent", "com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip")
         .send()
         .await
         .map_err(|e| format!("Audio stream request failed: {}", e))?;
+
     if !resp.status().is_success() {
-        return Err(format!("Download stream returned status {}", resp.status()));
+        return Err(format!("Download stream returned HTTP status {}", resp.status()));
     }
-    let bytes = resp.bytes().await.map_err(|e| format!("Failed to read stream bytes: {}", e))?;
-    let file_size = bytes.len() as i64;
-    fs::write(&dest_audio_path, &bytes).map_err(|e| format!("Failed to write audio file: {}", e))?;
+
+    let mut file = fs::File::create(&dest_audio_path)
+        .map_err(|e| format!("Failed to create audio file at {:?}: {}", dest_audio_path, e))?;
+
+    let mut file_size: i64 = 0;
+    while let Some(chunk) = resp.chunk().await.map_err(|e| format!("Failed downloading stream chunk: {}", e))? {
+        file_size += chunk.len() as i64;
+        std::io::Write::write_all(&mut file, &chunk)
+            .map_err(|e| format!("Failed writing stream chunk to disk: {}", e))?;
+    }
+
+    if file_size < 1000 {
+        let _ = fs::remove_file(&dest_audio_path);
+        return Err("Downloaded file is too small or incomplete".into());
+    }
 
     // 5. Download artwork if available
     let mut local_cover_path: Option<String> = None;
@@ -86,7 +130,7 @@ pub async fn download_online_track(
         }
     }
 
-    // 6. Update database record
+    // 6. Update database record idempotently
     let conn = db.0.lock().map_err(|e| e.to_string())?;
 
     let (artist_id, _) = crate::repositories::artist_repository::find_or_create(&conn, &input.artist)
@@ -108,17 +152,21 @@ pub async fn download_online_track(
     let local_path = dest_audio_path.to_string_lossy().to_string();
     let online_path = format!("online://youtube/{}", input.id);
 
-    // If an online entry for this track already existed, update its path to local offline path!
-    let updated_rows = conn.execute(
-        "UPDATE songs 
-         SET path = ?1, file_size = ?2, file_modified_at = ?3, album_id = ?4, artist_id = ?5 
-         WHERE path = ?6",
-        rusqlite::params![local_path, file_size, now, album_id, artist_id, online_path],
-    ).unwrap_or(0);
+    // Check if song already exists with either local_path OR online_path
+    let existing_id: Option<i64> = conn.query_row(
+        "SELECT id FROM songs WHERE path = ?1 OR path = ?2",
+        rusqlite::params![local_path, online_path],
+        |r| r.get(0),
+    ).ok();
 
-    let final_id = if updated_rows > 0 {
-        conn.query_row("SELECT id FROM songs WHERE path = ?1", rusqlite::params![local_path], |r| r.get::<_, i64>(0))
-            .map_err(|e| e.to_string())?
+    let final_id = if let Some(id) = existing_id {
+        conn.execute(
+            "UPDATE songs 
+             SET path = ?1, file_size = ?2, file_modified_at = ?3, album_id = ?4, artist_id = ?5 
+             WHERE id = ?6",
+            rusqlite::params![local_path, file_size, now, album_id, artist_id, id],
+        ).map_err(|e| format!("Failed to update existing song: {}", e))?;
+        id
     } else {
         conn.execute(
             "INSERT INTO songs (title, duration, path, is_favorite, favorite_added_at, track_number, created_at, folder_id, album_id, artist_id, file_modified_at, file_size)
@@ -136,17 +184,97 @@ pub fn is_track_downloaded(
     app_handle: AppHandle,
     id: String,
 ) -> Result<bool, String> {
+    let clean_id = id.trim();
+    if clean_id.is_empty() {
+        return Ok(false);
+    }
     let downloads_dir = resolve_downloads_dir(&app_handle);
     if !downloads_dir.exists() {
         return Ok(false);
     }
+    let pattern = format!("[{}]", clean_id);
     if let Ok(entries) = fs::read_dir(downloads_dir) {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if name.contains(&format!("[{}]", id)) {
-                return Ok(true);
+            if name.contains(&pattern) {
+                if let Ok(meta) = entry.metadata() {
+                    if meta.len() > 1000 {
+                        return Ok(true);
+                    }
+                }
             }
         }
     }
     Ok(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sanitize_filename() {
+        assert_eq!(sanitize_filename("Queen / Bohemian : Rhapsody *?", 50), "Queen _ Bohemian _ Rhapsody __");
+        assert_eq!(sanitize_filename("   hello...   ", 50), "hello");
+        assert_eq!(sanitize_filename("", 50), "track");
+        let long_name = "a".repeat(100);
+        assert_eq!(sanitize_filename(&long_name, 30).len(), 30);
+    }
+
+    #[test]
+    fn test_is_track_downloaded_pattern() {
+        let pattern = format!("[{}]", "fJ9rUzIMcZQ");
+        let sample = "Queen - Bohemian Rhapsody [fJ9rUzIMcZQ].m4a";
+        assert!(sample.contains(&pattern));
+        let diff = "Queen - Bohemian Rhapsody [otherId].m4a";
+        assert!(!diff.contains(&pattern));
+    }
+
+    #[test]
+    fn test_idempotent_db_download_records() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        crate::db::migrations::run_migrations(&conn).unwrap();
+
+        let (artist_id, _) = crate::repositories::artist_repository::find_or_create(&conn, "Queen").unwrap();
+        let (album_id, _) = crate::repositories::album_repository::find_or_create(&conn, "Downloads", artist_id).unwrap();
+
+        let local_path = "downloads/Queen - Bohemian Rhapsody [fJ9rUzIMcZQ].m4a";
+        let online_path = "online://youtube/fJ9rUzIMcZQ";
+        let now = 1000000;
+        let file_size = 5000000;
+
+        // 1. Initial insert
+        conn.execute(
+            "INSERT INTO songs (title, duration, path, is_favorite, favorite_added_at, track_number, created_at, folder_id, album_id, artist_id, file_modified_at, file_size)
+             VALUES (?1, ?2, ?3, 0, NULL, 1, ?4, NULL, ?5, ?6, ?4, ?7)",
+            rusqlite::params!["Bohemian Rhapsody", 354, local_path, now, album_id, artist_id, file_size],
+        ).unwrap();
+        let first_id = conn.last_insert_rowid();
+
+        // 2. Querying row works
+        let res = crate::repositories::song_repository::get_by_id(&conn, first_id).unwrap();
+        assert_eq!(res.title, "Bohemian Rhapsody");
+        assert_eq!(res.artist_name, "Queen");
+
+        // 3. Re-downloading (idempotency check) updates rather than crashing
+        let existing_id: Option<i64> = conn.query_row(
+            "SELECT id FROM songs WHERE path = ?1 OR path = ?2",
+            rusqlite::params![local_path, online_path],
+            |r| r.get(0),
+        ).ok();
+
+        assert_eq!(existing_id, Some(first_id));
+
+        // Update works without constraint error
+        let updated_size = 5200000;
+        conn.execute(
+            "UPDATE songs 
+             SET path = ?1, file_size = ?2, file_modified_at = ?3, album_id = ?4, artist_id = ?5 
+             WHERE id = ?6",
+            rusqlite::params![local_path, updated_size, now + 10, album_id, artist_id, first_id],
+        ).unwrap();
+
+        let res2 = crate::repositories::song_repository::get_by_id(&conn, first_id).unwrap();
+        assert_eq!(res2.file_size, updated_size);
+    }
 }

@@ -4,6 +4,18 @@ All notable changes to **Sonara Stream** are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.4] - 2026-09-08
+
+### 📥 Android Download Engine Overhaul & Verification
+- **5-Minute Extended Download Timeout**: Replaced API-scoped 10-second timeout with a dedicated streaming HTTP client configured with a 300-second timeout, preventing premature termination when downloading large audio tracks over mobile networks.
+- **Chunked Direct-to-Disk Streaming**: Replaced full-file memory buffering (`resp.bytes()`) with chunked stream writing, preventing out-of-memory errors on memory-constrained Android devices.
+- **Idempotent Download Database Records**: Ensured duplicate downloads update existing records rather than triggering `UNIQUE constraint failed: songs.path`.
+- **Tauri Asset Protocol Scope Expansion**: Expanded `assetProtocol` allow scope to permit playing downloaded tracks from Android application storage without 403 Forbidden errors.
+- **Safe Filename Sanitization**: Truncated filenames to safe 50-character limits, preventing `File name too long` (os error 36) crashes on Android ext4 filesystems.
+- **Instant UI Refresh**: Configured downloads to invalidate both `["songs"]` and `["homeData"]` query caches with granular toast feedback.
+
+---
+
 ## [0.6.3] - 2026-09-08
 
 ### 💖 Online Favorites, Offline Downloads & Seamless Launch

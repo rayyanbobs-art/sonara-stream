@@ -1,10 +1,10 @@
 import React, { useState } from "react";
-import { Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { Download, RefreshCw, X, AlertCircle } from "lucide-react";
+import { UnifiedAppUpdate, openExternalUrl } from "../utils/appUpdater";
 
 interface UpdateBannerProps {
-  update: Update;
+  update: UnifiedAppUpdate;
   isPlaying: boolean;
   onDismiss: () => void;
 }
@@ -19,6 +19,16 @@ export const UpdateBanner: React.FC<UpdateBannerProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   const handleUpdate = async () => {
+    // Android path: open direct APK download link via AndroidNative or system browser
+    if (update.isAndroid || !update.rawDesktopUpdate) {
+      const url =
+        update.downloadUrl ||
+        "https://github.com/rayyanbobs-art/sonara-stream/releases/latest/download/SonaraStream-Android.apk";
+      openExternalUrl(url);
+      onDismiss();
+      return;
+    }
+
     if (isPlaying) {
       const proceed = window.confirm(
         "Audio is currently playing. Updating and restarting will interrupt playback. Continue?"
@@ -33,7 +43,7 @@ export const UpdateBanner: React.FC<UpdateBannerProps> = ({
       let downloadedBytes = 0;
       let totalBytes = 0;
 
-      await update.downloadAndInstall((event) => {
+      await update.rawDesktopUpdate.downloadAndInstall((event) => {
         if (event.event === "Started") {
           totalBytes = event.data.contentLength || 0;
         } else if (event.event === "Progress") {
@@ -133,7 +143,7 @@ export const UpdateBanner: React.FC<UpdateBannerProps> = ({
           ) : (
             <>
               <Download size={13} />
-              <span>Update & Restart</span>
+              <span>{update.isAndroid ? "Download APK" : "Update & Restart"}</span>
             </>
           )}
         </button>

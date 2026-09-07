@@ -5,6 +5,7 @@ mod recommend;
 mod playlist;
 mod lyrics;
 mod media_controls;
+mod app_updater;
 
 use tauri::Manager;
 
@@ -78,6 +79,7 @@ pub fn run() {
             media_controls::update_media_metadata,
             media_controls::update_playback_state,
             media_controls::clear_media_controls,
+            app_updater::check_app_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running sonara-stream application");

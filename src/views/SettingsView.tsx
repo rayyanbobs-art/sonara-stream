@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { check } from "@tauri-apps/plugin-updater";
+import { checkUnifiedAppUpdate, openExternalUrl, isAndroidPlatform } from "../utils/appUpdater";
 import {
   Radio,
   RefreshCw,
@@ -327,11 +327,21 @@ export const SettingsView: React.FC<SettingsViewProps> = React.memo(
       setCheckingApp(true);
       setToastMessage("Checking for Sonara Stream app updates...");
       try {
-        const update = await check();
+        const update = await checkUnifiedAppUpdate();
         if (update?.available) {
-          showToast(`New version available: v${update.version}! Relaunch via update banner.`);
+          if (update.isAndroid) {
+            showToast(`New version available: v${update.version}! Starting APK download...`);
+            openExternalUrl(
+              update.downloadUrl ||
+                "https://github.com/rayyanbobs-art/sonara-stream/releases/latest/download/SonaraStream-Android.apk"
+            );
+          } else {
+            showToast(`New version available: v${update.version}! Relaunch via update banner.`);
+          }
         } else {
-          showToast("You're up to date — no newer release published.");
+          showToast(
+            `You're up to date (${update?.currentVersion ? `v${update.currentVersion}` : "v0.5.0"}) — no newer release published.`
+          );
         }
       } catch (err: any) {
         const errStr = String(err?.message || err || "").toLowerCase();
@@ -771,7 +781,7 @@ export const SettingsView: React.FC<SettingsViewProps> = React.memo(
                 </button>
               </div>
 
-              <div style={{ marginTop: "14px" }}>
+              <div style={{ marginTop: "14px", display: "flex", flexWrap: "wrap", gap: "10px" }}>
                 <button
                   type="button"
                   className="settings-action-btn"
@@ -781,6 +791,20 @@ export const SettingsView: React.FC<SettingsViewProps> = React.memo(
                   <ArrowUpCircle size={14} className={checkingApp ? "spin" : ""} />
                   <span>{checkingApp ? "Checking App Releases..." : "Check for App Updates"}</span>
                 </button>
+                {isAndroidPlatform() && (
+                  <button
+                    type="button"
+                    className="settings-action-btn"
+                    onClick={() =>
+                      openExternalUrl(
+                        "https://github.com/rayyanbobs-art/sonara-stream/releases/latest/download/SonaraStream-Android.apk"
+                      )
+                    }
+                  >
+                    <Download size={14} />
+                    <span>Download Latest APK (Android)</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>

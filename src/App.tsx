@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { AlertCircle } from "lucide-react";
-import { check, Update } from "@tauri-apps/plugin-updater";
+import { checkUnifiedAppUpdate, UnifiedAppUpdate } from "./utils/appUpdater";
 import { UpdateBanner } from "./components/UpdateBanner";
 import { Sidebar } from "./components/Sidebar";
 import { Header } from "./components/Header";
@@ -79,7 +79,7 @@ export default function App() {
   const [source, setSource] = useState<"youtube" | "spotify">("youtube");
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [availableUpdate, setAvailableUpdate] = useState<Update | null>(null);
+  const [availableUpdate, setAvailableUpdate] = useState<UnifiedAppUpdate | null>(null);
   const [showPerfOverlay, setShowPerfOverlay] = useState<boolean>(() => {
     return localStorage.getItem("sonara_perf_overlay") === "true";
   });
@@ -120,7 +120,7 @@ export default function App() {
       const autoUpdate = localStorage.getItem("sonara_app_autoupdate") !== "false";
       if (!autoUpdate) return;
       try {
-        const update = await check();
+        const update = await checkUnifiedAppUpdate();
         if (update && update.available) {
           setAvailableUpdate(update);
         }

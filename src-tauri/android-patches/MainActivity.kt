@@ -38,6 +38,33 @@ class MainActivity : TauriActivity() {
         super.onWebViewCreate(webView)
         webViewInstance = webView
         webView.settings.mediaPlaybackRequiresUserGesture = false
+
+        // Bridge to allow frontend to open external URLs / download APKs directly
+        webView.addJavascriptInterface(object {
+            @android.webkit.JavascriptInterface
+            fun openUrl(url: String) {
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }, "AndroidNative")
+
+        // Handle any direct file download navigations
+        webView.setDownloadListener { url, _, _, _, _ ->
+            try {
+                val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(intent)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {

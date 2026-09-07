@@ -83,7 +83,9 @@ export function useAudioPlayer(options: UseAudioPlayerOptions = {}) {
       setIsPlaying(true);
       if (clickStartTimeRef.current > 0) {
         const elapsed = Math.round(performance.now() - clickStartTimeRef.current);
-        perf.recordPlaybackStart(elapsed, isCacheHitRef.current, isPrefetchRef.current);
+        if (!isCacheHitRef.current) {
+          perf.recordPlaybackStart(elapsed, false, isPrefetchRef.current);
+        }
         clickStartTimeRef.current = 0;
       }
     };
@@ -282,8 +284,10 @@ export function useAudioPlayer(options: UseAudioPlayerOptions = {}) {
       } else {
         const tInvokeStart = performance.now();
         streamUrl = await invoke("get_stream_url", { id: track.id });
-        if (performance.now() - tInvokeStart < 80) {
+        const elapsedInvoke = Math.round(performance.now() - tInvokeStart);
+        if (elapsedInvoke < 80) {
           isCacheHitRef.current = true;
+          perf.recordPlaybackStart(Math.max(1, elapsedInvoke), true, false);
         }
       }
 

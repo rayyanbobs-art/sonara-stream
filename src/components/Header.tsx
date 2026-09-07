@@ -31,6 +31,8 @@ interface HeaderProps {
 
 import { perf } from "../utils/perf";
 
+const suggestionsCache = new Map<string, string[]>();
+
 export const Header: React.FC<HeaderProps> = React.memo(({
   query,
   onQueryChange,
@@ -44,25 +46,31 @@ export const Header: React.FC<HeaderProps> = React.memo(({
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
-  const keystrokeTimeRef = useRef<number>(0);
 
-  // Fetch search suggestions debounced
+  // Fetch search suggestions debounced with in-memory caching
   useEffect(() => {
-    if (!query.trim() || query.length < 2 || source === "spotify") {
+    const cleanQ = query.trim().toLowerCase();
+    if (!cleanQ || cleanQ.length < 2 || source === "spotify") {
       setSuggestions([]);
       setShowSuggestions(false);
+      return;
+    }
+
+    if (suggestionsCache.has(cleanQ)) {
+      const cached = suggestionsCache.get(cleanQ)!;
+      setSuggestions(cached);
+      setShowSuggestions(cached.length > 0);
+      setSelectedIndex(-1);
       return;
     }
 
     const timer = setTimeout(async () => {
       try {
         const results: string[] = await invoke("get_search_suggestions", { query });
+        suggestionsCache.set(cleanQ, results);
         setSuggestions(results);
         setShowSuggestions(results.length > 0);
         setSelectedIndex(-1);
-        if (keystrokeTimeRef.current > 0) {
-          perf.recordKeystroke(Math.round(performance.now() - keystrokeTimeRef.current));
-        }
       } catch {
         setSuggestions([]);
       }
@@ -132,8 +140,13 @@ export const Header: React.FC<HeaderProps> = React.memo(({
               type="text"
               value={query}
               onChange={(e) => {
-                keystrokeTimeRef.current = performance.now();
-                onQueryChange(e.target.value);
+                const val = e.target.value;
+                const t0 = performance.now();
+                onQueryChange(val);
+                requestAnimationFrame(() => {
+                  const elapsed = Math.round(performance.now() - t0);
+                  perf.recordKeystroke(Math.max(1, elapsed));
+                });
               }}
               onFocus={() => {
                 if (suggestions.length > 0) setShowSuggestions(true);

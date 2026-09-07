@@ -254,7 +254,24 @@ export default function App() {
 
   // Initial load: Fetch personalized recommendations from Rust engine
   useEffect(() => {
+    // B1: Cold start to interactive UI frame mount
+    requestAnimationFrame(() => {
+      perf.recordColdStart(Math.max(1, Math.round(performance.now())));
+    });
+
     const loadRecommendations = async () => {
+      // Check local cached recommendations first to render instantly
+      try {
+        const cached = localStorage.getItem("sonara_cached_recommendations");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setRecommendations(parsed);
+            mergeDiscoveredTracks(parsed);
+          }
+        }
+      } catch (_) {}
+
       setLoading(true);
       try {
         const res: { title: string; tracks: Track[] } = await invoke("get_recommendations", { limit: 24 });
@@ -262,6 +279,9 @@ export default function App() {
           setRecommendations(res.tracks);
           if (res.title) setRecommendationTitle(res.title);
           mergeDiscoveredTracks(res.tracks);
+          try {
+            localStorage.setItem("sonara_cached_recommendations", JSON.stringify(res.tracks.slice(0, 24)));
+          } catch (_) {}
           res.tracks.slice(0, 4).forEach((t) => {
             handlePrefetchTrack(t);
           });
@@ -270,8 +290,6 @@ export default function App() {
         console.warn("Failed to load initial recommendations:", err);
       } finally {
         setLoading(false);
-        // B1: Cold start to interactive UI with recommendations visible
-        perf.recordColdStart(Math.round(performance.now()));
       }
     };
     loadRecommendations();

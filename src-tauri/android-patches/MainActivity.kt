@@ -108,8 +108,17 @@ class MainActivity : TauriActivity() {
         }
     }
 
+    private val keepAliveHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val keepAliveRunnable = object : Runnable {
+        override fun run() {
+            resumeWebViewBackground()
+            keepAliveHandler.postDelayed(this, 1500)
+        }
+    }
+
     override fun onResume() {
         super.onResume()
+        keepAliveHandler.removeCallbacks(keepAliveRunnable)
         hideSystemNavigation()
         webViewInstance?.onResume()
         webViewInstance?.resumeTimers()
@@ -133,11 +142,15 @@ class MainActivity : TauriActivity() {
     }
 
     override fun onPause() {
+        // Proactively keep WebView audio active before and after OS pause transition
+        resumeWebViewBackground()
         super.onPause()
         resumeWebViewBackground()
+        keepAliveHandler.post(keepAliveRunnable)
     }
 
     override fun onStop() {
+        resumeWebViewBackground()
         super.onStop()
         resumeWebViewBackground()
     }

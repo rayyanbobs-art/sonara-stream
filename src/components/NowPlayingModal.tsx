@@ -16,6 +16,7 @@ import {
   Sparkles,
   Volume2,
   VolumeX,
+  ChevronLeft,
 } from "lucide-react";
 import { Track, RepeatMode } from "../types";
 import { getDominantColor } from "../utils/dominantColor";
@@ -84,11 +85,17 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = React.memo(({
   lyricsSlot,
 }) => {
   const [activeTab, setActiveTab] = useState<"queue" | "lyrics" | "related">("queue");
+  const [mobileView, setMobileView] = useState<"nowplaying" | "lyrics" | "queue" | "related">("nowplaying");
   const [dominantColor, setDominantColor] = useState<string>("rgba(35, 30, 45, 0.95)");
   const [relatedTracks, setRelatedTracks] = useState<Track[]>([]);
   const [loadingRelated, setLoadingRelated] = useState(false);
   const [isSeeking, setIsSeeking] = useState(false);
   const [seekValue, setSeekValue] = useState(0);
+
+  const handleSelectTab = (tab: "queue" | "lyrics" | "related") => {
+    setActiveTab(tab);
+    setMobileView(tab);
+  };
 
   // Close on Escape key
   useEffect(() => {
@@ -164,10 +171,22 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = React.memo(({
     >
       {/* Top Bar with Close Button */}
       <div className="np-top-bar">
-        <div className="np-top-tag">
-          <Music size={14} />
-          <span>NOW PLAYING</span>
-        </div>
+        {mobileView === "nowplaying" ? (
+          <div className="np-top-tag">
+            <Music size={14} />
+            <span>NOW PLAYING</span>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="np-mobile-back-track-btn"
+            onClick={() => setMobileView("nowplaying")}
+          >
+            <ChevronLeft size={16} />
+            <span>Track</span>
+          </button>
+        )}
+
         <button
           type="button"
           className="np-close-btn"
@@ -182,7 +201,7 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = React.memo(({
       {/* Main Split Layout */}
       <div className="np-content-grid">
         {/* Left / Top: Track presentation and core playback */}
-        <div className="np-left-section">
+        <div className={`np-left-section ${mobileView !== "nowplaying" ? "mobile-hidden" : ""}`}>
           <div className="np-art-wrapper">
             <img
               src={getOptimizedThumbnail(currentTrack.thumbnail, "full")}
@@ -302,15 +321,35 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = React.memo(({
               </button>
             )}
           </div>
+
+          {/* Quick Mobile Action to view Lyrics or Queue */}
+          <div className="np-mobile-quick-actions">
+            <button
+              type="button"
+              className="np-quick-action-pill"
+              onClick={() => handleSelectTab("lyrics")}
+            >
+              <FileText size={14} />
+              <span>Lyrics View</span>
+            </button>
+            <button
+              type="button"
+              className="np-quick-action-pill"
+              onClick={() => handleSelectTab("queue")}
+            >
+              <ListMusic size={14} />
+              <span>Queue View ({userQueue.length + upNextTracks.length})</span>
+            </button>
+          </div>
         </div>
 
         {/* Right / Bottom: Tabs for Up Next, Lyrics, Related */}
-        <div className="np-right-section">
+        <div className={`np-right-section ${mobileView === "nowplaying" ? "mobile-hidden" : ""}`}>
           <div className="np-tabs-header">
             <button
               type="button"
               className={`np-tab-btn ${activeTab === "queue" ? "active" : ""}`}
-              onClick={() => setActiveTab("queue")}
+              onClick={() => handleSelectTab("queue")}
             >
               <ListMusic size={16} />
               <span>Up Next</span>
@@ -318,7 +357,7 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = React.memo(({
             <button
               type="button"
               className={`np-tab-btn ${activeTab === "lyrics" ? "active" : ""}`}
-              onClick={() => setActiveTab("lyrics")}
+              onClick={() => handleSelectTab("lyrics")}
             >
               <FileText size={16} />
               <span>Lyrics</span>
@@ -326,7 +365,7 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = React.memo(({
             <button
               type="button"
               className={`np-tab-btn ${activeTab === "related" ? "active" : ""}`}
-              onClick={() => setActiveTab("related")}
+              onClick={() => handleSelectTab("related")}
             >
               <Sparkles size={16} />
               <span>Related</span>
@@ -444,6 +483,51 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = React.memo(({
               </div>
             )}
           </div>
+
+          {/* Mobile bottom mini playback control strip */}
+          {mobileView !== "nowplaying" && (
+            <div className="np-mobile-tab-footer">
+              <div className="np-mtf-info">
+                <span className="np-mtf-title">{currentTrack.title}</span>
+                <span className="np-mtf-artist">{currentTrack.artist}</span>
+              </div>
+              <div className="np-mtf-controls">
+                <button
+                  type="button"
+                  className="np-ctrl-btn"
+                  onClick={onPrev}
+                  title="Previous track"
+                  aria-label="Previous track"
+                >
+                  <SkipBack size={18} />
+                </button>
+                <button
+                  type="button"
+                  className="np-play-btn np-play-btn-mini"
+                  onClick={onTogglePlay}
+                  title={isPlaying ? "Pause" : "Play"}
+                  aria-label={isPlaying ? "Pause" : "Play"}
+                >
+                  {isBuffering ? (
+                    <div className="player-buffer-spinner mini" />
+                  ) : isPlaying ? (
+                    <Pause size={18} />
+                  ) : (
+                    <Play size={18} fill="currentColor" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="np-ctrl-btn"
+                  onClick={onNext}
+                  title="Next track"
+                  aria-label="Next track"
+                >
+                  <SkipForward size={18} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

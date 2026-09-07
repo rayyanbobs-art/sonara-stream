@@ -66,4 +66,3 @@ jobs:
           releaseBody: 'See CHANGELOG.md for release notes and changes.'
           releaseDraft: false
           prerelease: false
-          args: --no-sign

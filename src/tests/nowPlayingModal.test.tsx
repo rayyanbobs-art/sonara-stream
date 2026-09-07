@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import React from "react";
 import { NowPlayingModal } from "../components/NowPlayingModal";
@@ -71,23 +71,37 @@ describe("NowPlayingModal Component", () => {
   });
 
   it("switches tabs between Up Next, Lyrics, and Related", async () => {
-    mockInvoke.mockResolvedValueOnce([
-      {
-        id: "rel_1",
-        title: "Related Song",
-        artist: "Solaris",
-        thumbnail: "https://example.com/rel.jpg",
-        duration: 200,
-        source: "youtube",
-      },
-    ]);
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "build_radio") {
+        return Promise.resolve([
+          {
+            id: "rel_1",
+            title: "Related Song",
+            artist: "Solaris",
+            thumbnail: "https://example.com/rel.jpg",
+            duration: 200,
+            source: "youtube",
+          },
+        ]);
+      }
+      if (cmd === "get_lyrics") {
+        return Promise.resolve({
+          id: 1,
+          plain_lyrics: "Sample lyrics",
+          synced_lyrics: null,
+          instrumental: false,
+          cached_at_unix: 1000,
+        });
+      }
+      return Promise.resolve([]);
+    });
 
     render(<NowPlayingModal {...defaultProps} />);
 
     // Click Lyrics tab
     const lyricsTab = screen.getByText("Lyrics");
     fireEvent.click(lyricsTab);
-    expect(screen.getByText("Synced and plain lyrics will be displayed here.")).toBeDefined();
+    expect(screen.getByTitle("Medium font size")).toBeDefined();
 
     // Click Related tab
     const relatedTab = screen.getByText("Related");

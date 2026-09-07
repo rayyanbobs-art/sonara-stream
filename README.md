@@ -173,6 +173,7 @@ Sonara Stream runs entirely on your local machine and collects no telemetry, ana
 | **Spotify** (`open.spotify.com/oembed`, `*.scdn.co`, `*.spotifycdn.com`) | Rust backend (`reqwest`) & Webview `<img>` | Resolving track title, artist name, and cover artwork when a Spotify link is pasted. | The public Spotify track URL pasted by the user sent to Spotify's oEmbed endpoint; artwork image requests sent to Spotify CDN. |
 | **GitHub Releases (`yt-dlp`)** (`api.github.com`, `objects.githubusercontent.com`) | Rust backend (`reqwest`) | Checking for latest `yt-dlp` updates, downloading release checksums (`SHA2-256SUMS`), and fetching verified binary updates. | Standard HTTPS GET requests for release assets and version tags; no personal or user data sent. |
 | **GitHub Releases (Sonara App)** (`github.com/rayyanbobs-art/sonara-stream`) | Rust backend (`tauri-plugin-updater`) | Checking for newer application releases (`latest.json`), downloading signed installer updates. | Standard HTTPS GET requests for version manifest and update bundles; no telemetry sent. |
+| **LRCLIB** (`lrclib.net`) | Rust backend (`reqwest`) | Fetching synchronized (.lrc format with timestamps) and plain text lyrics for currently playing songs; cached locally on disk for 7 days. | URL-encoded track title, artist name, and duration; no telemetry or personal identifiers sent. |
 
 ---
 

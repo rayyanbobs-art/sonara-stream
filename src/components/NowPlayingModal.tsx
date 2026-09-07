@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   X,
@@ -20,6 +20,7 @@ import {
 import { Track, RepeatMode } from "../types";
 import { getDominantColor } from "../utils/dominantColor";
 import { getOptimizedThumbnail } from "../utils/thumbnail";
+import { LyricsView } from "./LyricsView";
 
 interface NowPlayingModalProps {
   isOpen: boolean;
@@ -403,11 +404,11 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = React.memo(({
                 {lyricsSlot ? (
                   lyricsSlot
                 ) : (
-                  <div className="np-lyrics-placeholder">
-                    <FileText size={36} className="np-placeholder-icon" />
-                    <h3>Lyrics</h3>
-                    <p>Synced and plain lyrics will be displayed here.</p>
-                  </div>
+                  <LyricsView
+                    currentTrack={currentTrack}
+                    currentTime={currentTime}
+                    onSeek={onSeek}
+                  />
                 )}
               </div>
             )}

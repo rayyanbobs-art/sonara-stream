@@ -3205,3 +3205,163 @@ body {
   color: rgba(255, 255, 255, 0.5);
   font-size: 14px;
 }
+
+/* ==========================================================================
+   Lyrics View & Karaoke Scrolling
+   ========================================================================== */
+.lyrics-view-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+.lyrics-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 4px 12px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.lyrics-font-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 3px 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.lyrics-font-selector .font-icon {
+  color: rgba(255, 255, 255, 0.5);
+  margin-right: 4px;
+}
+
+.font-size-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+  font-weight: 700;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.font-size-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.font-size-btn.active {
+  background: var(--accent, #f5b800);
+  color: #000;
+}
+
+.lyrics-scroll-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 40px 20px;
+  scroll-behavior: smooth;
+  text-align: center;
+}
+
+.lyrics-font-small .lyrics-line,
+.lyrics-font-small .lyrics-plain-line {
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.lyrics-font-medium .lyrics-line,
+.lyrics-font-medium .lyrics-plain-line {
+  font-size: 19px;
+  line-height: 2.1;
+}
+
+.lyrics-font-large .lyrics-line,
+.lyrics-font-large .lyrics-plain-line {
+  font-size: 25px;
+  line-height: 2.3;
+}
+
+.lyrics-synced-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 650px;
+  margin: 0 auto;
+}
+
+.lyrics-line {
+  margin: 8px 0;
+  padding: 6px 14px;
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.35);
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.25s ease, transform 0.25s ease, background 0.15s ease;
+  user-select: none;
+  max-width: 100%;
+}
+
+.lyrics-line:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.lyrics-line.past {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.lyrics-line.active {
+  color: var(--accent, #f5b800);
+  font-weight: 700;
+  transform: scale(1.08);
+  text-shadow: 0 0 24px rgba(245, 184, 0, 0.4);
+}
+
+.lyrics-plain-container {
+  max-width: 600px;
+  margin: 0 auto;
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 500;
+}
+
+.lyrics-plain-line {
+  margin: 4px 0;
+}
+
+.lyrics-state-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 16px;
+  color: rgba(255, 255, 255, 0.6);
+  text-align: center;
+}
+
+.lyrics-state-message .state-icon {
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.lyrics-state-message h3 {
+  font-size: 18px;
+  color: #fff;
+  margin: 0 0 8px 0;
+}
+
+.lyrics-state-message p {
+  font-size: 14px;
+  margin: 0;
+  max-width: 320px;
+}

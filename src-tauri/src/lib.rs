@@ -3,6 +3,7 @@ mod spotify;
 mod ytdlp_updater;
 mod recommend;
 mod playlist;
+mod lyrics;
 
 use tauri::Manager;
 
@@ -65,6 +66,7 @@ pub fn run() {
             playlist::add_track_to_playlist,
             playlist::remove_track_from_playlist,
             playlist::reorder_playlist_tracks,
+            lyrics::get_lyrics,
         ])
         .run(tauri::generate_context!())
         .expect("error while running sonara-stream application");

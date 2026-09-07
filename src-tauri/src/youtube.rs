@@ -200,6 +200,21 @@ pub fn persist_search_cache_to_disk() {
     }
 }
 
+#[tauri::command]
+pub fn clear_search_cache() -> Result<(), String> {
+    if let Ok(mut guard) = get_search_cache().lock() {
+        guard.clear();
+    }
+    if let Ok(mut guard) = get_stream_cache().lock() {
+        guard.clear();
+    }
+    if let Some(app_data_dir) = APP_DATA_DIR.get() {
+        let cache_file = app_data_dir.join("search_cache.json");
+        let _ = std::fs::remove_file(cache_file);
+    }
+    Ok(())
+}
+
 pub fn get_bundled_ytdlp_path() -> PathBuf {
     // 1. Check relative to binary
     if let Ok(mut exe_path) = std::env::current_exe() {

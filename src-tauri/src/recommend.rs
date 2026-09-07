@@ -474,6 +474,14 @@ pub fn get_listening_history() -> Result<Vec<PlayHistoryEntry>, String> {
     Ok(guard.clone())
 }
 
+#[tauri::command]
+pub fn reset_listening_history() -> Result<(), String> {
+    let mut guard = get_history().lock().map_err(|e| e.to_string())?;
+    guard.clear();
+    save_history_to_disk(&guard);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

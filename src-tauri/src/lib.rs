@@ -63,6 +63,8 @@ pub fn run() {
             recommend::build_radio,
             recommend::record_play_event,
             recommend::get_listening_history,
+            recommend::reset_listening_history,
+            youtube::clear_search_cache,
             playlist::get_playlists,
             playlist::create_playlist,
             playlist::rename_playlist,

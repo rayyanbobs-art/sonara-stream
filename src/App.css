@@ -1030,6 +1030,205 @@ body {
   color: #fff;
 }
 
+/* Custom Settings Toggle Switch */
+.sonara-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  outline: none;
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.sonara-switch:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.sonara-switch.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
+.sonara-switch-knob {
+  position: absolute;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s ease;
+}
+
+.sonara-switch.active .sonara-switch-knob {
+  transform: translateX(20px);
+  background: #12141a;
+}
+
+/* Custom Segmented Control */
+.segmented-control {
+  display: inline-flex;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 3px;
+}
+
+.segmented-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.segmented-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.segmented-btn.active {
+  background: var(--accent);
+  color: #12141a;
+  font-weight: 600;
+  box-shadow: 0 2px 8px var(--accent-glow);
+}
+
+/* Settings Action & Danger Buttons */
+.settings-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.settings-action-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+.settings-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.settings-danger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #ef4444;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.settings-danger-btn:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.22);
+  border-color: #ef4444;
+  transform: translateY(-1px);
+}
+
+/* Scary confirmation warning */
+.scary-warning-box {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scary-warning-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #ef4444;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.scary-warning-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.scary-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* Network disclosure section */
+.disclosure-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+  font-size: 12px;
+}
+
+.disclosure-table th,
+.disclosure-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.disclosure-table th {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.disclosure-table td {
+  color: var(--text);
+}
+
+.disclosure-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--accent);
+}
+
 /* Floating Bottom Player (Exact Sonara Layout) */
 .sonara-player {
   position: absolute;

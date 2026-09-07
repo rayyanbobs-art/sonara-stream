@@ -4,6 +4,35 @@ All notable changes to **Sonara Stream** are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - 2026-09-08
+
+### 🛡️ Mobile Stability & Pure-Rust TLS
+- **Pure-Rust Mozilla Root Certificates**: Bundled `webpki-roots` into the Rust backend, completely bypassing Android's dynamic `rustls-platform-verifier` JNI classloader to eliminate `ClassNotFoundException` / `SIGABRT` crashes during YouTube searches and audio extraction on Android.
+- **Android Database Fallback**: Hardened SQLite database connection (`sonara.db`) to resolve via Tauri's application data directory, preventing `current_dir()` panics on mobile.
+- **Mobile Diagnostic Logging**: Configured a panic hook writing full stack traces to `sonara_panic.log` in app data for reliable mobile diagnostics.
+
+---
+
+## [0.6.1] - 2026-09-07
+
+### 📱 Android Immersive HUD & Layout
+- **Edge-to-Edge System Window Insets**: Configured Android window insets handling with `WindowInsetsCompat.Type.systemBars()` to prevent Android status and navigation bars from obscuring the search bar and HUD controls.
+- **InnerTube Mobile Search Fallback**: Enabled direct InnerTube YouTube client searches on Android where external desktop sidecar executables cannot run.
+- **HUD Import Button Responsive Fix**: Restructured mobile header layout to prevent import button overflow on narrow screens.
+
+---
+
+## [0.6.0] - 2026-09-07
+
+### ✨ Modern Sonara UI Migration & Dual-Engine Playback
+- **Authentic Sonara Interface**: Migrated to the modern Sonara UI powered by TanStack Router, Tailwind CSS v4, Radix UI primitives, and Lucide icons.
+- **Dual-Engine Playback Architecture**:
+  - **Offline Local Library**: High-speed local music directory scanning, ID3 metadata parsing, and local SQLite database (`sonara.db`) persistence.
+  - **Zero-Disk Online Streaming**: Low-latency in-memory YouTube streaming, LRCLIB synchronized lyrics, predictive hover pre-fetching, and Spotify oEmbed track resolution.
+- **Android Native Mobile Architecture**:
+  - Native `MediaPlaybackService` with `MediaSessionCompat` for Spotify-style lockscreen and notification drawer controls.
+  - CPU wake locks (`PARTIAL_WAKE_LOCK`) and high-performance Wi-Fi locks (`WIFI_MODE_FULL_HIGH_PERF`) ensuring uninterrupted background audio streaming with the screen off.
+
 ---
 
 ## [0.3.1] - 2026-09-05

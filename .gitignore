@@ -1,34 +1,32 @@
-# Dependencies
-node_modules/
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# Rust build artifacts
-src-tauri/target/
-target/
+node_modules
+dist
+dist-ssr
+*.local
 
-# Frontend build output
-dist/
-
-# Large sidecar binaries (distributed via releases)
-src-tauri/binaries/
-
-# Cloned reference repo
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+todo.txt
+release_assets
+src-tauri/target
+src-tauri/gen/android
+*.tsbuildinfo
+.tanstack
 sonara-0.3.1/
 
-# Release assets
-release_assets/
-
-# OS & Editor files
-.DS_Store
-Thumbs.db
-*.log
-.vscode/
-.idea/
-
-# Tauri generated schemas
-src-tauri/gen/schemas/
-
-# TypeScript cache
-*.tsbuildinfo
-
-
-*.apk

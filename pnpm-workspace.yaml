@@ -1,4 +1,4 @@
 allowBuilds:
+  core-js: true
   esbuild: true
-onlyBuiltDependencies:
-  - esbuild
+  msw: true

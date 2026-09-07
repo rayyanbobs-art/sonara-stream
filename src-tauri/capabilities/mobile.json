@@ -1,9 +1,0 @@
-{
-  "identifier": "mobile-capability",
-  "description": "Capability for mobile",
-  "platforms": ["android", "iOS"],
-  "permissions": [
-    "core:default",
-    "process:default"
-  ]
-}

@@ -200,21 +200,6 @@ pub fn persist_search_cache_to_disk() {
     }
 }
 
-#[tauri::command]
-pub fn clear_search_cache() -> Result<(), String> {
-    if let Ok(mut guard) = get_search_cache().lock() {
-        guard.clear();
-    }
-    if let Ok(mut guard) = get_stream_cache().lock() {
-        guard.clear();
-    }
-    if let Some(app_data_dir) = APP_DATA_DIR.get() {
-        let cache_file = app_data_dir.join("search_cache.json");
-        let _ = std::fs::remove_file(cache_file);
-    }
-    Ok(())
-}
-
 pub fn get_bundled_ytdlp_path() -> PathBuf {
     // 1. Check relative to binary
     if let Ok(mut exe_path) = std::env::current_exe() {
@@ -379,226 +364,6 @@ struct YtDlpSearchResult {
     thumbnails: Option<Vec<YtDlpThumbnail>>,
 }
 
-fn parse_duration_str(s: &str) -> u64 {
-    let parts: Vec<&str> = s.split(':').collect();
-    match parts.len() {
-        1 => parts[0].parse::<u64>().unwrap_or(0),
-        2 => {
-            let m = parts[0].parse::<u64>().unwrap_or(0);
-            let s = parts[1].parse::<u64>().unwrap_or(0);
-            m * 60 + s
-        }
-        3 => {
-            let h = parts[0].parse::<u64>().unwrap_or(0);
-            let m = parts[1].parse::<u64>().unwrap_or(0);
-            let s = parts[2].parse::<u64>().unwrap_or(0);
-            h * 3600 + m * 60 + s
-        }
-        _ => 0,
-    }
-}
-
-pub fn extract_video_id(input: &str) -> Option<String> {
-    let trimmed = input.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-    if let Some(pos) = trimmed.find("v=") {
-        let after = &trimmed[pos + 2..];
-        let id: String = after.chars().take_while(|c| *c != '&' && *c != '#' && *c != '?').collect();
-        if !id.is_empty() {
-            return Some(id);
-        }
-    }
-    if let Some(pos) = trimmed.find("youtu.be/") {
-        let after = &trimmed[pos + 9..];
-        let id: String = after.chars().take_while(|c| *c != '&' && *c != '#' && *c != '?').collect();
-        if !id.is_empty() {
-            return Some(id);
-        }
-    }
-    if !trimmed.starts_with("http") && !trimmed.contains('/') && !trimmed.contains(' ') {
-        return Some(trimmed.trim_start_matches('-').to_string());
-    }
-    None
-}
-
-pub async fn resolve_stream_innertube(video_id: &str) -> Result<String, String> {
-    let clean_id = video_id.trim();
-    if clean_id.is_empty() {
-        return Err("Empty video ID".into());
-    }
-
-    let payload = serde_json::json!({
-        "context": {
-            "client": {
-                "clientName": "ANDROID",
-                "clientVersion": "21.26.364",
-                "androidSdkVersion": 30,
-                "userAgent": "com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip",
-                "osName": "Android",
-                "osVersion": "11",
-                "hl": "en",
-                "timeZone": "UTC",
-                "utcOffsetMinutes": 0
-            }
-        },
-        "videoId": clean_id,
-        "playbackContext": {
-            "contentPlaybackContext": {
-                "html5Preference": "HTML5_PREF_WANTS"
-            }
-        },
-        "contentCheckOk": true,
-        "racyCheckOk": true
-    });
-
-    let client = get_http_client();
-    let res = client
-        .post("https://www.youtube.com/youtubei/v1/player?prettyPrint=false")
-        .header("Content-Type", "application/json")
-        .header("User-Agent", "com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip")
-        .header("X-Youtube-Client-Name", "3")
-        .header("X-Youtube-Client-Version", "21.26.364")
-        .header("Origin", "https://www.youtube.com")
-        .json(&payload)
-        .send()
-        .await
-        .map_err(|e| format!("InnerTube request failed: {}", e))?;
-
-    let json: serde_json::Value = res.json().await.map_err(|e| format!("Failed to parse InnerTube JSON: {}", e))?;
-
-    if let Some(formats) = json.pointer("/streamingData/formats").and_then(|v| v.as_array()) {
-        for f in formats {
-            if let Some(url) = f.get("url").and_then(|u| u.as_str()) {
-                if !url.is_empty() {
-                    return Ok(url.to_string());
-                }
-            }
-        }
-    }
-
-    if let Some(adaptive) = json.pointer("/streamingData/adaptiveFormats").and_then(|v| v.as_array()) {
-        for f in adaptive {
-            let mime = f.get("mimeType").and_then(|m| m.as_str()).unwrap_or("");
-            if mime.starts_with("audio/") {
-                if let Some(url) = f.get("url").and_then(|u| u.as_str()) {
-                    if !url.is_empty() {
-                        return Ok(url.to_string());
-                    }
-                }
-            }
-        }
-        for f in adaptive {
-            if let Some(url) = f.get("url").and_then(|u| u.as_str()) {
-                if !url.is_empty() {
-                    return Ok(url.to_string());
-                }
-            }
-        }
-    }
-
-    let reason = json.pointer("/playabilityStatus/reason")
-        .and_then(|r| r.as_str())
-        .unwrap_or("No direct stream URL available in InnerTube response");
-
-    Err(format!("InnerTube extraction error: {}", reason))
-}
-
-pub async fn search_innertube(query: &str) -> Result<Vec<Track>, String> {
-    let q = query.trim();
-    if q.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let payload = serde_json::json!({
-        "context": {
-            "client": {
-                "clientName": "ANDROID",
-                "clientVersion": "21.26.364",
-                "androidSdkVersion": 30,
-                "userAgent": "com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip",
-                "osName": "Android",
-                "osVersion": "11",
-                "hl": "en",
-                "timeZone": "UTC",
-                "utcOffsetMinutes": 0
-            }
-        },
-        "query": q
-    });
-
-    let client = get_http_client();
-    let res = client
-        .post("https://www.youtube.com/youtubei/v1/search?prettyPrint=false")
-        .header("Content-Type", "application/json")
-        .header("User-Agent", "com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip")
-        .header("X-Youtube-Client-Name", "3")
-        .header("X-Youtube-Client-Version", "21.26.364")
-        .header("Origin", "https://www.youtube.com")
-        .json(&payload)
-        .send()
-        .await
-        .map_err(|e| format!("InnerTube search request failed: {}", e))?;
-
-    let json: serde_json::Value = res.json().await.map_err(|e| format!("Failed to parse InnerTube search JSON: {}", e))?;
-
-    let mut tracks = Vec::new();
-    if let Some(sections_array) = json.pointer("/contents/sectionListRenderer/contents").and_then(|v| v.as_array()) {
-        for s in sections_array {
-            if let Some(items) = s.pointer("/itemSectionRenderer/contents").and_then(|v| v.as_array()) {
-                for item in items {
-                    let renderer = item.get("compactVideoRenderer")
-                        .or_else(|| item.get("videoWithContextRenderer"));
-                    if let Some(v) = renderer {
-                        if let Some(id) = v.get("videoId").and_then(|s| s.as_str()) {
-                            let title = v.pointer("/title/runs/0/text")
-                                .or_else(|| v.pointer("/headline/runs/0/text"))
-                                .and_then(|t| t.as_str())
-                                .unwrap_or("")
-                                .trim();
-
-                            let artist = v.pointer("/shortBylineText/runs/0/text")
-                                .and_then(|a| a.as_str())
-                                .unwrap_or("Unknown Artist")
-                                .trim();
-
-                            let dur_str = v.pointer("/lengthText/runs/0/text")
-                                .and_then(|d| d.as_str())
-                                .unwrap_or("");
-                            let duration = parse_duration_str(dur_str);
-
-                            let thumbnail = if !id.is_empty() {
-                                format!("https://i.ytimg.com/vi/{}/hqdefault.jpg", id)
-                            } else {
-                                v.pointer("/thumbnail/thumbnails/0/url")
-                                    .and_then(|u| u.as_str())
-                                    .unwrap_or("")
-                                    .to_string()
-                            };
-
-                            if !id.is_empty() && !title.is_empty() {
-                                let signature = get_title_signature_string(title, artist);
-                                tracks.push(Track {
-                                    id: id.to_string(),
-                                    title: title.to_string(),
-                                    artist: artist.to_string(),
-                                    duration,
-                                    thumbnail,
-                                    source: "youtube".into(),
-                                    signature,
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(tracks)
-}
-
 // Invokes external yt-dlp binary to search YouTube; subject to YouTube ToS and breakage on UI/API changes.
 pub(crate) async fn execute_ytdlp_search(search_arg: &str, binary: &Path) -> Result<Vec<Track>, String> {
     let sem_start = Instant::now();
@@ -684,17 +449,15 @@ pub(crate) async fn execute_ytdlp_search(search_arg: &str, binary: &Path) -> Res
             let artist = item.uploader.unwrap_or_else(|| "Unknown Artist".to_string());
             let duration = item.duration.unwrap_or(0.0) as u64;
 
-            let thumbnail = if !id.is_empty() {
-                format!("https://i.ytimg.com/vi/{}/hqdefault.jpg", id)
-            } else {
-                let mut thumb_str = String::new();
-                if let Some(thumbs) = item.thumbnails {
-                    if let Some(last) = thumbs.into_iter().last() {
-                        thumb_str = last.url;
-                    }
+            let mut thumbnail = String::new();
+            if let Some(thumbs) = item.thumbnails {
+                if let Some(first) = thumbs.into_iter().next() {
+                    thumbnail = first.url;
                 }
-                thumb_str
-            };
+            }
+            if thumbnail.is_empty() {
+                thumbnail = format!("https://i.ytimg.com/vi/{}/hqdefault.jpg", id);
+            }
 
             if !id.is_empty() && !title.is_empty() {
                 let signature = get_title_signature_string(&title, &artist);
@@ -789,20 +552,10 @@ pub async fn search_youtube(query: String) -> Result<Vec<Track>, String> {
     }
     tracing::info!(target: "sonara_stream::cache", event = "search_cache_miss", query = %q);
 
-    let raw_tracks = if cfg!(target_os = "android") {
-        search_innertube(&sanitized_query).await?
-    } else {
-        let binary = get_ytdlp_path();
-        if !binary.exists() {
-            search_innertube(&sanitized_query).await?
-        } else {
-            let search_arg = format!("ytsearch25:{}", sanitized_query);
-            match execute_ytdlp_search(&search_arg, &binary).await {
-                Ok(t) if !t.is_empty() => t,
-                _ => search_innertube(&sanitized_query).await?,
-            }
-        }
-    };
+    let binary = get_ytdlp_path();
+    let search_arg = format!("ytsearch25:{}", sanitized_query);
+
+    let raw_tracks = execute_ytdlp_search(&search_arg, &binary).await?;
 
     insert_search_cache(q, raw_tracks.clone());
 
@@ -814,26 +567,14 @@ pub async fn get_related_tracks(artist: String, title: String) -> Result<Vec<Tra
     let clean_artist = artist.trim().trim_start_matches('-').to_string();
     let clean_title = title.trim().trim_start_matches('-').to_string();
 
+    let binary = get_ytdlp_path();
     let query_term = if !clean_artist.is_empty() && clean_artist != "Unknown Artist" {
-        format!("{} songs", clean_artist)
+        format!("ytsearch15:{} songs", clean_artist)
     } else {
-        format!("{} mix", clean_title)
+        format!("ytsearch15:{} mix", clean_title)
     };
 
-    let raw = if cfg!(target_os = "android") {
-        search_innertube(&query_term).await.unwrap_or_default()
-    } else {
-        let binary = get_ytdlp_path();
-        if !binary.exists() {
-            search_innertube(&query_term).await.unwrap_or_default()
-        } else {
-            let search_arg = format!("ytsearch15:{}", query_term);
-            match execute_ytdlp_search(&search_arg, &binary).await {
-                Ok(t) if !t.is_empty() => t,
-                _ => search_innertube(&query_term).await.unwrap_or_default(),
-            }
-        }
-    };
+    let raw = execute_ytdlp_search(&query_term, &binary).await?;
     let mut seen = std::collections::HashSet::new();
     let target_sig = get_title_signature_string(&clean_title, &clean_artist);
     if !target_sig.is_empty() {
@@ -1043,53 +784,14 @@ pub async fn resolve_stream_url_internal(
 
     let id_clone = clean_id.clone();
     let task = tokio::spawn(async move {
-        if cfg!(target_os = "android") {
-            let target_id = if let Some(search_term) = id_clone.strip_prefix("search:") {
-                let search_res = search_innertube(search_term).await?;
-                if let Some(first) = search_res.into_iter().next() {
-                    first.id
-                } else {
-                    return Err(format!("No tracks found for: {}", search_term));
-                }
-            } else if let Some(vid) = extract_video_id(&id_clone) {
-                vid
-            } else {
-                id_clone.clone()
-            };
-
-            let url = resolve_stream_innertube(&target_id).await?;
-            insert_stream_cache(id_clone.clone(), url.clone());
-            return Ok(url);
-        }
-
-        let binary = get_ytdlp_path();
-        let use_innertube = !binary.exists();
-
-        if use_innertube {
-            let target_id = if let Some(search_term) = id_clone.strip_prefix("search:") {
-                let search_res = search_innertube(search_term).await?;
-                if let Some(first) = search_res.into_iter().next() {
-                    first.id
-                } else {
-                    return Err(format!("No tracks found for: {}", search_term));
-                }
-            } else if let Some(vid) = extract_video_id(&id_clone) {
-                vid
-            } else {
-                id_clone.clone()
-            };
-
-            let url = resolve_stream_innertube(&target_id).await?;
-            insert_stream_cache(id_clone.clone(), url.clone());
-            return Ok(url);
-        }
-
         let sem_start = Instant::now();
         let _permit = get_ytdlp_semaphore()
             .acquire()
             .await
             .map_err(|e| format!("Failed to acquire yt-dlp permit: {}", e))?;
         let sem_wait_ms = sem_start.elapsed().as_millis();
+
+        let binary = get_ytdlp_path();
         let video_url = if let Some(search_term) = id_clone.strip_prefix("search:") {
             let safe_term = search_term.trim_start_matches('-');
             format!("ytsearch1:{}", safe_term)
@@ -1182,14 +884,6 @@ pub async fn resolve_stream_url_internal(
                             }
                         }
                     }
-                }
-            }
-            // Fallback to InnerTube before returning error
-            let target_id = extract_video_id(&id_clone).unwrap_or_else(|| id_clone.clone());
-            if let Ok(url) = resolve_stream_innertube(&target_id).await {
-                if !url.is_empty() {
-                    insert_stream_cache(id_clone.clone(), url.clone());
-                    return Ok(url);
                 }
             }
             return Err(format!("Stream resolution failed: {}", err));

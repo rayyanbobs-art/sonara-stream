@@ -198,6 +198,52 @@ pub fn reorder_playlist_tracks(
     }
 }
 
+#[tauri::command]
+pub fn merge_imported_playlists(imported: Vec<Playlist>) -> Result<Vec<Playlist>, String> {
+    let mut guard = get_playlists_mutex().lock().map_err(|e| e.to_string())?;
+    for imp in imported {
+        let trimmed_name = imp.name.trim();
+        if trimmed_name.is_empty() {
+            continue;
+        }
+        if let Some(existing) = guard.iter_mut().find(|p| p.name.trim().eq_ignore_ascii_case(trimmed_name)) {
+            let mut seen_sigs: std::collections::HashSet<String> = existing
+                .tracks
+                .iter()
+                .map(|t| if t.signature.is_empty() { t.id.clone() } else { t.signature.clone() })
+                .collect();
+            for t in imp.tracks {
+                let sig = if t.signature.is_empty() { t.id.clone() } else { t.signature.clone() };
+                if !seen_sigs.contains(&sig) {
+                    seen_sigs.insert(sig);
+                    existing.tracks.push(t);
+                }
+            }
+            existing.updated_at = get_now_unix();
+        } else {
+            let mut deduped_tracks = Vec::new();
+            let mut seen_sigs = std::collections::HashSet::new();
+            for t in imp.tracks {
+                let sig = if t.signature.is_empty() { t.id.clone() } else { t.signature.clone() };
+                if !seen_sigs.contains(&sig) {
+                    seen_sigs.insert(sig);
+                    deduped_tracks.push(t);
+                }
+            }
+            let new_pl = Playlist {
+                id: format!("pl_{}_{:x}", get_now_unix(), fastrand_id()),
+                name: imp.name,
+                tracks: deduped_tracks,
+                created_at: if imp.created_at > 0 { imp.created_at } else { get_now_unix() },
+                updated_at: get_now_unix(),
+            };
+            guard.push(new_pl);
+        }
+    }
+    persist_playlists_to_disk(&guard);
+    Ok(guard.clone())
+}
+
 fn fastrand_id() -> u32 {
     use std::collections::hash_map::RandomState;
     use std::hash::{BuildHasher, Hasher};
@@ -258,5 +304,44 @@ mod tests {
         assert!(delete_playlist(p.id.clone()).is_ok());
         let remaining = get_playlists().unwrap();
         assert!(!remaining.iter().any(|pl| pl.id == p.id));
+    }
+
+    #[test]
+    fn test_merge_imported_playlists_deduplication() {
+        // Create initial playlist
+        let p = create_playlist("Chill Vibes".into()).unwrap();
+        add_track_to_playlist(p.id.clone(), dummy_track("track_1")).unwrap();
+
+        // Import matching playlist name with 1 existing track and 1 new track
+        let imported = vec![
+            Playlist {
+                id: "imp_1".into(),
+                name: "chill vibes".into(), // case-insensitive match
+                tracks: vec![dummy_track("track_1"), dummy_track("track_2")],
+                created_at: 100,
+                updated_at: 100,
+            },
+            Playlist {
+                id: "imp_2".into(),
+                name: "Upbeat".into(),
+                tracks: vec![dummy_track("track_3"), dummy_track("track_3")], // duplicate inside
+                created_at: 200,
+                updated_at: 200,
+            },
+        ];
+
+        let merged = merge_imported_playlists(imported).unwrap();
+        let chill = merged.iter().find(|pl| pl.name.eq_ignore_ascii_case("chill vibes")).unwrap();
+        assert_eq!(chill.tracks.len(), 2);
+        assert_eq!(chill.tracks[0].id, "track_1");
+        assert_eq!(chill.tracks[1].id, "track_2");
+
+        let upbeat = merged.iter().find(|pl| pl.name.eq_ignore_ascii_case("upbeat")).unwrap();
+        assert_eq!(upbeat.tracks.len(), 1);
+        assert_eq!(upbeat.tracks[0].id, "track_3");
+
+        // Clean up
+        let _ = delete_playlist(chill.id.clone());
+        let _ = delete_playlist(upbeat.id.clone());
     }
 }

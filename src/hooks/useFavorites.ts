@@ -22,6 +22,23 @@ export function useFavorites() {
     return () => clearTimeout(timer);
   }, [favorites]);
 
+  useEffect(() => {
+    const handleSync = () => {
+      try {
+        const saved = localStorage.getItem("sonara_favorites");
+        if (saved) {
+          setFavorites(JSON.parse(saved));
+        }
+      } catch {}
+    };
+    window.addEventListener("sonara_favorites_updated", handleSync);
+    window.addEventListener("storage", handleSync);
+    return () => {
+      window.removeEventListener("sonara_favorites_updated", handleSync);
+      window.removeEventListener("storage", handleSync);
+    };
+  }, []);
+
   const favoritesSet = useMemo(() => new Set(favorites.map((f) => f.id)), [favorites]);
 
   const isFavorite = useCallback(

@@ -43,6 +43,10 @@ export function usePlaylists() {
 
   useEffect(() => {
     loadPlaylists();
+    window.addEventListener("sonara_playlists_updated", loadPlaylists);
+    return () => {
+      window.removeEventListener("sonara_playlists_updated", loadPlaylists);
+    };
   }, [loadPlaylists]);
 
   const createPlaylist = useCallback(

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { check } from "@tauri-apps/plugin-updater";
 import {
@@ -17,8 +17,12 @@ import {
   Sun,
   Moon,
   Sparkles,
+  Download,
+  Upload,
+  FileJson,
+  CheckCircle2,
 } from "lucide-react";
-import { AccentColor } from "../types";
+import { AccentColor, Track, Playlist } from "../types";
 
 export interface SettingsViewProps {
   theme: "dark" | "light";
@@ -84,6 +88,17 @@ export const SettingsView: React.FC<SettingsViewProps> = React.memo(
     const [showScaryResetWarning, setShowScaryResetWarning] = useState(false);
     const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+    const [exporting, setExporting] = useState(false);
+    const [importing, setImporting] = useState(false);
+    const [importError, setImportError] = useState<string | null>(null);
+    const [importPreview, setImportPreview] = useState<{
+      version: number;
+      playlists: Playlist[];
+      liked_songs: Track[];
+      history: any[];
+    } | null>(null);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
+
     useEffect(() => {
       invoke("get_ytdlp_status")
         .then((status: any) => setYtdlpStatus(status))
@@ -134,6 +149,139 @@ export const SettingsView: React.FC<SettingsViewProps> = React.memo(
         showToast(`Failed to reset history: ${err?.message || err}`);
       } finally {
         setResettingHistory(false);
+      }
+    };
+
+    const handleExportLibrary = async () => {
+      setExporting(true);
+      try {
+        const [playlists, history] = await Promise.all([
+          invoke<Playlist[]>("get_playlists").catch(() => []),
+          invoke<any[]>("get_listening_history").catch(() => []),
+        ]);
+        const favorites: Track[] = JSON.parse(localStorage.getItem("sonara_favorites") || "[]");
+
+        const backup = {
+          version: 1,
+          exported_at: Date.now(),
+          generator: "Sonara Stream v0.4.1",
+          playlists,
+          liked_songs: favorites,
+          history,
+        };
+
+        const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const dateStr = new Date().toISOString().slice(0, 10);
+        a.href = url;
+        a.download = `sonara-library-backup-${dateStr}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast("Library backup exported successfully!");
+      } catch (err: any) {
+        showToast(`Export failed: ${err?.message || err}`);
+      } finally {
+        setExporting(false);
+      }
+    };
+
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      setImportError(null);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const content = event.target?.result as string;
+          const data = JSON.parse(content);
+          if (!data || typeof data !== "object") {
+            setImportError("Invalid backup format: root must be a JSON object.");
+            return;
+          }
+          if (typeof data.version !== "number") {
+            setImportError("Missing or invalid schema version in backup file.");
+            return;
+          }
+          const playlists: Playlist[] = Array.isArray(data.playlists) ? data.playlists : [];
+          const liked_songs: Track[] = Array.isArray(data.liked_songs)
+            ? data.liked_songs
+            : Array.isArray(data.favorites)
+            ? data.favorites
+            : [];
+          const history: any[] = Array.isArray(data.history) ? data.history : [];
+
+          if (playlists.length === 0 && liked_songs.length === 0 && history.length === 0) {
+            setImportError("Backup file contains no playlists, liked songs, or history entries.");
+            return;
+          }
+
+          setImportPreview({
+            version: data.version,
+            playlists,
+            liked_songs,
+            history,
+          });
+        } catch (err: any) {
+          setImportError(`Failed to parse backup JSON: ${err?.message || err}`);
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = "";
+    };
+
+    const handleConfirmMerge = async () => {
+      if (!importPreview) return;
+      setImporting(true);
+      try {
+        // 1. Merge Liked Songs (Favorites)
+        let addedFavorites = 0;
+        if (importPreview.liked_songs.length > 0) {
+          const existingFavs: Track[] = JSON.parse(localStorage.getItem("sonara_favorites") || "[]");
+          const seen = new Set(existingFavs.map((t) => t.signature || t.id));
+          const additions: Track[] = [];
+          for (const t of importPreview.liked_songs) {
+            if (t && (t.signature || t.id)) {
+              const key = t.signature || t.id;
+              if (!seen.has(key)) {
+                seen.add(key);
+                additions.push(t);
+              }
+            }
+          }
+          if (additions.length > 0) {
+            const merged = [...existingFavs, ...additions];
+            localStorage.setItem("sonara_favorites", JSON.stringify(merged));
+            window.dispatchEvent(new Event("sonara_favorites_updated"));
+            addedFavorites = additions.length;
+          }
+        }
+
+        // 2. Merge Playlists via Tauri backend command
+        let playlistCount = importPreview.playlists.length;
+        if (playlistCount > 0) {
+          await invoke("merge_imported_playlists", { imported: importPreview.playlists });
+          window.dispatchEvent(new Event("sonara_playlists_updated"));
+        }
+
+        // 3. Merge Listening History via Tauri backend command
+        let historyCount = 0;
+        if (importPreview.history.length > 0) {
+          try {
+            historyCount = await invoke<number>("merge_imported_history", { imported: importPreview.history });
+          } catch {}
+        }
+
+        showToast(
+          `Merged ${playlistCount} playlists, ${addedFavorites} new liked songs, and ${historyCount} history entries into your library!`
+        );
+        setImportPreview(null);
+      } catch (err: any) {
+        showToast(`Import merge failed: ${err?.message || err}`);
+      } finally {
+        setImporting(false);
       }
     };
 
@@ -440,6 +588,103 @@ export const SettingsView: React.FC<SettingsViewProps> = React.memo(
                 </div>
               </div>
             )}
+
+            {/* Export / Import Library Backup */}
+            <div style={{ paddingTop: "14px", borderTop: "1px solid var(--border)" }}>
+              <div className="setting-toggle-row" style={{ alignItems: "flex-start" }}>
+                <div>
+                  <div className="toggle-title">Library Backup & Restore</div>
+                  <div className="toggle-subtitle">
+                    Export your playlists, liked songs, and listening history to portable JSON or merge an existing backup
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button
+                    type="button"
+                    className="settings-action-btn"
+                    onClick={handleExportLibrary}
+                    disabled={exporting}
+                  >
+                    <Download size={14} />
+                    <span>{exporting ? "Exporting..." : "Export Library"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="settings-action-btn"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Upload size={14} />
+                    <span>Import Library</span>
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".json,application/json"
+                    style={{ display: "none" }}
+                    onChange={handleFileSelect}
+                    data-testid="library-file-input"
+                  />
+                </div>
+              </div>
+
+              {/* Import Error Banner */}
+              {importError && (
+                <div
+                  style={{
+                    marginTop: "12px",
+                    padding: "10px 14px",
+                    borderRadius: "8px",
+                    background: "rgba(239, 68, 68, 0.1)",
+                    border: "1px solid rgba(239, 68, 68, 0.3)",
+                    color: "#ef4444",
+                    fontSize: "12px",
+                  }}
+                >
+                  {importError}
+                </div>
+              )}
+
+              {/* Import Preview Box */}
+              {importPreview && (
+                <div className="import-preview-box">
+                  <div className="import-preview-header">
+                    <FileJson size={16} />
+                    <span>Library Backup Preview (Schema v{importPreview.version})</span>
+                  </div>
+                  <div style={{ fontSize: "13px", color: "#fff", fontWeight: 500 }}>
+                    {`${importPreview.playlists.length} playlists, ${importPreview.liked_songs.length} liked songs, ${importPreview.history.length} history entries`}
+                  </div>
+                  <div className="import-preview-stats">
+                    <span className="import-stat-chip">📁 {importPreview.playlists.length} Playlists</span>
+                    <span className="import-stat-chip">❤️ {importPreview.liked_songs.length} Liked Songs</span>
+                    <span className="import-stat-chip">🕒 {importPreview.history.length} History Logs</span>
+                  </div>
+                  <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>
+                    Tracks will be deduplicated against your current library by track ID and audio signature. No existing items will be overwritten.
+                  </div>
+                  <div className="scary-actions" style={{ marginTop: "8px" }}>
+                    <button
+                      type="button"
+                      className="settings-action-btn"
+                      style={{ background: "var(--accent)", color: "#12141a", borderColor: "var(--accent)" }}
+                      onClick={handleConfirmMerge}
+                      disabled={importing}
+                    >
+                      <CheckCircle2 size={14} />
+                      <span>{importing ? "Merging..." : "Merge into Library"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="settings-action-btn"
+                      onClick={() => setImportPreview(null)}
+                      disabled={importing}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

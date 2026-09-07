@@ -482,6 +482,35 @@ pub fn reset_listening_history() -> Result<(), String> {
     Ok(())
 }
 
+pub fn merge_history_records(existing: &mut Vec<PlayHistoryEntry>, imported: Vec<PlayHistoryEntry>) -> usize {
+    let existing_keys: std::collections::HashSet<(String, u64)> = existing
+        .iter()
+        .map(|e| (e.signature.clone(), e.played_at_unix))
+        .collect();
+
+    let mut added_count = 0;
+    for entry in imported {
+        let key = (entry.signature.clone(), entry.played_at_unix);
+        if !existing_keys.contains(&key) {
+            existing.push(entry);
+            added_count += 1;
+        }
+    }
+    if existing.len() > MAX_HISTORY_ENTRIES {
+        let excess = existing.len() - MAX_HISTORY_ENTRIES;
+        existing.drain(0..excess);
+    }
+    added_count
+}
+
+#[tauri::command]
+pub fn merge_imported_history(imported: Vec<PlayHistoryEntry>) -> Result<usize, String> {
+    let mut guard = get_history().lock().map_err(|e| e.to_string())?;
+    let added = merge_history_records(&mut guard, imported);
+    save_history_to_disk(&guard);
+    Ok(added)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -591,5 +620,35 @@ mod tests {
         // Oldest (0..99) should have been pruned
         assert_eq!(guard.first().unwrap().played_at_unix, 100);
         assert_eq!(guard.last().unwrap().played_at_unix, 599);
+    }
+
+    #[test]
+    fn test_merge_imported_history_deduplication() {
+        let entry1 = PlayHistoryEntry {
+            signature: "sig_1".into(),
+            track: dummy_track("1", "Title 1", "Artist 1", "sig_1"),
+            artist: "Artist 1".into(),
+            played_at_unix: 1000,
+            completed: true,
+            skipped_before_seconds: None,
+        };
+        let mut existing = vec![entry1.clone()];
+
+        // Import entry1 again and entry2 new
+        let imported = vec![
+            entry1,
+            PlayHistoryEntry {
+                signature: "sig_2".into(),
+                track: dummy_track("2", "Title 2", "Artist 2", "sig_2"),
+                artist: "Artist 2".into(),
+                played_at_unix: 2000,
+                completed: false,
+                skipped_before_seconds: Some(10),
+            },
+        ];
+
+        let added = merge_history_records(&mut existing, imported);
+        assert_eq!(added, 1);
+        assert_eq!(existing.len(), 2);
     }
 }

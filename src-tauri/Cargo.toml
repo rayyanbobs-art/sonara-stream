@@ -1,6 +1,6 @@
 [package]
 name = "sonara-stream"
-version = "0.4.1"
+version = "0.5.0"
 description = "A sleek instant streaming music player"
 edition = "2021"
 

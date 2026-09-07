@@ -1,4 +1,4 @@
-﻿use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Manager;
 
 const SEVEN_DAYS_SECS: u64 = 7 * 86400;
-const USER_AGENT: &str = "SonaraStream/0.4.1 (https://github.com/rayyanbobs-art/sonara-stream)";
+const USER_AGENT: &str = "SonaraStream/0.5.0 (https://github.com/rayyanbobs-art/sonara-stream)";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LyricsRecord {

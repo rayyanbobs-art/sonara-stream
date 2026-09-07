@@ -164,7 +164,7 @@ export const SettingsView: React.FC<SettingsViewProps> = React.memo(
         const backup = {
           version: 1,
           exported_at: Date.now(),
-          generator: "Sonara Stream v0.4.1",
+          generator: "Sonara Stream v0.5.0",
           playlists,
           liked_songs: favorites,
           history,
@@ -873,7 +873,7 @@ export const SettingsView: React.FC<SettingsViewProps> = React.memo(
                 A high-speed, lightweight desktop music player engineered with Rust, Tauri 2, and React. Focused on zero
                 telemetry, local privacy, and direct audio streaming without permanent disk storage.
               </p>
-              <span className="version-tag">v0.4.1 (Stream Edition)</span>
+              <span className="version-tag">v0.5.0 (Stream Edition)</span>
             </div>
           </div>
 

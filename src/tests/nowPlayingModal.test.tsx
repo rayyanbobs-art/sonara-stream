@@ -18,6 +18,7 @@ const mockTrack: Track = {
   thumbnail: "https://example.com/art.jpg",
   duration: 240,
   source: "youtube",
+  signature: "sig_fullscreen_1",
 };
 
 describe("getDominantColor", () => {

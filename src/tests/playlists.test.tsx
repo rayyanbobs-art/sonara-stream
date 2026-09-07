@@ -20,6 +20,7 @@ const sampleTrack1: Track = {
   thumbnail: "https://example.com/t1.jpg",
   duration: 180,
   source: "youtube",
+  signature: "sig_t1",
 };
 
 const sampleTrack2: Track = {
@@ -29,6 +30,7 @@ const sampleTrack2: Track = {
   thumbnail: "https://example.com/t2.jpg",
   duration: 210,
   source: "youtube",
+  signature: "sig_t2",
 };
 
 const samplePlaylist: Playlist = {

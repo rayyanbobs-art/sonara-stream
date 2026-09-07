@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { Users, Music, Clock, ChevronRight, Search, Play } from "lucide-react";
 import { Track } from "../types";
 import { getOptimizedThumbnail } from "../utils/thumbnail";
@@ -119,7 +119,7 @@ export const ArtistsView: React.FC<ArtistsViewProps> = React.memo(({
           >
             <div className="artist-avatar-wrapper">
               <img
-                src={getOptimizedThumbnail(artist.thumbnail, "detail")}
+                src={getOptimizedThumbnail(artist.thumbnail, "card")}
                 alt={artist.name}
                 className="artist-avatar"
                 loading="lazy"

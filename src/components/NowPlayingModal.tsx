@@ -185,7 +185,7 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = React.memo(({
         <div className="np-left-section">
           <div className="np-art-wrapper">
             <img
-              src={getOptimizedThumbnail(currentTrack.thumbnail, "detail")}
+              src={getOptimizedThumbnail(currentTrack.thumbnail, "full")}
               alt={currentTrack.title}
               className="np-large-art"
             />

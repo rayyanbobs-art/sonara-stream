@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { useMediaControls } from "../hooks/useMediaControls";
 import { Track } from "../types";
@@ -26,6 +26,7 @@ const mockTrack: Track = {
   thumbnail: "https://example.com/art.jpg",
   duration: 200,
   source: "youtube",
+  signature: "sig_media_1",
 };
 
 describe("useMediaControls Hook", () => {

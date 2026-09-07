@@ -581,7 +581,6 @@ export default function App() {
               onPlayTrack={handlePlayTrack}
               onPrefetchTrack={handlePrefetchTrack}
               onToggleFavorite={toggleFavorite}
-              isFavorite={isFavorite}
               onBrowse={handleBackToHome}
               onOpenContextMenu={handleOpenContextMenu}
             />

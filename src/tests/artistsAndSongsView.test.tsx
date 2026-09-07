@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import React from "react";
 import { ArtistsView } from "../views/ArtistsView";
@@ -19,6 +19,7 @@ const mockTracks: Track[] = [
     thumbnail: "https://example.com/beatles.jpg",
     duration: 180,
     source: "youtube",
+    signature: "sig_t1",
   },
   {
     id: "t2",
@@ -27,6 +28,7 @@ const mockTracks: Track[] = [
     thumbnail: "https://example.com/beatles2.jpg",
     duration: 210,
     source: "youtube",
+    signature: "sig_t2",
   },
   {
     id: "t3",
@@ -35,6 +37,7 @@ const mockTracks: Track[] = [
     thumbnail: "https://example.com/dualipa.jpg",
     duration: 240,
     source: "youtube",
+    signature: "sig_t3",
   },
 ];
 

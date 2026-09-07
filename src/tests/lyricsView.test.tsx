@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import React from "react";
 import { LyricsView } from "../components/LyricsView";
@@ -17,6 +17,7 @@ const mockTrack: Track = {
   thumbnail: "https://example.com/art.jpg",
   duration: 354,
   source: "youtube",
+  signature: "sig_lyric_1",
 };
 
 describe("LyricsView Component", () => {

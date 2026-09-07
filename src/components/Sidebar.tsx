@@ -2,34 +2,38 @@ import React from "react";
 import {
   Home,
   Music,
-  User,
-  Disc,
+  Users,
   Heart,
   Plus,
   Settings,
   Radio,
+  ListMusic,
 } from "lucide-react";
-import { NavTab } from "../types";
+import { NavTab, Playlist } from "../types";
 
 interface SidebarProps {
   activeTab: NavTab;
   onTabChange: (tab: NavTab) => void;
-  onSelectMix?: (mix: string) => void;
-  playlistCount?: number;
+  playlists?: Playlist[];
+  activePlaylistId?: string | null;
+  onSelectPlaylist?: (id: string) => void;
+  onCreatePlaylist?: () => void;
 }
 
 const libraryItems = [
   { id: "home" as NavTab, label: "Home", icon: Home },
   { id: "songs" as NavTab, label: "Songs", icon: Music },
-  { id: "favorites" as NavTab, label: "Favorites", icon: Heart },
+  { id: "artists" as NavTab, label: "Artists", icon: Users },
 ];
 
 export const Sidebar: React.FC<SidebarProps> = React.memo(({
   activeTab,
   onTabChange,
-  onSelectMix,
+  playlists = [],
+  activePlaylistId,
+  onSelectPlaylist,
+  onCreatePlaylist,
 }) => {
-
   return (
     <aside className="sonara-sidebar">
       {/* Brand / Logo */}
@@ -63,33 +67,50 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
         </nav>
       </div>
 
-      {/* Curated Mixes Group */}
+      {/* Real User Playlists Group */}
       <div className="sidebar-group">
         <div className="sidebar-group-header">
-          <span className="sidebar-group-title">Curated Mixes</span>
+          <span className="sidebar-group-title">Playlists</span>
+          {onCreatePlaylist && (
+            <button
+              type="button"
+              className="sidebar-add-playlist-btn"
+              onClick={onCreatePlaylist}
+              title="Create Playlist"
+              aria-label="Create Playlist"
+            >
+              <Plus size={14} />
+            </button>
+          )}
         </div>
         <nav className="sidebar-menu playlists">
+          {/* Liked Songs auto-playlist backed by favorites */}
           <button
             type="button"
-            className="sidebar-playlist-item"
-            onClick={() => onSelectMix ? onSelectMix("Trending Hits") : onTabChange("home")}
-          >
-            🔥 Top Global Hits
-          </button>
-          <button
-            type="button"
-            className="sidebar-playlist-item"
-            onClick={() => onSelectMix ? onSelectMix("Lofi Beats") : onTabChange("home")}
-          >
-            🎧 Lofi Study Beats
-          </button>
-          <button
-            type="button"
-            className="sidebar-playlist-item"
+            className={`sidebar-playlist-item ${activeTab === "favorites" ? "active" : ""}`}
             onClick={() => onTabChange("favorites")}
           >
-            💖 Liked Collection
+            <Heart size={14} fill={activeTab === "favorites" ? "currentColor" : "none"} className="liked-songs-icon" />
+            <span>Liked Songs</span>
           </button>
+
+          {/* User playlists */}
+          {playlists.map((playlist) => {
+            const isActive = activeTab === "playlist" && activePlaylistId === playlist.id;
+            return (
+              <button
+                key={playlist.id}
+                type="button"
+                className={`sidebar-playlist-item ${isActive ? "active" : ""}`}
+                onClick={() => onSelectPlaylist?.(playlist.id)}
+              >
+                <ListMusic size={14} />
+                <span className="sidebar-playlist-title" title={playlist.name}>
+                  {playlist.name}
+                </span>
+              </button>
+            );
+          })}
         </nav>
       </div>
 

@@ -19,6 +19,9 @@ import { Track, NavTab, AccentColor } from "./types";
 import { useFavorites } from "./hooks/useFavorites";
 import { useAudioPlayer } from "./hooks/useAudioPlayer";
 import { useQueue } from "./hooks/useQueue";
+import { usePlaylists } from "./hooks/usePlaylists";
+import { PlaylistView } from "./views/PlaylistView";
+import { TrackContextMenu } from "./components/TrackContextMenu";
 import { PerfOverlay } from "./components/PerfOverlay";
 import { perf } from "./utils/perf";
 import "./App.css";
@@ -47,6 +50,25 @@ export default function App() {
   });
 
   const { favorites, isFavorite, toggleFavorite } = useFavorites();
+  const {
+    playlists,
+    activePlaylistId,
+    setActivePlaylistId,
+    activePlaylist,
+    createPlaylist,
+    renamePlaylist,
+    deletePlaylist,
+    addTrackToPlaylist,
+    removeTrackFromPlaylist,
+    reorderPlaylistTracks,
+    playlistsRecentFirst,
+  } = usePlaylists();
+
+  const [contextMenu, setContextMenu] = useState<{
+    track: Track;
+    x: number;
+    y: number;
+  } | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [source, setSource] = useState<"youtube" | "spotify">("youtube");
@@ -150,10 +172,12 @@ export default function App() {
         return songsList;
       case "favorites":
         return favorites;
+      case "playlist":
+        return activePlaylist?.tracks || [];
       default:
         return recommendations;
     }
-  }, [activeTab, searchResults, songsList, favorites, recommendations]);
+  }, [activeTab, searchResults, songsList, favorites, activePlaylist, recommendations]);
 
   const {
     upNextMix,
@@ -363,6 +387,62 @@ export default function App() {
     setErrorMessage(null);
   }, []);
 
+  const handleOpenContextMenu = useCallback((track: Track, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ track, x: e.clientX, y: e.clientY });
+  }, []);
+
+  const handleCloseContextMenu = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
+  const handleSelectPlaylist = useCallback((id: string) => {
+    setActivePlaylistId(id);
+    setActiveTab("playlist");
+  }, [setActivePlaylistId]);
+
+  const handleCreatePlaylist = useCallback(async () => {
+    const defaultName = `My Playlist #${playlists.length + 1}`;
+    const name = window.prompt("Playlist name:", defaultName);
+    if (name && name.trim()) {
+      const created = await createPlaylist(name.trim());
+      if (created) {
+        setActivePlaylistId(created.id);
+        setActiveTab("playlist");
+      }
+    }
+  }, [playlists.length, createPlaylist, setActivePlaylistId]);
+
+  const handlePlayPlaylist = useCallback((tracks: Track[], shuffle = false) => {
+    if (tracks.length === 0) return;
+    let listToPlay = [...tracks];
+    if (shuffle) {
+      for (let i = listToPlay.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [listToPlay[i], listToPlay[j]] = [listToPlay[j], listToPlay[i]];
+      }
+    }
+    const [first, ...rest] = listToPlay;
+    handlePlayTrack(first);
+    setUpNextMix(rest);
+  }, [handlePlayTrack, setUpNextMix]);
+
+  const handleSaveQueueAsPlaylist = useCallback(async (tracks: Track[]) => {
+    if (tracks.length === 0) return;
+    const dateStr = new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    const name = window.prompt("Save queue as playlist:", `Queue ${dateStr}`);
+    if (!name || !name.trim()) return;
+    const created = await createPlaylist(name.trim());
+    if (created) {
+      for (const t of tracks) {
+        await addTrackToPlaylist(created.id, t);
+      }
+      setActivePlaylistId(created.id);
+      setActiveTab("playlist");
+    }
+  }, [createPlaylist, addTrackToPlaylist, setActivePlaylistId]);
+
   const handleDismissUpdate = useCallback(() => {
     setAvailableUpdate(null);
   }, []);
@@ -375,7 +455,10 @@ export default function App() {
       <Sidebar
         activeTab={activeTab}
         onTabChange={handleTabChange}
-        onSelectMix={handleSelectMix}
+        playlists={playlists}
+        activePlaylistId={activePlaylistId}
+        onSelectPlaylist={handleSelectPlaylist}
+        onCreatePlaylist={handleCreatePlaylist}
       />
 
       {/* Main Container */}
@@ -456,6 +539,7 @@ export default function App() {
               onToggleFavorite={toggleFavorite}
               isFavorite={isFavorite}
               onBrowse={handleBackToHome}
+              onOpenContextMenu={handleOpenContextMenu}
             />
           )}
 
@@ -467,8 +551,40 @@ export default function App() {
               onPlayTrack={handlePlayTrack}
               onPrefetchTrack={handlePrefetchTrack}
               onToggleFavorite={toggleFavorite}
+              isFavorite={isFavorite}
               onBrowse={handleBackToHome}
+              onOpenContextMenu={handleOpenContextMenu}
             />
+          )}
+
+          {activeTab === "playlist" && (
+            activePlaylist ? (
+              <PlaylistView
+                playlist={activePlaylist}
+                currentTrack={currentTrack}
+                isPlaying={isPlaying}
+                onPlayTrack={handlePlayTrack}
+                onPlayPlaylist={handlePlayPlaylist}
+                onRenamePlaylist={renamePlaylist}
+                onDeletePlaylist={async (id) => {
+                  await deletePlaylist(id);
+                  setActiveTab("home");
+                }}
+                onRemoveTrack={removeTrackFromPlaylist}
+                onReorderTracks={reorderPlaylistTracks}
+                onToggleFavorite={toggleFavorite}
+                isFavorite={isFavorite}
+                onOpenContextMenu={handleOpenContextMenu}
+              />
+            ) : (
+              <div className="sonara-empty-panel">
+                <h3 className="empty-panel-title">No Playlist Selected</h3>
+                <p className="empty-panel-desc">Select a playlist from the sidebar or create a new one.</p>
+                <button type="button" className="empty-action-btn" onClick={handleCreatePlaylist}>
+                  + Create Playlist
+                </button>
+              </div>
+            )
           )}
 
           {activeTab === "settings" && (
@@ -526,6 +642,7 @@ export default function App() {
         onRemoveFromUserQueue={removeFromUserQueue}
         onClearUserQueue={clearUserQueue}
         onReorderUserQueue={reorderUserQueue}
+        onSaveQueueAsPlaylist={handleSaveQueueAsPlaylist}
         isPlaying={isPlaying}
       />
 
@@ -543,6 +660,28 @@ export default function App() {
           update={availableUpdate}
           isPlaying={isPlaying}
           onDismiss={handleDismissUpdate}
+        />
+      )}
+
+      {/* Track Context Menu */}
+      {contextMenu && (
+        <TrackContextMenu
+          track={contextMenu.track}
+          playlists={playlistsRecentFirst}
+          isOpen={true}
+          position={{ x: contextMenu.x, y: contextMenu.y }}
+          onClose={handleCloseContextMenu}
+          onPlayNext={playNextInQueue}
+          onAddToQueue={addToUserQueue}
+          onAddToPlaylist={addTrackToPlaylist}
+          onCreateAndAddToPlaylist={async (name, track) => {
+            const created = await createPlaylist(name);
+            if (created) {
+              await addTrackToPlaylist(created.id, track);
+            }
+          }}
+          isFavorite={isFavorite(contextMenu.track.id)}
+          onToggleFavorite={toggleFavorite}
         />
       )}
     </div>

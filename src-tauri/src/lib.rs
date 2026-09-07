@@ -1,7 +1,8 @@
-﻿mod youtube;
+mod youtube;
 mod spotify;
 mod ytdlp_updater;
 mod recommend;
+mod playlist;
 
 use tauri::Manager;
 
@@ -29,7 +30,8 @@ pub fn run() {
             if let Ok(app_data) = app.path().app_data_dir() {
                 let manager = ytdlp_updater::init_manager(app_data.clone());
                 recommend::init_recommendations(app_data.clone());
-                youtube::init_search_cache(app_data);
+                youtube::init_search_cache(app_data.clone());
+                playlist::init_playlists(app_data);
 
                 #[cfg(desktop)]
                 {
@@ -56,6 +58,13 @@ pub fn run() {
             recommend::get_recommendations,
             recommend::build_radio,
             recommend::record_play_event,
+            playlist::get_playlists,
+            playlist::create_playlist,
+            playlist::rename_playlist,
+            playlist::delete_playlist,
+            playlist::add_track_to_playlist,
+            playlist::remove_track_from_playlist,
+            playlist::reorder_playlist_tracks,
         ])
         .run(tauri::generate_context!())
         .expect("error while running sonara-stream application");

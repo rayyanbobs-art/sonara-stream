@@ -12,6 +12,7 @@ interface FavoritesViewProps {
   onPrefetchTrack?: (track: Track) => void;
   onToggleFavorite: (track: Track) => void;
   onBrowse: () => void;
+  onOpenContextMenu?: (track: Track, e: React.MouseEvent) => void;
 }
 
 const formatDuration = (secs: number): string => {
@@ -29,6 +30,7 @@ export const FavoritesView: React.FC<FavoritesViewProps> = React.memo(({
   onPrefetchTrack,
   onToggleFavorite,
   onBrowse,
+  onOpenContextMenu,
 }) => {
   const tableWrapRef = useRef<HTMLDivElement>(null);
 
@@ -105,6 +107,7 @@ export const FavoritesView: React.FC<FavoritesViewProps> = React.memo(({
                   className={`table-row ${isCurrent ? "current" : ""}`}
                   onClick={() => onPlayTrack(track)}
                   onMouseEnter={() => onPrefetchTrack?.(track)}
+                  onContextMenu={(e) => onOpenContextMenu?.(track, e)}
                 >
                   <td className="row-index">
                     <span className="index-num">{index + 1}</span>

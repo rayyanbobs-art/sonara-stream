@@ -9,8 +9,17 @@ export interface Track {
   addedAt?: number;
 }
 
+export interface Playlist {
+  id: string;
+  name: string;
+  tracks: Track[];
+  created_at: number;
+  updated_at: number;
+}
+
 export type AccentColor = "gold" | "green" | "blue" | "purple" | "red";
 
-export type NavTab = "home" | "search" | "songs" | "favorites" | "settings";
+export type NavTab = "home" | "search" | "songs" | "artists" | "favorites" | "settings" | "playlist";
 
 export type RepeatMode = "off" | "all" | "one";
+

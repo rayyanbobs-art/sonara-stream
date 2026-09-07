@@ -84,7 +84,97 @@ export const Player: React.FC<PlayerProps> = ({
 
   return (
     <footer className="sonara-player">
-      <div className="player-content-grid">
+      {/* Mobile Mini-Player View */}
+      <div className="player-mobile-view">
+        <div
+          className="player-mobile-content"
+          onClick={onToggleFullscreen}
+          style={{ cursor: onToggleFullscreen ? "pointer" : "default" }}
+          role="button"
+          tabIndex={0}
+          aria-label="Open now playing view"
+        >
+          {currentTrack ? (
+            <img
+              src={getOptimizedThumbnail(currentTrack.thumbnail, "list")}
+              alt={currentTrack.title}
+              className="player-mobile-art"
+              loading="lazy"
+            />
+          ) : (
+            <div className="player-mobile-art-placeholder" />
+          )}
+          <div className="player-mobile-labels">
+            <div className="player-mobile-name">
+              {currentTrack ? currentTrack.title : "No song selected"}
+            </div>
+            <div className="player-mobile-sub">
+              {currentTrack ? currentTrack.artist : "Select a song to play"}
+            </div>
+          </div>
+        </div>
+
+        <div className="player-mobile-actions">
+          {currentTrack && (
+            <button
+              type="button"
+              className={`player-fav-btn ${isFavorite ? "fav" : ""}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleFavorite?.();
+              }}
+              title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+              aria-label={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+            >
+              <Heart size={18} fill={isFavorite ? "currentColor" : "none"} />
+            </button>
+          )}
+
+          <button
+            type="button"
+            className="player-play-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              onTogglePlay();
+            }}
+            disabled={!currentTrack}
+            title={isPlaying ? "Pause" : "Play"}
+            aria-label={isPlaying ? "Pause" : "Play"}
+          >
+            {isBuffering ? (
+              <div className="player-buffer-spinner" />
+            ) : isPlaying ? (
+              <Pause size={18} />
+            ) : (
+              <Play size={18} fill="currentColor" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            className="ctrl-icon-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              onNext();
+            }}
+            disabled={!currentTrack}
+            title="Next track"
+            aria-label="Next track"
+          >
+            <SkipForward size={18} />
+          </button>
+        </div>
+
+        <div className="player-mobile-progress-line">
+          <div
+            className="player-mobile-progress-fill"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Desktop Player Grid */}
+      <div className="player-content-grid player-desktop-view">
         {/* Left: Track Details */}
         <div className="player-left">
           {currentTrack ? (

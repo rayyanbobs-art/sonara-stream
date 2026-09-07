@@ -10,15 +10,28 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 
-
 class MainActivity : TauriActivity() {
-    private var webViewInstance: WebView? = null
+
+    companion object {
+        var webViewInstance: WebView? = null
+
+        fun dispatchMediaEvent(eventName: String, payload: Double? = null) {
+            val js = if (payload != null) {
+                "window.dispatchEvent(new CustomEvent('$eventName', { detail: $payload }));"
+            } else {
+                "window.dispatchEvent(new CustomEvent('$eventName'));"
+            }
+            webViewInstance?.post {
+                webViewInstance?.evaluateJavascript(js, null)
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         hideSystemNavigation()
 
-        // Start Foreground Service to guarantee continuous background audio & screen lock playback
+        // Start Foreground Media Service for Spotify-like lockscreen & background audio
         try {
             val serviceIntent = Intent(this, MediaPlaybackService::class.java)
             ContextCompat.startForegroundService(this, serviceIntent)
@@ -26,7 +39,7 @@ class MainActivity : TauriActivity() {
             e.printStackTrace()
         }
 
-        // Prompt for notification permission on Android 13+ (Tiramisu) if not granted
+        // Prompt for notification permission on Android 13+ (Tiramisu)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101)
@@ -54,7 +67,28 @@ class MainActivity : TauriActivity() {
             }
         }, "AndroidNative")
 
-        // Handle any direct file download navigations
+        // Native Media Session bridge for rich background notification & Control Center controls
+        webView.addJavascriptInterface(object {
+            @android.webkit.JavascriptInterface
+            fun updateMetadata(
+                title: String,
+                artist: String,
+                album: String?,
+                coverUrl: String?,
+                durationSecs: Double,
+                isPlaying: Boolean,
+                positionSecs: Double
+            ) {
+                MediaPlaybackService.updateTrack(title, artist, album, coverUrl, durationSecs, isPlaying, positionSecs)
+            }
+
+            @android.webkit.JavascriptInterface
+            fun updatePlaybackState(isPlaying: Boolean, positionSecs: Double) {
+                MediaPlaybackService.updateState(isPlaying, positionSecs)
+            }
+        }, "AndroidMedia")
+
+        // Handle direct file download navigations
         webView.setDownloadListener { url, _, _, _, _ ->
             try {
                 val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)).apply {
@@ -89,7 +123,7 @@ class MainActivity : TauriActivity() {
         controller.hide(WindowInsetsCompat.Type.navigationBars())
         controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
 
-        // Legacy flags for Android 9 Pie (e.g. LG G Pad 5 10.1 FHD) and Android 10
+        // Legacy flags for Android 9 / 10
         window.decorView.systemUiVisibility = (
             View.SYSTEM_UI_FLAG_LAYOUT_STABLE
             or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
@@ -100,13 +134,11 @@ class MainActivity : TauriActivity() {
 
     override fun onPause() {
         super.onPause()
-        // Prevent WebView from freezing audio/network when app is minimized
         resumeWebViewBackground()
     }
 
     override fun onStop() {
         super.onStop()
-        // Prevent WebView from stopping playback when screen is locked
         resumeWebViewBackground()
     }
 
@@ -115,12 +147,9 @@ class MainActivity : TauriActivity() {
             webViewInstance?.onResume()
             webViewInstance?.resumeTimers()
 
-            // Notify WebView engine that window is visible to prevent media suspension
             val method = View::class.java.getDeclaredMethod("onWindowVisibilityChanged", Int::class.javaPrimitiveType)
             method.isAccessible = true
             method.invoke(webViewInstance, View.VISIBLE)
-        } catch (e: Exception) {
-            // Ignore reflection errors if restricted by newer Android hidden API policies
-        }
+        } catch (_: Exception) {}
     }
 }

@@ -32,7 +32,7 @@ export function useMediaControls({
     callbacksRef.current = { onTogglePlay, onNext, onPrev, onSeek, isPlaying };
   }, [onTogglePlay, onNext, onPrev, onSeek, isPlaying]);
 
-  // Listen to OS media key events emitted from Rust backend
+  // 1. Listen to Desktop OS media keys (Windows SMTC / Linux MPRIS)
   useEffect(() => {
     if (!isTauri) return;
 
@@ -45,14 +45,10 @@ export function useMediaControls({
           const action = event.payload;
           switch (action) {
             case "play":
-              if (!callbacksRef.current.isPlaying) {
-                callbacksRef.current.onTogglePlay();
-              }
+              if (!callbacksRef.current.isPlaying) callbacksRef.current.onTogglePlay();
               break;
             case "pause":
-              if (callbacksRef.current.isPlaying) {
-                callbacksRef.current.onTogglePlay();
-              }
+              if (callbacksRef.current.isPlaying) callbacksRef.current.onTogglePlay();
               break;
             case "toggle":
               callbacksRef.current.onTogglePlay();
@@ -64,9 +60,7 @@ export function useMediaControls({
               callbacksRef.current.onPrev();
               break;
             case "stop":
-              if (callbacksRef.current.isPlaying) {
-                callbacksRef.current.onTogglePlay();
-              }
+              if (callbacksRef.current.isPlaying) callbacksRef.current.onTogglePlay();
               break;
           }
         });
@@ -89,45 +83,127 @@ export function useMediaControls({
     };
   }, [isTauri]);
 
-  // Update OS media metadata when current track changes
+  // 2. Listen to Android Native MediaSession & Notification Actions
   useEffect(() => {
-    if (!isTauri) return;
+    if (typeof window === "undefined") return;
 
+    const handlePlay = () => {
+      if (!callbacksRef.current.isPlaying) callbacksRef.current.onTogglePlay();
+    };
+    const handlePause = () => {
+      if (callbacksRef.current.isPlaying) callbacksRef.current.onTogglePlay();
+    };
+    const handleToggle = () => {
+      callbacksRef.current.onTogglePlay();
+    };
+    const handleNext = () => {
+      callbacksRef.current.onNext();
+    };
+    const handlePrev = () => {
+      callbacksRef.current.onPrev();
+    };
+    const handleSeek = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (typeof detail === "number") {
+        callbacksRef.current.onSeek(detail);
+      }
+    };
+
+    window.addEventListener("sonara-media-play", handlePlay);
+    window.addEventListener("sonara-media-pause", handlePause);
+    window.addEventListener("sonara-media-toggle", handleToggle);
+    window.addEventListener("sonara-media-next", handleNext);
+    window.addEventListener("sonara-media-prev", handlePrev);
+    window.addEventListener("sonara-media-seek", handleSeek);
+
+    return () => {
+      window.removeEventListener("sonara-media-play", handlePlay);
+      window.removeEventListener("sonara-media-pause", handlePause);
+      window.removeEventListener("sonara-media-toggle", handleToggle);
+      window.removeEventListener("sonara-media-next", handleNext);
+      window.removeEventListener("sonara-media-prev", handlePrev);
+      window.removeEventListener("sonara-media-seek", handleSeek);
+    };
+  }, []);
+
+  // 3. Update OS Media Metadata (Desktop Rust + Android Native MediaSession)
+  useEffect(() => {
     if (!currentTrack) {
-      invoke("clear_media_controls").catch(() => {});
+      if (isTauri) invoke("clear_media_controls").catch(() => {});
       return;
     }
 
-    invoke("update_media_metadata", {
-      title: currentTrack.title,
-      artist: currentTrack.artist,
-      album: currentTrack.artist,
-      coverUrl: getOptimizedThumbnail(currentTrack.thumbnail, "card"),
-      durationSecs: duration || currentTrack.duration,
-      isPlaying,
-      positionSecs: currentTime,
-    }).catch((err) => console.debug("update_media_metadata error:", err));
-  }, [isTauri, currentTrack?.id]);
+    const coverUrl = getOptimizedThumbnail(currentTrack.thumbnail, "card");
+    const durSecs = duration || currentTrack.duration;
 
-  // Update OS playback state immediately when play/pause changes
+    // Desktop
+    if (isTauri) {
+      invoke("update_media_metadata", {
+        title: currentTrack.title,
+        artist: currentTrack.artist,
+        album: currentTrack.artist,
+        coverUrl,
+        durationSecs: durSecs,
+        isPlaying,
+        positionSecs: currentTime,
+      }).catch((err) => console.debug("update_media_metadata error:", err));
+    }
+
+    // Android Native MediaSession bridge
+    if (typeof window !== "undefined" && typeof (window as any).AndroidMedia?.updateMetadata === "function") {
+      try {
+        (window as any).AndroidMedia.updateMetadata(
+          currentTrack.title,
+          currentTrack.artist,
+          currentTrack.artist,
+          coverUrl,
+          durSecs,
+          isPlaying,
+          currentTime
+        );
+      } catch (err) {
+        console.debug("AndroidMedia updateMetadata error:", err);
+      }
+    }
+  }, [isTauri, currentTrack?.id, currentTrack?.title, currentTrack?.artist]);
+
+  // 4. Update Playback State (Playing / Paused)
   useEffect(() => {
-    if (!isTauri || !currentTrack) return;
+    if (!currentTrack) return;
 
-    invoke("update_playback_state", {
-      isPlaying,
-      positionSecs: currentTime,
-    }).catch(() => {});
-  }, [isTauri, isPlaying]);
-
-  // Update OS playback timeline position every ~5s while playing
-  useEffect(() => {
-    if (!isTauri || !isPlaying || !currentTrack) return;
-
-    const interval = setInterval(() => {
+    if (isTauri) {
       invoke("update_playback_state", {
-        isPlaying: true,
+        isPlaying,
         positionSecs: currentTime,
       }).catch(() => {});
+    }
+
+    if (typeof window !== "undefined" && typeof (window as any).AndroidMedia?.updatePlaybackState === "function") {
+      try {
+        (window as any).AndroidMedia.updatePlaybackState(isPlaying, currentTime);
+      } catch (err) {
+        console.debug("AndroidMedia updatePlaybackState error:", err);
+      }
+    }
+  }, [isTauri, isPlaying]);
+
+  // 5. Periodic playback timeline sync
+  useEffect(() => {
+    if (!isPlaying || !currentTrack) return;
+
+    const interval = setInterval(() => {
+      if (isTauri) {
+        invoke("update_playback_state", {
+          isPlaying: true,
+          positionSecs: currentTime,
+        }).catch(() => {});
+      }
+
+      if (typeof window !== "undefined" && typeof (window as any).AndroidMedia?.updatePlaybackState === "function") {
+        try {
+          (window as any).AndroidMedia.updatePlaybackState(true, currentTime);
+        } catch (_) {}
+      }
     }, 5000);
 
     return () => clearInterval(interval);

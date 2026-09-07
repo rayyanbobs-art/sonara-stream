@@ -91,8 +91,10 @@ describe("UI Performance: Virtualization and Lazy Loading", () => {
       />
     );
 
-    const playerArt = screen.getByAltText(mockTrack.title);
-    expect(playerArt).toBeDefined();
-    expect(playerArt.getAttribute("loading")).toBe("lazy");
+    const playerArts = screen.getAllByAltText(mockTrack.title);
+    expect(playerArts.length).toBeGreaterThanOrEqual(1);
+    playerArts.forEach((art) => {
+      expect(art.getAttribute("loading")).toBe("lazy");
+    });
   });
 });

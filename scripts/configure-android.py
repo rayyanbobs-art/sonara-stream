@@ -58,6 +58,7 @@ def configure_android():
     required_permissions = [
         "android.permission.INTERNET",
         "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.ACCESS_WIFI_STATE",
         "android.permission.WAKE_LOCK",
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
@@ -84,7 +85,34 @@ def configure_android():
     with open(manifest_path, "w", encoding="utf-8") as f:
         f.write(content)
 
-    print("AndroidManifest.xml successfully configured!")
+    # 3. Patch app/build.gradle.kts for androidx.media dependency
+    gradle_path = os.path.join(gen_android_dir, "app", "build.gradle.kts")
+    if os.path.exists(gradle_path):
+        with open(gradle_path, "r", encoding="utf-8") as f:
+            gradle_content = f.read()
+        if "androidx.media:media" not in gradle_content:
+            gradle_content = gradle_content.replace(
+                "dependencies {",
+                'dependencies {\n    implementation("androidx.media:media:1.7.0")'
+            )
+            with open(gradle_path, "w", encoding="utf-8") as f:
+                f.write(gradle_content)
+            print("Added androidx.media:media:1.7.0 dependency to build.gradle.kts")
+    else:
+        gradle_groovy_path = os.path.join(gen_android_dir, "app", "build.gradle")
+        if os.path.exists(gradle_groovy_path):
+            with open(gradle_groovy_path, "r", encoding="utf-8") as f:
+                gradle_content = f.read()
+            if "androidx.media:media" not in gradle_content:
+                gradle_content = gradle_content.replace(
+                    "dependencies {",
+                    "dependencies {\n    implementation 'androidx.media:media:1.7.0'"
+                )
+                with open(gradle_groovy_path, "w", encoding="utf-8") as f:
+                    f.write(gradle_content)
+                print("Added androidx.media:media:1.7.0 dependency to build.gradle")
+
+    print("Android configuration complete!")
     return True
 
 if __name__ == "__main__":

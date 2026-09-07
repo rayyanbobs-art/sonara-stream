@@ -4,6 +4,7 @@ import { AlertCircle } from "lucide-react";
 import { checkUnifiedAppUpdate, UnifiedAppUpdate } from "./utils/appUpdater";
 import { UpdateBanner } from "./components/UpdateBanner";
 import { Sidebar } from "./components/Sidebar";
+import { BottomNavBar } from "./components/BottomNavBar";
 import { Header } from "./components/Header";
 import { Player } from "./components/Player";
 import { UpNextDrawer } from "./components/UpNextDrawer";
@@ -659,6 +660,9 @@ export default function App() {
         isQueueOpen={isQueueOpen}
         onToggleFullscreen={() => setIsFullscreenNowPlaying((prev) => !prev)}
       />
+
+      {/* Mobile Bottom Navigation Bar */}
+      <BottomNavBar activeTab={activeTab} onTabChange={handleTabChange} />
 
       {/* Fullscreen Now Playing Modal */}
       <NowPlayingModal

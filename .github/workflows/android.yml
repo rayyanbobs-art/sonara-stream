@@ -57,10 +57,12 @@ jobs:
       - name: Init Tauri Android
         run: bun run tauri android init
 
-      - name: Configure Android Permissions
+      - name: Configure Android Permissions & Compatibility
         run: |
           MANIFEST="src-tauri/gen/android/app/src/main/AndroidManifest.xml"
           if [ -f "$MANIFEST" ]; then
+            # Enable cleartext traffic for Android 9+ network compatibility
+            sed -i 's/<application /<application android:usesCleartextTraffic="true" /g' "$MANIFEST"
             # Ensure permissions are inserted before <application>
             sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />\n    <uses-permission android:name="android.permission.WAKE_LOCK" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />' "$MANIFEST"
           fi
@@ -68,23 +70,47 @@ jobs:
       - name: Build Android APK
         run: bun run tauri android build --apk
 
-      - name: Rename APK for release
+      - name: Sign and Align APK for Release
         run: |
-          find src-tauri/gen/android/app/build/outputs/apk -name "*.apk" -exec cp {} ./SonaraStream-Android.apk \;
-          ls -la ./SonaraStream-Android.apk || true
+          RAW_APK=$(find src-tauri/gen/android/app/build/outputs/apk -name "*.apk" | head -n 1)
+          echo "Found unsigned APK: $RAW_APK"
+
+          BUILD_TOOLS=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -n 1)
+          echo "Using Android build-tools: $BUILD_TOOLS"
+
+          # 4-byte boundary alignment
+          $BUILD_TOOLS/zipalign -v -p 4 "$RAW_APK" SonaraStream-aligned.apk
+
+          # Generate standard release keystore
+          keytool -genkey -v -keystore release.jks -alias sonara \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass sonarastream -keypass sonarastream \
+            -dname "CN=SonaraStream, OU=Audio, O=Sonara, L=Unknown, S=Unknown, C=US"
+
+          # Sign APK with v1 (JAR), v2 (APK Signature v2), and v3 schemes
+          $BUILD_TOOLS/apksigner sign --ks release.jks \
+            --ks-key-alias sonara \
+            --ks-pass pass:sonarastream \
+            --key-pass pass:sonarastream \
+            --v1-signing-enabled true \
+            --v2-signing-enabled true \
+            --v3-signing-enabled true \
+            --out SonaraStream-Android.apk SonaraStream-aligned.apk
+
+          # Verify signature
+          $BUILD_TOOLS/apksigner verify --verbose SonaraStream-Android.apk
+          ls -la SonaraStream-Android.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: SonaraStream-Android-APK
-          path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          path: SonaraStream-Android.apk
 
       - name: Attach APK to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            SonaraStream-Android.apk
-            src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          files: SonaraStream-Android.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

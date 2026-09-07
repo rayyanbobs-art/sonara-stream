@@ -41,20 +41,25 @@ const AppHeader = () => {
       ref={containerRef}
       onMouseDown={isMacOS ? handler : undefined}
       data-tauri-drag-region={isMacOS}
-      className="h-14 p-2 fixed top-2 right-2 left-2 md:left-64 rounded-2xl md:rounded-3xl shadow-md border border-muted-foreground/30 bg-muted/90 md:bg-muted/50 dark:bg-sidebar/90 md:dark:bg-sidebar/50 backdrop-blur-lg z-20 flex items-center justify-between"
+      style={{
+        top: "max(0.5rem, env(safe-area-inset-top, 0px))",
+      }}
+      className="h-14 px-2.5 sm:px-3 py-2 fixed right-2 left-2 md:left-64 rounded-2xl md:rounded-3xl shadow-md border border-muted-foreground/30 bg-muted/90 md:bg-muted/50 dark:bg-sidebar/90 md:dark:bg-sidebar/50 backdrop-blur-lg z-20 flex items-center justify-between gap-2 overflow-hidden"
     >
-      <div className="flex items-center gap-3 flex-1">
+      <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
         <Button
           variant="outline"
-          className="border border-muted-foreground/30"
+          className="border border-muted-foreground/30 shrink-0 size-9 rounded-xl"
           size="icon"
           onClick={handleBack}
         >
-          <ChevronLeft />
+          <ChevronLeft className="size-4" />
         </Button>
         <SearchDialog />
       </div>
-      <ImportButton />
+      <div className="shrink-0 flex items-center">
+        <ImportButton />
+      </div>
     </header>
   );
 };

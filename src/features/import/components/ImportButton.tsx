@@ -21,11 +21,12 @@ const ImportButton = () => {
     <>
       <Button
         variant="outline"
-        className="border border-muted-foreground/30"
+        className="border border-muted-foreground/30 h-9 px-2.5 sm:px-3.5 flex items-center gap-1.5 shrink-0 rounded-xl"
         onClick={handleFolderSelection}
+        title="Import music folders"
       >
-        <Plus size={10} />
-        <span className="text-xs font-heading text-foreground">Import</span>
+        <Plus className="size-4 shrink-0" />
+        <span className="hidden sm:inline text-xs font-heading font-medium text-foreground">Import</span>
       </Button>
       <LoadingOverlay open={mutation.isPending} />
     </>

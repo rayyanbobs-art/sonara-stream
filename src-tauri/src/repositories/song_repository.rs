@@ -19,10 +19,10 @@ fn song_from_row(row: &rusqlite::Row) -> rusqlite::Result<SongResponse> {
         folder_id: row.get("folder_id")?,
         album_id: row.get("album_id")?,
         artist_id: row.get("artist_id")?,
-        artist_name: row.get("artist_name")?,
-        album_name: row.get("album_name")?,
+        artist_name: row.get::<_, Option<String>>("artist_name")?.unwrap_or_else(|| "Unknown Artist".to_string()),
+        album_name: row.get::<_, Option<String>>("album_name")?.unwrap_or_else(|| "Unknown Album".to_string()),
         album_cover_path: row.get("album_cover_path")?,
-        album_artist_name: row.get("album_artist_name")?,
+        album_artist_name: row.get::<_, Option<String>>("album_artist_name")?.unwrap_or_else(|| "Unknown Artist".to_string()),
     })
 }
 

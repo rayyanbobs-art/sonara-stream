@@ -13,6 +13,20 @@ pub struct DownloadTrackInput {
     pub duration: i64,
 }
 
+fn resolve_downloads_dir(app_handle: &AppHandle) -> std::path::PathBuf {
+    let app_dir = app_handle.path().app_data_dir().unwrap_or_else(|_| {
+        #[cfg(target_os = "android")]
+        {
+            std::path::PathBuf::from("/data/data/com.sonara.stream/files")
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            std::path::PathBuf::from(".")
+        }
+    });
+    app_dir.join("downloads")
+}
+
 #[tauri::command]
 pub async fn download_online_track(
     app_handle: AppHandle,
@@ -23,11 +37,7 @@ pub async fn download_online_track(
     let stream_url = crate::youtube::resolve_stream_url_internal(input.id.clone(), None, std::time::Duration::from_secs(25)).await?;
 
     // 2. Prepare downloads directory
-    let app_data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Failed to get app_data_dir: {}", e))?;
-    let downloads_dir = app_data_dir.join("downloads");
+    let downloads_dir = resolve_downloads_dir(&app_handle);
     if !downloads_dir.exists() {
         fs::create_dir_all(&downloads_dir)
             .map_err(|e| format!("Failed to create downloads directory: {}", e))?;
@@ -126,11 +136,7 @@ pub fn is_track_downloaded(
     app_handle: AppHandle,
     id: String,
 ) -> Result<bool, String> {
-    let app_data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Failed to get app_data_dir: {}", e))?;
-    let downloads_dir = app_data_dir.join("downloads");
+    let downloads_dir = resolve_downloads_dir(&app_handle);
     if !downloads_dir.exists() {
         return Ok(false);
     }

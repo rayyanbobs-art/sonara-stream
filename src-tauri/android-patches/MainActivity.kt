@@ -50,6 +50,7 @@ class MainActivity : TauriActivity() {
     override fun onWebViewCreate(webView: WebView) {
         super.onWebViewCreate(webView)
         webViewInstance = webView
+        webView.setBackgroundColor(android.graphics.Color.parseColor("#09090b"))
         webView.settings.mediaPlaybackRequiresUserGesture = false
 
         // Bridge to allow frontend to open external URLs / download APKs directly

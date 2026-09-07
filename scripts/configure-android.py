@@ -112,6 +112,26 @@ def configure_android():
                     f.write(gradle_content)
                 print("Added androidx.media:media:1.7.0 dependency to build.gradle")
 
+    # 4. Patch styles/themes to ensure dark window background
+    res_dir = os.path.join(gen_android_dir, "app", "src", "main", "res")
+    for values_folder in ["values", "values-night"]:
+        for xml_name in ["styles.xml", "themes.xml"]:
+            xml_path = os.path.join(res_dir, values_folder, xml_name)
+            if os.path.exists(xml_path):
+                try:
+                    with open(xml_path, "r", encoding="utf-8") as f:
+                        style_content = f.read()
+                    if "android:windowBackground" not in style_content:
+                        style_content = style_content.replace(
+                            "</style>",
+                            '    <item name="android:windowBackground">#09090b</item>\n    </style>'
+                        )
+                        with open(xml_path, "w", encoding="utf-8") as f:
+                            f.write(style_content)
+                        print(f"Patched windowBackground in {xml_path}")
+                except Exception as e:
+                    print(f"Error patching {xml_path}: {e}")
+
     print("Android configuration complete!")
     return True
 

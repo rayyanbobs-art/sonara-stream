@@ -4,6 +4,16 @@ All notable changes to **Sonara Stream** are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3] - 2026-09-08
+
+### 💖 Online Favorites, Offline Downloads & Seamless Launch
+- **Online Track Favoriting**: Fixed heart button for online tracks by removing local-only ID guards and implementing database persistence with graceful NULL joins (`Option<String>` fallback in `song_from_row`), preventing app crashes.
+- **Stable Playback State**: Hardened Zustand playback store so favoriting a playing track updates `is_favorite` without altering runtime song IDs or triggering audio stream re-fetching.
+- **Offline Track Downloads**: Added direct stream download pipeline (`download_online_track`) saving `.m4a` audio and artwork with mobile application data directory fallback.
+- **Eliminated White Screen Launch Flash**: Set instant `#09090b` dark background across `index.html`, Android WebView instance, and Android styles/themes.
+
+---
+
 ## [0.6.2] - 2026-09-08
 
 ### 🛡️ Mobile Stability & Pure-Rust TLS

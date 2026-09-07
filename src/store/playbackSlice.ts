@@ -239,7 +239,7 @@ const createPlaybackSlice: StateCreator<
         (currentSong.id === songId ||
           (updatedSong && currentSong.path === updatedSong.path))
       ) {
-        currentSong = updatedSong || {
+        currentSong = {
           ...currentSong,
           is_favorite: isFavorite,
           favorite_added_at: isFavorite ? Date.now() : null,
@@ -254,22 +254,22 @@ const createPlaybackSlice: StateCreator<
           favorite_added_at: isFavorite ? Date.now() : null,
         };
       }
-      if (updatedSong && updatedSong.id !== songId) {
-        delete onlineSongsMap[songId];
-        onlineSongsMap[updatedSong.id] = updatedSong;
-      }
 
       const updateItem = (item: QueueItem) => {
+        if (!item) return item;
         if (
           item.songId === songId ||
           (updatedSong && item.song?.path === updatedSong.path)
         ) {
-          const song =
-            updatedSong ||
-            (item.song ? { ...item.song, is_favorite: isFavorite } : undefined);
+          const song = item.song
+            ? {
+                ...item.song,
+                is_favorite: isFavorite,
+                favorite_added_at: isFavorite ? Date.now() : null,
+              }
+            : undefined;
           return {
             ...item,
-            songId: updatedSong ? updatedSong.id : item.songId,
             song,
           };
         }
@@ -279,8 +279,8 @@ const createPlaybackSlice: StateCreator<
       const currentQueueItem = state.currentQueueItem
         ? updateItem(state.currentQueueItem)
         : null;
-      const queue = state.queue.map(updateItem);
-      const playbackQueue = state.playbackQueue.map(updateItem);
+      const queue = (state.queue || []).map(updateItem);
+      const playbackQueue = (state.playbackQueue || []).map(updateItem);
 
       return {
         currentSong,

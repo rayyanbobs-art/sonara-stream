@@ -29,7 +29,7 @@ const SongsTable = ({
   const { mutate } = useToggleFavoriteMutation();
 
   const toggleFavorite = (song: Song) => {
-    mutate({ songId: song.id, isFavorite: !song.is_favorite });
+    mutate({ songId: song.id, isFavorite: !song.is_favorite, song });
   };
 
   return (

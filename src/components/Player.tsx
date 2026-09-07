@@ -12,6 +12,7 @@ import {
   Heart,
   Radio,
   ListMusic,
+  Maximize2,
 } from "lucide-react";
 import { Track, RepeatMode } from "../types";
 
@@ -35,6 +36,7 @@ interface PlayerProps {
   onToggleFavorite: () => void;
   onToggleQueue?: () => void;
   isQueueOpen?: boolean;
+  onToggleFullscreen?: () => void;
 }
 
 const formatTime = (secs: number): string => {
@@ -64,6 +66,7 @@ export const Player: React.FC<PlayerProps> = ({
   onToggleFavorite,
   onToggleQueue,
   isQueueOpen,
+  onToggleFullscreen,
 }) => {
   const [prevVol, setPrevVol] = useState(volume || 0.85);
 
@@ -91,6 +94,9 @@ export const Player: React.FC<PlayerProps> = ({
                 className="player-track-art"
                 loading="lazy"
                 decoding="async"
+                onClick={onToggleFullscreen}
+                style={{ cursor: onToggleFullscreen ? "pointer" : "default" }}
+                title={onToggleFullscreen ? "Expand fullscreen view" : undefined}
               />
               <div className="player-track-labels">
                 <div className="player-track-name" title={currentTrack.title}>
@@ -224,6 +230,18 @@ export const Player: React.FC<PlayerProps> = ({
               aria-pressed={isQueueOpen}
             >
               <ListMusic size={18} />
+            </button>
+          )}
+
+          {currentTrack && onToggleFullscreen && (
+            <button
+              type="button"
+              className="ctrl-icon-btn"
+              onClick={onToggleFullscreen}
+              title="Fullscreen Now Playing"
+              aria-label="Fullscreen Now Playing"
+            >
+              <Maximize2 size={16} />
             </button>
           )}
 

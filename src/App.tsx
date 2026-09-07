@@ -22,12 +22,14 @@ import { useQueue } from "./hooks/useQueue";
 import { usePlaylists } from "./hooks/usePlaylists";
 import { PlaylistView } from "./views/PlaylistView";
 import { TrackContextMenu } from "./components/TrackContextMenu";
+import { NowPlayingModal } from "./components/NowPlayingModal";
 import { PerfOverlay } from "./components/PerfOverlay";
 import { perf } from "./utils/perf";
 import "./App.css";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavTab>("home");
+  const [isFullscreenNowPlaying, setIsFullscreenNowPlaying] = useState(false);
   const [accentColor, setAccentColor] = useState<AccentColor>(() => {
     return (localStorage.getItem("sonara_accent") as AccentColor) || "gold";
   });
@@ -628,6 +630,35 @@ export default function App() {
         onToggleFavorite={handlePlayerToggleFavorite}
         onToggleQueue={toggleQueue}
         isQueueOpen={isQueueOpen}
+        onToggleFullscreen={() => setIsFullscreenNowPlaying((prev) => !prev)}
+      />
+
+      {/* Fullscreen Now Playing Modal */}
+      <NowPlayingModal
+        isOpen={isFullscreenNowPlaying}
+        onClose={() => setIsFullscreenNowPlaying(false)}
+        currentTrack={currentTrack}
+        isPlaying={isPlaying}
+        isBuffering={isBuffering}
+        currentTime={currentTime}
+        duration={duration}
+        volume={volume}
+        isShuffle={isShuffle}
+        repeatMode={repeatMode}
+        isFavorite={isCurrentFavorite}
+        onTogglePlay={togglePlay}
+        onSeek={seek}
+        onVolumeChange={setVolume}
+        onNext={handleNext}
+        onPrev={handlePrev}
+        onToggleShuffle={toggleShuffle}
+        onToggleRepeat={toggleRepeat}
+        onToggleFavorite={handlePlayerToggleFavorite}
+        upNextTracks={upNextMix}
+        userQueue={userQueue}
+        onPlayTrack={handlePlayTrack}
+        onRemoveFromUserQueue={removeFromUserQueue}
+        onClearUserQueue={clearUserQueue}
       />
 
       {/* Slide-in Queue Panel */}

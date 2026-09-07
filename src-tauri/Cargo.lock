@@ -3933,7 +3933,7 @@ dependencies = [
 
 [[package]]
 name = "sonara"
-version = "0.6.1"
+version = "0.6.2"
 dependencies = [
  "lofty",
  "reqwest",
@@ -3957,6 +3957,7 @@ dependencies = [
  "tracing",
  "urlencoding",
  "walkdir",
+ "webpki-root-certs",
 ]
 
 [[package]]

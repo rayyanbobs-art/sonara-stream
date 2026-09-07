@@ -26,6 +26,15 @@ fn greet(name: &str) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    std::panic::set_hook(Box::new(|panic_info| {
+        eprintln!("CRITICAL PANIC: {panic_info}");
+        #[cfg(target_os = "android")]
+        {
+            let payload = format!("PANIC: {panic_info}\n");
+            let _ = std::fs::write("/data/data/com.sonara.stream/files/panic.log", payload);
+        }
+    }));
+
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_os::init())
@@ -41,8 +50,16 @@ pub fn run() {
 
     builder
         .setup(|app: &mut tauri::App| {
-            let conn = get_connection(app.handle()).expect("Failed to connect to the database");
-            run_migrations(&conn).expect("Failed to run database migrations");
+            let conn = match get_connection(app.handle()) {
+                Ok(c) => c,
+                Err(err) => {
+                    eprintln!("Failed to connect to primary database: {err}");
+                    rusqlite::Connection::open_in_memory().expect("In-memory sqlite fallback failed")
+                }
+            };
+            if let Err(err) = run_migrations(&conn) {
+                eprintln!("Failed to run database migrations: {err}");
+            }
 
             app.manage(DbState(Mutex::new(conn)));
 

@@ -216,10 +216,46 @@ pub fn order_no_consecutive_artists(tracks: Vec<Track>) -> Vec<Track> {
     ordered
 }
 
+async fn search_tracks(query: &str, binary: Option<&std::path::Path>) -> Result<Vec<Track>, String> {
+    if cfg!(target_os = "android") {
+        let clean_query = if let Some(idx) = query.find(':') {
+            if query.starts_with("ytsearch") {
+                &query[idx + 1..]
+            } else {
+                query
+            }
+        } else {
+            query
+        };
+        crate::youtube::search_innertube(clean_query).await
+    } else if let Some(bin) = binary {
+        if !bin.exists() {
+            let clean_query = if let Some(idx) = query.find(':') {
+                if query.starts_with("ytsearch") {
+                    &query[idx + 1..]
+                } else {
+                    query
+                }
+            } else {
+                query
+            };
+            crate::youtube::search_innertube(clean_query).await
+        } else {
+            execute_ytdlp_search(query, bin).await
+        }
+    } else {
+        Err("No search method available".into())
+    }
+}
+
 #[tauri::command]
 pub async fn get_recommendations(limit: Option<usize>) -> Result<RecommendationsResult, String> {
     let target_limit = limit.unwrap_or(24).clamp(8, 50);
-    let binary = get_ytdlp_path();
+    let binary = if cfg!(target_os = "android") {
+        None
+    } else {
+        Some(get_ytdlp_path())
+    };
 
     let (history_entries, now) = {
         let guard = get_history()
@@ -250,7 +286,7 @@ pub async fn get_recommendations(limit: Option<usize>) -> Result<Recommendations
 
         let mut pool = Vec::new();
         for q in seed_queries {
-            if let Ok(mut tracks) = execute_ytdlp_search(q, &binary).await {
+            if let Ok(mut tracks) = search_tracks(q, binary.as_deref()).await {
                 pool.append(&mut tracks);
             }
             if pool.len() >= target_limit * 2 {
@@ -305,7 +341,7 @@ pub async fn get_recommendations(limit: Option<usize>) -> Result<Recommendations
     // 1. Top artist tracks
     for artist in &top_artists {
         let q = format!("ytsearch8:{} best songs", artist);
-        if let Ok(mut tracks) = execute_ytdlp_search(&q, &binary).await {
+        if let Ok(mut tracks) = search_tracks(&q, binary.as_deref()).await {
             pool.append(&mut tracks);
         }
     }
@@ -314,7 +350,7 @@ pub async fn get_recommendations(limit: Option<usize>) -> Result<Recommendations
     if let Some(first_artist) = top_artists.first() {
         if let Some(genre) = detect_genre_for_artist(first_artist).await {
             let q = format!("ytsearch8:{} music hits", genre);
-            if let Ok(mut tracks) = execute_ytdlp_search(&q, &binary).await {
+            if let Ok(mut tracks) = search_tracks(&q, binary.as_deref()).await {
                 pool.append(&mut tracks);
             }
         }
@@ -339,7 +375,11 @@ pub async fn get_recommendations(limit: Option<usize>) -> Result<Recommendations
 #[tauri::command]
 pub async fn build_radio(seed_track: Track, limit: Option<usize>) -> Result<Vec<Track>, String> {
     let target_limit = limit.unwrap_or(20).clamp(15, 25);
-    let binary = get_ytdlp_path();
+    let binary = if cfg!(target_os = "android") {
+        None
+    } else {
+        Some(get_ytdlp_path())
+    };
 
     // Get last 50 played signatures to avoid immediate repeats
     let recent_50_signatures: HashSet<String> = {
@@ -371,7 +411,7 @@ pub async fn build_radio(seed_track: Track, limit: Option<usize>) -> Result<Vec<
     let artist_clean = seed_track.artist.trim().to_string();
     if !artist_clean.is_empty() && artist_clean != "Unknown Artist" {
         let q = format!("ytsearch12:{} greatest hits songs", artist_clean);
-        if let Ok(tracks) = execute_ytdlp_search(&q, &binary).await {
+        if let Ok(tracks) = search_tracks(&q, binary.as_deref()).await {
             let artist_slice =
                 filter_diverse_tracks(tracks, &excluded_signatures, 3, same_artist_target);
             for t in &artist_slice {
@@ -390,7 +430,7 @@ pub async fn build_radio(seed_track: Track, limit: Option<usize>) -> Result<Vec<
         format!("ytsearch12:{} mix songs", seed_track.title)
     };
 
-    if let Ok(tracks) = execute_ytdlp_search(&genre_query, &binary).await {
+    if let Ok(tracks) = search_tracks(&genre_query, binary.as_deref()).await {
         let genre_slice = filter_diverse_tracks(tracks, &excluded_signatures, 2, genre_target);
         for t in &genre_slice {
             excluded_signatures.insert(t.signature.clone());
@@ -402,7 +442,7 @@ pub async fn build_radio(seed_track: Track, limit: Option<usize>) -> Result<Vec<
     let needed = target_limit.saturating_sub(radio_pool.len());
     if needed > 0 {
         let discovery_query = format!("ytsearch10:{} related songs", artist_clean);
-        if let Ok(tracks) = execute_ytdlp_search(&discovery_query, &binary).await {
+        if let Ok(tracks) = search_tracks(&discovery_query, binary.as_deref()).await {
             let discovery_slice = filter_diverse_tracks(tracks, &excluded_signatures, 2, needed);
             radio_pool.extend(discovery_slice);
         }
@@ -411,7 +451,7 @@ pub async fn build_radio(seed_track: Track, limit: Option<usize>) -> Result<Vec<
     // Ensure we meet the minimum target count (at least 15 tracks)
     if radio_pool.len() < 15 {
         let fallback_query = "ytsearch15:top hits music";
-        if let Ok(tracks) = execute_ytdlp_search(fallback_query, &binary).await {
+        if let Ok(tracks) = search_tracks(fallback_query, binary.as_deref()).await {
             let extra = filter_diverse_tracks(
                 tracks,
                 &excluded_signatures,

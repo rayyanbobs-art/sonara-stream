@@ -772,14 +772,18 @@ pub async fn search_youtube(query: String) -> Result<Vec<Track>, String> {
     }
     tracing::info!(target: "sonara_stream::cache", event = "search_cache_miss", query = %q);
 
-    let binary = get_ytdlp_path();
-    let raw_tracks = if !binary.exists() || cfg!(target_os = "android") {
+    let raw_tracks = if cfg!(target_os = "android") {
         search_innertube(&sanitized_query).await?
     } else {
-        let search_arg = format!("ytsearch25:{}", sanitized_query);
-        match execute_ytdlp_search(&search_arg, &binary).await {
-            Ok(t) if !t.is_empty() => t,
-            _ => search_innertube(&sanitized_query).await?,
+        let binary = get_ytdlp_path();
+        if !binary.exists() {
+            search_innertube(&sanitized_query).await?
+        } else {
+            let search_arg = format!("ytsearch25:{}", sanitized_query);
+            match execute_ytdlp_search(&search_arg, &binary).await {
+                Ok(t) if !t.is_empty() => t,
+                _ => search_innertube(&sanitized_query).await?,
+            }
         }
     };
 
@@ -793,20 +797,24 @@ pub async fn get_related_tracks(artist: String, title: String) -> Result<Vec<Tra
     let clean_artist = artist.trim().trim_start_matches('-').to_string();
     let clean_title = title.trim().trim_start_matches('-').to_string();
 
-    let binary = get_ytdlp_path();
     let query_term = if !clean_artist.is_empty() && clean_artist != "Unknown Artist" {
         format!("{} songs", clean_artist)
     } else {
         format!("{} mix", clean_title)
     };
 
-    let raw = if !binary.exists() || cfg!(target_os = "android") {
+    let raw = if cfg!(target_os = "android") {
         search_innertube(&query_term).await.unwrap_or_default()
     } else {
-        let search_arg = format!("ytsearch15:{}", query_term);
-        match execute_ytdlp_search(&search_arg, &binary).await {
-            Ok(t) if !t.is_empty() => t,
-            _ => search_innertube(&query_term).await.unwrap_or_default(),
+        let binary = get_ytdlp_path();
+        if !binary.exists() {
+            search_innertube(&query_term).await.unwrap_or_default()
+        } else {
+            let search_arg = format!("ytsearch15:{}", query_term);
+            match execute_ytdlp_search(&search_arg, &binary).await {
+                Ok(t) if !t.is_empty() => t,
+                _ => search_innertube(&query_term).await.unwrap_or_default(),
+            }
         }
     };
     let mut seen = std::collections::HashSet::new();
@@ -1018,8 +1026,27 @@ pub async fn resolve_stream_url_internal(
 
     let id_clone = clean_id.clone();
     let task = tokio::spawn(async move {
+        if cfg!(target_os = "android") {
+            let target_id = if let Some(search_term) = id_clone.strip_prefix("search:") {
+                let search_res = search_innertube(search_term).await?;
+                if let Some(first) = search_res.into_iter().next() {
+                    first.id
+                } else {
+                    return Err(format!("No tracks found for: {}", search_term));
+                }
+            } else if let Some(vid) = extract_video_id(&id_clone) {
+                vid
+            } else {
+                id_clone.clone()
+            };
+
+            let url = resolve_stream_innertube(&target_id).await?;
+            insert_stream_cache(id_clone.clone(), url.clone());
+            return Ok(url);
+        }
+
         let binary = get_ytdlp_path();
-        let use_innertube = cfg!(target_os = "android") || !binary.exists();
+        let use_innertube = !binary.exists();
 
         if use_innertube {
             let target_id = if let Some(search_term) = id_clone.strip_prefix("search:") {

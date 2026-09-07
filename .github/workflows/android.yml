@@ -110,6 +110,6 @@ jobs:
       - name: Attach APK to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          gh release upload "$GITHUB_REF_NAME" SonaraStream-Android.apk --clobber
+          gh release upload "$GITHUB_REF_NAME" SonaraStream-Android.apk --clobber || gh release create "$GITHUB_REF_NAME" SonaraStream-Android.apk --title "Sonara Stream $GITHUB_REF_NAME" --notes "Release $GITHUB_REF_NAME"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

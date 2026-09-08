@@ -1,4 +1,4 @@
-﻿import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { useEffect, useRef } from "react";
 import { getOptimizedThumbnail } from "@/utils/thumbnail";
@@ -231,7 +231,7 @@ const useMediaSession = ({
           title,
           artist,
           album,
-          artworkPath,
+          song?.album_cover_path || artworkPath,
           durSecs,
           isPlaying,
           position

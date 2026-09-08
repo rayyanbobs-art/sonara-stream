@@ -27,6 +27,30 @@ import MarqueeText from "@/components/custom/MarqueText";
 import { isOnlineSong, getOnlineVideoId } from "@/lib/onlineTrack";
 import { getOptimizedThumbnail } from "@/utils/thumbnail";
 
+const getAudioMimeType = (path: string): string => {
+  const ext = path.split(".").pop()?.toLowerCase();
+  switch (ext) {
+    case "m4a":
+      return "audio/mp4";
+    case "mp3":
+      return "audio/mpeg";
+    case "flac":
+      return "audio/flac";
+    case "wav":
+      return "audio/wav";
+    case "ogg":
+      return "audio/ogg";
+    case "opus":
+      return "audio/opus";
+    case "aac":
+      return "audio/aac";
+    case "webm":
+      return "audio/webm";
+    default:
+      return "audio/mpeg";
+  }
+};
+
 type AudioPlayerProps = {
   currentSong: Song;
 };
@@ -35,6 +59,7 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const playerRef = useRef<HTMLAudioElement | null>(null);
+  const activeBlobUrlRef = useRef<string | null>(null);
 
   const hasCountedPlayRef = useRef(false);
   const lastSongIdRef = useRef<number | null>(null);
@@ -208,12 +233,26 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
     hasCountedPlayRef.current = false;
   }, [currentSong.id]);
 
+  // Clean up any existing blob url on unmount
+  useEffect(() => {
+    return () => {
+      if (activeBlobUrlRef.current) {
+        URL.revokeObjectURL(activeBlobUrlRef.current);
+        activeBlobUrlRef.current = null;
+      }
+    };
+  }, []);
+
   // Song switching
   useEffect(() => {
     const player = playerRef.current;
     if (!player) return;
 
     if (isOnlineSong(currentSong)) {
+      if (activeBlobUrlRef.current) {
+        URL.revokeObjectURL(activeBlobUrlRef.current);
+        activeBlobUrlRef.current = null;
+      }
       const videoId = getOnlineVideoId(currentSong);
       if (!videoId) return;
 
@@ -249,15 +288,59 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
     } else {
       activeRequestIdRef.current = null;
       setIsResolvingStream(false);
-      player.src = convertFileSrc(currentSong.path);
-      const playPromise = player.play();
-      if (playPromise !== undefined) {
-        playPromise.catch((err) => {
-          if (err.name !== "AbortError") {
-            console.error("Audio play failed:", err);
+
+      let isCancelled = false;
+      const loadAndPlayLocal = async () => {
+        try {
+          // Read binary data via Rust IPC to prevent Android WebView asset protocol range crashes
+          const fileData = await invoke<ArrayBuffer | Uint8Array>("read_audio_file", {
+            path: currentSong.path,
+          });
+          if (isCancelled || !playerRef.current) return;
+
+          if (activeBlobUrlRef.current) {
+            URL.revokeObjectURL(activeBlobUrlRef.current);
+            activeBlobUrlRef.current = null;
           }
-        });
-      }
+
+          const mimeType = getAudioMimeType(currentSong.path);
+          const blob = new Blob([fileData], { type: mimeType });
+          const blobUrl = URL.createObjectURL(blob);
+          activeBlobUrlRef.current = blobUrl;
+
+          player.src = blobUrl;
+          const playPromise = player.play();
+          if (playPromise !== undefined) {
+            playPromise.catch((err) => {
+              if (err.name !== "AbortError") {
+                console.error("Audio play failed:", err);
+              }
+            });
+          }
+        } catch (err) {
+          console.warn("read_audio_file fallback to convertFileSrc:", err);
+          if (isCancelled || !playerRef.current) return;
+          if (activeBlobUrlRef.current) {
+            URL.revokeObjectURL(activeBlobUrlRef.current);
+            activeBlobUrlRef.current = null;
+          }
+          player.src = convertFileSrc(currentSong.path);
+          const playPromise = player.play();
+          if (playPromise !== undefined) {
+            playPromise.catch((e) => {
+              if (e.name !== "AbortError") {
+                console.error("Audio play failed:", e);
+              }
+            });
+          }
+        }
+      };
+
+      loadAndPlayLocal();
+
+      return () => {
+        isCancelled = true;
+      };
     }
   }, [currentSong.id, currentSong.path, playerRef]);
 

@@ -154,6 +154,7 @@ pub fn run() {
             commands::download::download_online_track,
             commands::download::is_track_downloaded,
             commands::song::record_song_play,
+            commands::song::read_audio_file,
             commands::lyrics::get_song_lyrics,
             commands::lyrics::update_song_lyrics,
             commands::playlist::get_all_playlists,

@@ -14,16 +14,23 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.wifi.WifiManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import java.io.File
+import java.net.URI
 import java.net.URL
+import java.net.URLDecoder
 
 class MediaPlaybackService : Service() {
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
     private var mediaSession: MediaSessionCompat? = null
@@ -148,6 +155,62 @@ class MediaPlaybackService : Service() {
         }
     }
 
+    private fun loadArtworkBitmap(coverUrl: String?): Bitmap? {
+        if (coverUrl.isNullOrBlank()) return null
+        try {
+            val rawBitmap = when {
+                coverUrl.startsWith("http://asset.localhost") || coverUrl.startsWith("https://asset.localhost") -> {
+                    val uri = android.net.Uri.parse(coverUrl)
+                    val rawPath = uri.path?.let { URLDecoder.decode(it, "UTF-8") }
+                    if (rawPath != null && File(rawPath).exists()) {
+                        BitmapFactory.decodeFile(rawPath)
+                    } else null
+                }
+                coverUrl.startsWith("file://") -> {
+                    val path = URI(coverUrl).path
+                    if (File(path).exists()) BitmapFactory.decodeFile(path) else null
+                }
+                coverUrl.startsWith("/") -> {
+                    if (File(coverUrl).exists()) BitmapFactory.decodeFile(coverUrl) else null
+                }
+                coverUrl.startsWith("http://") || coverUrl.startsWith("https://") -> {
+                    val url = URL(coverUrl)
+                    val conn = url.openConnection()
+                    conn.connectTimeout = 5000
+                    conn.readTimeout = 5000
+                    conn.getInputStream().use { stream ->
+                        BitmapFactory.decodeStream(stream)
+                    }
+                }
+                else -> null
+            } ?: return null
+
+            return scaleBitmapSafely(rawBitmap, 256)
+        } catch (e: Exception) {
+            Log.w("MediaPlaybackService", "Error loading cover artwork: $coverUrl", e)
+            return null
+        }
+    }
+
+    private fun scaleBitmapSafely(bitmap: Bitmap, maxDimension: Int): Bitmap {
+        val width = bitmap.width
+        val height = bitmap.height
+        if (width <= maxDimension && height <= maxDimension) {
+            return bitmap
+        }
+        val ratio = width.toFloat() / height.toFloat()
+        val targetWidth: Int
+        val targetHeight: Int
+        if (ratio > 1f) {
+            targetWidth = maxDimension
+            targetHeight = (maxDimension / ratio).toInt().coerceAtLeast(1)
+        } else {
+            targetHeight = maxDimension
+            targetWidth = (maxDimension * ratio).toInt().coerceAtLeast(1)
+        }
+        return Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true)
+    }
+
     fun updateTrackInternal(
         title: String,
         artist: String,
@@ -168,68 +231,75 @@ class MediaPlaybackService : Service() {
         if (coverUrl != null && coverUrl != currentCoverUrl) {
             currentCoverUrl = coverUrl
             Thread {
-                try {
-                    val url = URL(coverUrl)
-                    val stream = url.openStream()
-                    currentArtBitmap = BitmapFactory.decodeStream(stream)
-                    stream.close()
-                } catch (e: Exception) {
-                    currentArtBitmap = null
+                currentArtBitmap = loadArtworkBitmap(coverUrl)
+                mainHandler.post {
+                    syncMediaState()
                 }
-                syncMediaState()
             }.start()
         } else {
-            syncMediaState()
+            mainHandler.post {
+                syncMediaState()
+            }
         }
     }
 
     fun updateStateInternal(isPlaying: Boolean, positionSecs: Double) {
         isCurrentlyPlaying = isPlaying
         currentPositionSecs = positionSecs
-        syncMediaState()
+        mainHandler.post {
+            syncMediaState()
+        }
     }
 
     private fun syncMediaState() {
-        val state = if (isCurrentlyPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
-        val actions = PlaybackStateCompat.ACTION_PLAY or
-                PlaybackStateCompat.ACTION_PAUSE or
-                PlaybackStateCompat.ACTION_PLAY_PAUSE or
-                PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
-                PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
-                PlaybackStateCompat.ACTION_SEEK_TO or
-                PlaybackStateCompat.ACTION_STOP
+        try {
+            val state = if (isCurrentlyPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
+            val actions = PlaybackStateCompat.ACTION_PLAY or
+                    PlaybackStateCompat.ACTION_PAUSE or
+                    PlaybackStateCompat.ACTION_PLAY_PAUSE or
+                    PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
+                    PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
+                    PlaybackStateCompat.ACTION_SEEK_TO or
+                    PlaybackStateCompat.ACTION_STOP
 
-        val playbackState = PlaybackStateCompat.Builder()
-            .setActions(actions)
-            .setState(state, (currentPositionSecs * 1000).toLong(), 1.0f)
-            .build()
-        mediaSession?.setPlaybackState(playbackState)
+            val playbackState = PlaybackStateCompat.Builder()
+                .setActions(actions)
+                .setState(state, (currentPositionSecs * 1000).toLong(), 1.0f)
+                .build()
+            mediaSession?.setPlaybackState(playbackState)
 
-        val metaBuilder = MediaMetadataCompat.Builder()
-            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, currentTitle)
-            .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, currentArtist)
-            .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, currentAlbum)
-            .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, (currentDurationSecs * 1000).toLong())
+            val metaBuilder = MediaMetadataCompat.Builder()
+                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, currentTitle)
+                .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, currentArtist)
+                .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, currentAlbum)
+                .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, (currentDurationSecs * 1000).toLong())
 
-        currentArtBitmap?.let {
-            metaBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, it)
+            currentArtBitmap?.let {
+                metaBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, it)
+            }
+            mediaSession?.setMetadata(metaBuilder.build())
+
+            startForegroundWithNotification()
+        } catch (e: Exception) {
+            Log.e("MediaPlaybackService", "Error syncing media state", e)
         }
-        mediaSession?.setMetadata(metaBuilder.build())
-
-        startForegroundWithNotification()
     }
 
     private fun startForegroundWithNotification() {
-        val notification = buildNotification()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ServiceCompat.startForeground(
-                this,
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        try {
+            val notification = buildNotification()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ServiceCompat.startForeground(
+                    this,
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (e: Exception) {
+            Log.e("MediaPlaybackService", "Failed to startForegroundWithNotification", e)
         }
     }
 
@@ -280,10 +350,24 @@ class MediaPlaybackService : Service() {
             .addAction(android.R.drawable.ic_media_next, "Next", nextIntent)
 
         currentArtBitmap?.let {
-            builder.setLargeIcon(it)
+            try {
+                builder.setLargeIcon(it)
+            } catch (e: Exception) {
+                Log.w("MediaPlaybackService", "Failed to attach large icon", e)
+            }
         }
 
-        return builder.build()
+        return try {
+            builder.build()
+        } catch (e: Exception) {
+            Log.e("MediaPlaybackService", "Notification build failed, falling back to minimal notification", e)
+            NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_media_play)
+                .setContentTitle(currentTitle)
+                .setContentText(currentArtist)
+                .setContentIntent(contentIntent)
+                .build()
+        }
     }
 
     private fun acquireLocks() {

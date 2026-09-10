@@ -372,73 +372,93 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
         />
 
         {/* Mobile Mini Player (< md) */}
-        <section className="flex md:hidden items-center justify-between gap-3 px-1 py-0.5">
-          <div
-            onClick={() => setIsExpanded(true)}
-            className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer"
-          >
-            <div className="size-11 rounded-lg bg-linear-to-br from-primary/50 to-primary/30 shrink-0 flex items-center justify-center overflow-hidden shadow-xs">
-              {coverSrc ? (
-                <img
-                  src={coverSrc}
-                  alt={currentSong.title}
-                  className="w-full h-full object-cover"
+        <section
+          className="flex md:hidden flex-col"
+          onTouchStart={(e) => {
+            const touch = e.touches[0];
+            (e.currentTarget as HTMLElement).dataset.touchStartY = String(touch.clientY);
+          }}
+          onTouchEnd={(e) => {
+            const startY = Number((e.currentTarget as HTMLElement).dataset.touchStartY || 0);
+            const endY = e.changedTouches[0].clientY;
+            if (startY - endY > 50) setIsExpanded(true);
+          }}
+        >
+          <div className="flex items-center justify-between gap-3 px-1 py-0.5">
+            <div
+              onClick={() => setIsExpanded(true)}
+              className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer"
+            >
+              <div className="size-12 rounded-lg bg-linear-to-br from-primary/50 to-primary/30 shrink-0 flex items-center justify-center overflow-hidden shadow-xs">
+                {coverSrc ? (
+                  <img
+                    src={coverSrc}
+                    alt={currentSong.title}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <Music className="size-5 text-primary" />
+                )}
+              </div>
+              <div className="min-w-0 space-y-0.5 flex-1 pr-1">
+                <MarqueeText
+                  text={currentSong.title}
+                  className="text-sm font-semibold font-heading truncate"
                 />
-              ) : (
-                <Music className="size-5 text-primary" />
-              )}
+                <p className="text-xs text-muted-foreground truncate">
+                  {currentSong.artist_name || "Unknown Artist"}
+                </p>
+              </div>
             </div>
-            <div className="min-w-0 space-y-0.5 flex-1 pr-1">
-              <MarqueeText
-                text={currentSong.title}
-                className="text-sm font-semibold font-heading truncate"
-              />
-              <p className="text-xs text-muted-foreground truncate">
-                {currentSong.artist_name || "Unknown Artist"}
-              </p>
+
+            <div className="flex items-center gap-1 shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-full size-9"
+                onClick={handlePrevious}
+              >
+                <SkipBack className="size-4" />
+              </Button>
+              {isResolvingStream ? (
+                <Button variant="ghost" size="icon" className="rounded-full size-10" disabled>
+                  <Loader2 className="size-5 animate-spin text-primary" />
+                </Button>
+              ) : isPlaying ? (
+                <Button
+                  variant="default"
+                  size="icon"
+                  className="rounded-full size-10 shadow-md shadow-primary/20"
+                  onClick={pauseAudio}
+                >
+                  <Pause className="size-5" />
+                </Button>
+              ) : (
+                <Button
+                  variant="default"
+                  size="icon"
+                  className="rounded-full size-10 shadow-md shadow-primary/20"
+                  onClick={playAudio}
+                >
+                  <Play className="size-5 ml-0.5" />
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-full size-9"
+                onClick={handleNext}
+              >
+                <SkipForward className="size-4" />
+              </Button>
             </div>
           </div>
-
-          <div className="flex items-center gap-1 shrink-0">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-full size-9"
-              onClick={handlePrevious}
-            >
-              <SkipBack className="size-4" />
-            </Button>
-            {isResolvingStream ? (
-              <Button variant="ghost" size="icon" className="rounded-full size-10" disabled>
-                <Loader2 className="size-5 animate-spin text-primary" />
-              </Button>
-            ) : isPlaying ? (
-              <Button
-                variant="default"
-                size="icon"
-                className="rounded-full size-10 shadow-md shadow-primary/20"
-                onClick={pauseAudio}
-              >
-                <Pause className="size-5" />
-              </Button>
-            ) : (
-              <Button
-                variant="default"
-                size="icon"
-                className="rounded-full size-10 shadow-md shadow-primary/20"
-                onClick={playAudio}
-              >
-                <Play className="size-5 ml-0.5" />
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-full size-9"
-              onClick={handleNext}
-            >
-              <SkipForward className="size-4" />
-            </Button>
+          {/* Thin progress bar */}
+          <div className="w-full h-[2px] bg-muted-foreground/20 rounded-full mt-1 overflow-hidden">
+            <div
+              className="h-full bg-primary rounded-full transition-[width] duration-300 ease-linear"
+              style={{ width: duration > 0 ? `${(currentTime / duration) * 100}%` : "0%" }}
+            />
           </div>
         </section>
 

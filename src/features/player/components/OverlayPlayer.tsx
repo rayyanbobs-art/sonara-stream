@@ -100,15 +100,26 @@ const OverlayPlayer = ({
   return (
     <section className="fixed inset-0 z-50 pointer-events-none">
       <div
-        className={`absolute inset-0 bg-background/95 backdrop-blur-2xl transition-opacity duration-300 ease-out ${
+        className={`absolute inset-0 transition-opacity duration-300 ease-out ${
           isExpanded ? "opacity-100" : "opacity-0"
         }`}
         onClick={collapse}
-      />
+      >
+        {/* Dynamic blurred artwork background (mobile) */}
+        {coverSrc && (
+          <img
+            src={coverSrc}
+            aria-hidden="true"
+            className="md:hidden absolute inset-0 w-full h-full object-cover scale-110 blur-[60px] brightness-[0.25] saturate-150"
+          />
+        )}
+        {/* Solid overlay */}
+        <div className="absolute inset-0 bg-background/80 md:bg-background/95 backdrop-blur-sm md:backdrop-blur-2xl" />
+      </div>
       <div
         className={`absolute inset-0 w-full h-full flex flex-col ${
           isExpanded ? "translate-y-0" : "translate-y-full"
-        } transition-transform duration-300 ease-out pointer-events-auto overflow-hidden safe-top safe-bottom`}
+        } transition-transform duration-300 ease-out pointer-events-auto overflow-hidden safe-top safe-bottom will-change-transform`}
       >
         {/* Top Header Bar */}
         <div
@@ -304,8 +315,8 @@ const OverlayPlayer = ({
             {mobileTab === "track" ? (
               <div className="flex-1 flex flex-col justify-between py-2 max-w-sm mx-auto w-full">
                 {/* Artwork */}
-                <div className="flex-1 min-h-0 flex items-center justify-center p-2">
-                  <div className="w-64 h-64 max-w-[75vw] max-h-[38vh] aspect-square rounded-2xl bg-linear-to-br from-primary/30 to-primary/10 flex items-center justify-center overflow-hidden shadow-2xl border border-border/40">
+                <div className="flex-1 min-h-0 flex items-center justify-center px-4 py-2">
+                  <div className="w-full max-w-[85vw] max-h-[50vh] aspect-square rounded-3xl bg-linear-to-br from-primary/30 to-primary/10 flex items-center justify-center overflow-hidden shadow-2xl border border-white/10">
                     {coverSrc ? (
                       <img
                         src={coverSrc}
@@ -313,7 +324,7 @@ const OverlayPlayer = ({
                         className="w-full h-full object-cover object-center"
                       />
                     ) : (
-                      <Music className="size-20 text-primary/70" />
+                      <Music className="size-24 text-primary/70" />
                     )}
                   </div>
                 </div>
@@ -350,72 +361,57 @@ const OverlayPlayer = ({
                     <Button
                       variant={isShuffle ? "default" : "ghost"}
                       size="icon"
-                      className="rounded-full size-9"
+                      className="rounded-full size-10"
                       onClick={() => setIsShuffle(!isShuffle)}
                     >
-                      <Shuffle className="size-4" />
+                      <Shuffle className="size-[18px]" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="rounded-full size-10"
+                      className="rounded-full size-12"
                       onClick={onPrevious}
                     >
-                      <SkipBack className="size-5" />
+                      <SkipBack className="size-6" />
                     </Button>
                     <Button
                       size="icon-lg"
-                      className="rounded-full size-14 shadow-lg shadow-primary/25"
+                      className="rounded-full size-16 shadow-lg shadow-primary/25"
                       onClick={isPlaying ? onPause : onPlay}
                     >
-                      {isPlaying ? <Pause className="size-6" /> : <Play className="size-6 ml-0.5" />}
+                      {isPlaying ? <Pause className="size-7" /> : <Play className="size-7 ml-0.5" />}
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="rounded-full size-10"
+                      className="rounded-full size-12"
                       onClick={onNext}
                     >
-                      <SkipForward className="size-5" />
+                      <SkipForward className="size-6" />
                     </Button>
                     <Button
                       variant={repeatMode !== "off" ? "default" : "ghost"}
                       size="icon"
-                      className="rounded-full size-9"
+                      className="rounded-full size-10"
                       onClick={toggleRepeatMode}
                     >
-                      {repeatMode === "off" && <Repeat className="size-4" />}
-                      {repeatMode === "one" && <Repeat1 className="size-4" />}
-                      {repeatMode === "all" && <Repeat className="size-4" />}
+                      {repeatMode === "off" && <Repeat className="size-[18px]" />}
+                      {repeatMode === "one" && <Repeat1 className="size-[18px]" />}
+                      {repeatMode === "all" && <Repeat className="size-[18px]" />}
                     </Button>
                   </div>
 
-                  <div className="flex items-center justify-between px-2 pt-1">
+                  <div className="flex items-center justify-center pt-2">
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="rounded-full size-8"
-                      onClick={() => setMuted(!muted)}
-                    >
-                      {muted ? <VolumeOff className="size-3.5" /> : <Volume2 className="size-3.5" />}
-                    </Button>
-                    <Slider
-                      defaultValue={[0]}
-                      max={100}
-                      value={[volume]}
-                      onValueChange={(value) => handleVolumeChange(value[0])}
-                      className={`w-40 flex-1 mx-3 ${muted ? "opacity-50" : ""}`}
-                    />
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="rounded-full size-8"
+                      className="rounded-full size-10"
                       onClick={toggleFavorite}
                     >
                       {song.is_favorite ? (
-                        <Heart className="size-4 text-primary fill-current" />
+                        <Heart className="size-5 text-primary fill-current" />
                       ) : (
-                        <Heart className="size-4" />
+                        <Heart className="size-5" />
                       )}
                     </Button>
                   </div>

@@ -44,20 +44,24 @@
   - Patched `OverlayPlayer.tsx`: Replaced 60px full-screen blur with lightweight ambient radial gradient.
   - Critic Review & Verification passed (Score: 9.25/10).
 
+- **Slice 2: Home Screen Figma Restyle (COMPLETED 2026-09-11)**
+  - Added top category filter chips (`All`, `Music`, `Favorites`, `Stream`).
+  - Added `QuickAccessCard.tsx`: 2-column (mobile) and 4-column (desktop) compact cards with square album art, bold title, and instant play trigger.
+  - Added `ArtworkTrackCard.tsx`: Vertical cards with prominent square artwork, floating circular play buttons on desktop hover, and touch carousels on mobile.
+  - Critic Review & Verification passed (Score: 9.47/10).
+
 ---
 
 ## 5. Verification Commands
 - `bun run test` (TypeScript typecheck): Pass (0 errors)
-- `bun run build` (Vite production build): Pass (23.26s)
+- `bun run build` (Vite production build): Pass (3.39s)
 - `cargo test` (Rust backend unit tests): Pass (29 passed, 0 failed)
 - Android CI build: `.github/workflows/android.yml`
 
 ---
 
 ## 6. The Exact Next Task
-**Slice 2: Home Screen Figma Restyle (Desktop & Android)**:
-- Add top category filter chips (`All`, `Music`, `Favorites`, `Downloads`).
-- Build quick-access grid (2-column on mobile, 4-column on desktop) with square album art, bold titles, and instant play trigger matching Figma Spotify Redesign.
-- Modernize section headers and card layouts.
-- Files to touch: `src/routes/index.tsx`, `src/features/home/components/SongCard.tsx`.
-- Desktop impact: Enhances desktop with 4-column quick grid while giving mobile responsive 2-column grid. Zero breaking changes to playback.
+**Slice 3: Search / Browse Screen Figma Overhaul**:
+- Convert `/stream` and Search experience into a dedicated Browse & Discover view matching Figma's "Browse All" colored category cards.
+- Add search bar pill ("What do you want to listen to?").
+- Include genre/category browse cards (*Pop, Rock, Hip-Hop, Acoustic, Favorites, Downloads*).

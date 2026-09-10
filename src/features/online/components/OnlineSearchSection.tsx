@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Search, Loader2, Radio, Sparkles, X } from "lucide-react";
+import { Search, Loader2, Sparkles, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import OnlineTrackCard from "./OnlineTrackCard";
+import BrowseCategoryCard, { BROWSE_CATEGORIES } from "./BrowseCategoryCard";
 import useAppStore from "@/store/app-store";
 import useCurrentSong from "@/hooks/useCurrentSong";
 
@@ -136,21 +137,21 @@ export const OnlineSearchSection = () => {
 
   return (
     <div className="space-y-6 w-full max-w-4xl mx-auto">
-      {/* Search Input Bar */}
+      {/* Search Input Bar (Figma Spotify Redesign Pill) */}
       <div className="relative">
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input
               ref={inputRef}
-              placeholder="Search YouTube music or paste Spotify link..."
+              placeholder="What do you want to listen to?"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               onFocus={() => {
                 if (suggestions.length > 0) setShowSuggestions(true);
               }}
-              className="pl-10 pr-10 h-11 text-sm rounded-xl border-muted-foreground/30 bg-muted/40 focus-visible:ring-primary"
+              className="pl-11 pr-10 h-12 text-sm rounded-full border-white/10 bg-white/5 focus-visible:ring-primary focus-visible:bg-white/10 transition-colors shadow-inner font-medium placeholder:text-muted-foreground/70"
             />
             {query && (
               <button
@@ -160,7 +161,7 @@ export const OnlineSearchSection = () => {
                   setShowSuggestions(false);
                   inputRef.current?.focus();
                 }}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
                 <X className="size-4" />
               </button>
@@ -169,7 +170,7 @@ export const OnlineSearchSection = () => {
           <Button
             onClick={() => performSearch(query)}
             disabled={loading || !query.trim()}
-            className="h-11 px-5 rounded-xl font-heading font-medium"
+            className="h-12 px-6 rounded-full font-heading font-semibold shadow-md shadow-primary/20"
           >
             {loading ? <Loader2 className="size-4 animate-spin" /> : "Search"}
           </Button>
@@ -179,7 +180,7 @@ export const OnlineSearchSection = () => {
         {showSuggestions && suggestions.length > 0 && (
           <div
             ref={suggestionsBoxRef}
-            className="absolute top-full left-0 right-16 mt-1.5 py-1.5 rounded-xl border border-muted-foreground/30 bg-card/95 backdrop-blur-md shadow-xl z-50 max-h-60 overflow-y-auto"
+            className="absolute top-full left-0 right-16 mt-2 py-1.5 rounded-2xl border border-white/10 bg-card/95 backdrop-blur-xl shadow-2xl z-50 max-h-60 overflow-y-auto"
           >
             {suggestions.map((suggestion, idx) => (
               <div
@@ -188,10 +189,10 @@ export const OnlineSearchSection = () => {
                   setQuery(suggestion);
                   performSearch(suggestion);
                 }}
-                className={`px-4 py-2 text-sm cursor-pointer flex items-center gap-2.5 transition-colors ${
+                className={`px-4 py-2.5 text-sm cursor-pointer flex items-center gap-2.5 transition-colors ${
                   idx === activeSuggestionIdx
-                    ? "bg-primary text-primary-foreground font-medium"
-                    : "hover:bg-muted text-foreground"
+                    ? "bg-primary text-primary-foreground font-semibold"
+                    : "hover:bg-white/5 text-foreground"
                 }`}
               >
                 <Search className="size-3.5 opacity-60 shrink-0" />
@@ -215,7 +216,7 @@ export const OnlineSearchSection = () => {
               setQuery(chip);
               performSearch(chip);
             }}
-            className="px-3 py-1 text-xs rounded-full border border-muted-foreground/30 bg-muted/30 hover:bg-primary/20 hover:border-primary/40 hover:text-primary transition-all cursor-pointer font-heading"
+            className="px-3.5 py-1 text-xs rounded-full border border-white/10 bg-white/5 hover:bg-primary/20 hover:border-primary/40 hover:text-primary transition-all cursor-pointer font-heading font-medium"
           >
             {chip}
           </button>
@@ -241,12 +242,21 @@ export const OnlineSearchSection = () => {
 
       {/* Results List */}
       {!loading && results.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between pb-1">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground font-heading">
-              Online Results ({results.length})
+        <div className="space-y-3">
+          <div className="flex items-center justify-between pb-1 border-b border-white/5">
+            <h3 className="text-sm font-bold tracking-tight text-foreground font-heading">
+              Top Results ({results.length})
             </h3>
-            <span className="text-xs text-muted-foreground">Click to play instantly</span>
+            <button
+              onClick={() => {
+                setQuery("");
+                setResults([]);
+                setError(null);
+              }}
+              className="text-xs text-primary hover:underline font-semibold cursor-pointer"
+            >
+              Clear & Browse all
+            </button>
           </div>
           <div className="space-y-1.5">
             {results.map((track) => {
@@ -266,17 +276,25 @@ export const OnlineSearchSection = () => {
         </div>
       )}
 
-      {/* Empty State before any search */}
+      {/* Figma "Browse All" Category Cards (shown when not searching) */}
       {!loading && results.length === 0 && !error && (
-        <div className="text-center py-16 space-y-3">
-          <div className="size-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
-            <Radio className="size-8 text-primary" />
+        <div className="space-y-4 pt-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg sm:text-xl font-bold font-heading text-white tracking-tight">
+              Browse all
+            </h2>
           </div>
-          <div className="space-y-1">
-            <h4 className="font-heading font-semibold text-base">Instant Online Music</h4>
-            <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-              Search any song on YouTube or paste a Spotify track link to listen to online music alongside your local files.
-            </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4">
+            {BROWSE_CATEGORIES.map((category) => (
+              <BrowseCategoryCard
+                key={category.id}
+                category={category}
+                onClick={(searchQuery) => {
+                  setQuery(searchQuery);
+                  performSearch(searchQuery);
+                }}
+              />
+            ))}
           </div>
         </div>
       )}

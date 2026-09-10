@@ -60,8 +60,26 @@
 
 ---
 
+- **Slice 3: Search / Browse Screen Figma Overhaul (COMPLETED 2026-09-11)**
+  - Added `BrowseCategoryCard.tsx`: 12 vibrant genre/category cards matching Figma's "Browse all" grid.
+  - Modernized search input bar into a high-contrast pill with placeholder *"What do you want to listen to?"*.
+  - Updated `BottomNavBar.tsx` to display Search tab with `Search` icon.
+  - Critic Review & Verification passed (Score: 9.53/10).
+
+---
+
+## 5. Verification Commands
+- `bun run test` (TypeScript typecheck): Pass (0 errors)
+- `bun run build` (Vite production build): Pass (3.48s)
+- `cargo test` (Rust backend unit tests): Pass (29 passed, 0 failed)
+- Android CI build: `.github/workflows/android.yml`
+
+---
+
 ## 6. The Exact Next Task
-**Slice 3: Search / Browse Screen Figma Overhaul**:
-- Convert `/stream` and Search experience into a dedicated Browse & Discover view matching Figma's "Browse All" colored category cards.
-- Add search bar pill ("What do you want to listen to?").
-- Include genre/category browse cards (*Pop, Rock, Hip-Hop, Acoustic, Favorites, Downloads*).
+**Slice 4: Now Playing & Mini-Player Refinement (Figma / Mobbin Polish)**:
+- Hero square artwork with 24px corner radius and deep shadow.
+- Scrubber with smooth progress and precision timestamps (`0:00` / `duration`).
+- Control row: `Shuffle`, `Previous`, 64dp central circular `Play/Pause` with Sonara yellow `#f3bc16`, `Next`, `Repeat`.
+- Auxiliary row: Heart / Favorite, Device/Quality, Lyrics sheet toggle, and Queue sheet.
+- Mini-player floating pill with safe-area spacing and progress line.

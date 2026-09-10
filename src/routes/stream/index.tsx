@@ -8,18 +8,18 @@ export const Route = createFileRoute("/stream/")({
 
 function StreamRouteComponent() {
   return (
-    <div className="w-full h-full overflow-y-auto px-6 pt-20 pb-36 space-y-6">
+    <div className="w-full h-full overflow-y-auto px-3 sm:px-6 pt-16 sm:pt-20 pb-32 sm:pb-36 space-y-6 custom-scrollbar">
       <div className="max-w-4xl mx-auto space-y-2">
-        <div className="flex items-center gap-2.5">
-          <div className="size-9 rounded-xl bg-primary/15 flex items-center justify-center text-primary">
-            <Radio className="size-5" />
+        <div className="flex items-center gap-3">
+          <div className="size-10 sm:size-11 rounded-2xl bg-primary/15 flex items-center justify-center text-primary shadow-sm shadow-primary/20">
+            <Radio className="size-5 sm:size-6" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold font-heading tracking-tight flex items-center gap-2">
-              Online Music & Streams
+            <h1 className="text-xl sm:text-2xl font-bold font-heading tracking-tight flex items-center gap-2">
+              Search & Browse
             </h1>
             <p className="text-xs text-muted-foreground">
-              Search YouTube music or paste Spotify links to stream online music alongside your offline library.
+              Search online streams or explore curated genres and vibes.
             </p>
           </div>
         </div>

@@ -1,10 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Search, Loader2, Sparkles, X } from "lucide-react";
+import { Search, Loader2, Sparkles, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import OnlineTrackCard from "./OnlineTrackCard";
-import BrowseCategoryCard, { BROWSE_CATEGORIES } from "./BrowseCategoryCard";
+import BrowseCategoryCard, {
+  DISCOVER_CATEGORIES,
+  GENRE_CATEGORIES,
+} from "./BrowseCategoryCard";
 import useAppStore from "@/store/app-store";
 import useCurrentSong from "@/hooks/useCurrentSong";
 
@@ -136,7 +139,7 @@ export const OnlineSearchSection = () => {
   };
 
   return (
-    <div className="space-y-6 w-full max-w-4xl mx-auto">
+    <div className="space-y-6 w-full max-w-7xl mx-auto">
       {/* Search Input Bar (Figma Spotify Redesign Pill) */}
       <div className="relative">
         <div className="flex items-center gap-2">
@@ -278,23 +281,63 @@ export const OnlineSearchSection = () => {
 
       {/* Figma "Browse All" Category Cards (shown when not searching) */}
       {!loading && results.length === 0 && !error && (
-        <div className="space-y-4 pt-2">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg sm:text-xl font-bold font-heading text-white tracking-tight">
-              Browse all
-            </h2>
+        <div className="space-y-8 pt-2">
+          {/* Section 1: Discover */}
+          <div className="space-y-3.5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base sm:text-lg font-bold font-heading text-white tracking-tight">
+                Discover
+              </h2>
+              <div className="hidden sm:flex items-center gap-1.5 text-neutral-400">
+                <button className="p-1 rounded-full hover:bg-white/10 hover:text-white transition-colors" aria-label="Previous">
+                  <ChevronLeft size={16} />
+                </button>
+                <button className="p-1 rounded-full hover:bg-white/10 hover:text-white transition-colors" aria-label="Next">
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2.5 sm:gap-3.5">
+              {DISCOVER_CATEGORIES.map((category) => (
+                <BrowseCategoryCard
+                  key={category.id}
+                  category={category}
+                  onClick={(searchQuery) => {
+                    setQuery(searchQuery);
+                    performSearch(searchQuery);
+                  }}
+                />
+              ))}
+            </div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4">
-            {BROWSE_CATEGORIES.map((category) => (
-              <BrowseCategoryCard
-                key={category.id}
-                category={category}
-                onClick={(searchQuery) => {
-                  setQuery(searchQuery);
-                  performSearch(searchQuery);
-                }}
-              />
-            ))}
+
+          {/* Section 2: Genres */}
+          <div className="space-y-3.5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base sm:text-lg font-bold font-heading text-white tracking-tight">
+                Genres
+              </h2>
+              <div className="hidden sm:flex items-center gap-1.5 text-neutral-400">
+                <button className="p-1 rounded-full hover:bg-white/10 hover:text-white transition-colors" aria-label="Previous">
+                  <ChevronLeft size={16} />
+                </button>
+                <button className="p-1 rounded-full hover:bg-white/10 hover:text-white transition-colors" aria-label="Next">
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2.5 sm:gap-3.5">
+              {GENRE_CATEGORIES.map((category) => (
+                <BrowseCategoryCard
+                  key={category.id}
+                  category={category}
+                  onClick={(searchQuery) => {
+                    setQuery(searchQuery);
+                    performSearch(searchQuery);
+                  }}
+                />
+              ))}
+            </div>
           </div>
         </div>
       )}

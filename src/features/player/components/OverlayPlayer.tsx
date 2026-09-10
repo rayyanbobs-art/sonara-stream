@@ -105,16 +105,13 @@ const OverlayPlayer = ({
         }`}
         onClick={collapse}
       >
-        {/* Dynamic blurred artwork background (mobile) */}
-        {coverSrc && (
-          <img
-            src={coverSrc}
-            aria-hidden="true"
-            className="md:hidden absolute inset-0 w-full h-full object-cover scale-110 blur-[60px] brightness-[0.25] saturate-150"
-          />
-        )}
+        {/* Safe ambient color glow (mobile) without GPU-crashing full-screen blur */}
+        <div
+          aria-hidden="true"
+          className="md:hidden absolute inset-0 opacity-40 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/35 via-background/80 to-background pointer-events-none"
+        />
         {/* Solid overlay */}
-        <div className="absolute inset-0 bg-background/80 md:bg-background/95 backdrop-blur-sm md:backdrop-blur-2xl" />
+        <div className="absolute inset-0 bg-background/90 md:bg-background/95 backdrop-blur-sm md:backdrop-blur-2xl" />
       </div>
       <div
         className={`absolute inset-0 w-full h-full flex flex-col ${

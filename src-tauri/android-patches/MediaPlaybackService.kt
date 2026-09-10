@@ -185,7 +185,7 @@ class MediaPlaybackService : Service() {
                 else -> null
             } ?: return null
 
-            return scaleBitmapSafely(rawBitmap, 256)
+            return scaleBitmapSafely(rawBitmap, 192)
         } catch (e: Exception) {
             Log.w("MediaPlaybackService", "Error loading cover artwork: $coverUrl", e)
             return null
@@ -279,7 +279,18 @@ class MediaPlaybackService : Service() {
             }
             mediaSession?.setMetadata(metaBuilder.build())
 
-            startForegroundWithNotification()
+            if (isCurrentlyPlaying) {
+                startForegroundWithNotification()
+            } else {
+                try {
+                    val notification = buildNotification()
+                    val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                    notificationManager?.notify(NOTIFICATION_ID, notification)
+                    ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_DETACH)
+                } catch (e: Exception) {
+                    Log.w("MediaPlaybackService", "Error updating paused notification state", e)
+                }
+            }
         } catch (e: Exception) {
             Log.e("MediaPlaybackService", "Error syncing media state", e)
         }

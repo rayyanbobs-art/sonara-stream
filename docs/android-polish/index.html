@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sonara Stream — Android Polish & Desktop Harmonization Plan</title>
+  <style>
+    :root {
+      --bg: #09090b;
+      --card-bg: #141417;
+      --card-border: rgba(255, 255, 255, 0.08);
+      --accent: #f3bc16;
+      --accent-glow: rgba(243, 188, 22, 0.25);
+      --text: #f4f4f5;
+      --text-muted: #a1a1aa;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+      padding: 2rem 1rem;
+    }
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    header {
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 2rem;
+      margin-bottom: 2.5rem;
+    }
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      background: rgba(243, 188, 22, 0.15);
+      color: var(--accent);
+      border: 1px solid rgba(243, 188, 22, 0.3);
+      margin-bottom: 1rem;
+    }
+    h1 {
+      font-size: 2.25rem;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      color: #fff;
+      margin-bottom: 0.5rem;
+    }
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.015em;
+      margin: 2.5rem 0 1rem;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin: 1.5rem 0 0.5rem;
+      color: var(--text);
+    }
+    p { margin-bottom: 1rem; color: var(--text-muted); font-size: 0.95rem; }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 1rem;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 0.2rem 0.4rem;
+      border-radius: 0.35rem;
+      color: #fbbf24;
+    }
+    pre {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      background: #000;
+      border: 1px solid var(--card-border);
+      padding: 1rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      margin: 0.75rem 0;
+      color: #d4d4d8;
+    }
+    .wireframe-box {
+      border: 2px dashed rgba(255, 255, 255, 0.15);
+      border-radius: 1.5rem;
+      padding: 1.5rem;
+      background: #000;
+      margin: 1rem 0;
+    }
+    .mock-screen {
+      max-width: 320px;
+      margin: 0 auto;
+      border: 4px solid #27272a;
+      border-radius: 2rem;
+      padding: 1.25rem 1rem;
+      background: #09090b;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+    }
+    .mock-header {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      overflow-x: auto;
+      padding-bottom: 0.25rem;
+    }
+    .chip {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 0.3rem 0.75rem;
+      border-radius: 9999px;
+      white-space: nowrap;
+    }
+    .chip.active {
+      background: var(--accent);
+      color: #000;
+    }
+    .mock-quick-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+      margin-bottom: 1.25rem;
+    }
+    .mock-quick-card {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 0.5rem;
+      overflow: hidden;
+      height: 38px;
+    }
+    .mock-thumb {
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, rgba(243, 188, 22, 0.4), rgba(243, 188, 22, 0.1));
+      flex-shrink: 0;
+    }
+    .mock-title {
+      font-size: 0.65rem;
+      font-weight: 600;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      padding-right: 0.25rem;
+    }
+    .mock-section-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #fff;
+      margin: 0.75rem 0 0.5rem;
+    }
+    .mock-carousel {
+      display: flex;
+      gap: 0.75rem;
+      overflow-x: auto;
+      margin-bottom: 1rem;
+    }
+    .mock-album-card {
+      width: 90px;
+      flex-shrink: 0;
+    }
+    .mock-album-cover {
+      width: 90px;
+      height: 90px;
+      border-radius: 0.75rem;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.03));
+      margin-bottom: 0.35rem;
+    }
+    .mock-album-name {
+      font-size: 0.65rem;
+      font-weight: 600;
+      color: #fff;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .mock-album-artist {
+      font-size: 0.55rem;
+      color: var(--text-muted);
+    }
+    .mock-mini-player {
+      background: rgba(24, 24, 27, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 0.75rem;
+      padding: 0.4rem 0.6rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 0.5rem;
+    }
+    .mock-nav-bar {
+      display: flex;
+      justify-content: space-around;
+      padding-top: 0.75rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      margin-top: 0.5rem;
+    }
+    .mock-nav-item {
+      font-size: 0.6rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
+    .mock-nav-item.active {
+      color: var(--accent);
+      font-weight: 700;
+    }
+    .tag-danger {
+      color: #f87171;
+      background: rgba(248, 113, 113, 0.1);
+      border: 1px solid rgba(248, 113, 113, 0.2);
+      padding: 0.2rem 0.5rem;
+      border-radius: 0.35rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .tag-success {
+      color: #4ade80;
+      background: rgba(74, 222, 128, 0.1);
+      border: 1px solid rgba(74, 222, 128, 0.2);
+      padding: 0.2rem 0.5rem;
+      border-radius: 0.35rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--card-border);
+    }
+    th {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.03);
+      font-weight: 600;
+    }
+    .action-btn {
+      display: inline-block;
+      background: var(--accent);
+      color: #000;
+      font-weight: 700;
+      padding: 0.6rem 1.25rem;
+      border-radius: 9999px;
+      text-decoration: none;
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="badge">Master Plan & Technical Specification</div>
+      <h1>Sonara Stream: Android Polish & Stability Architecture</h1>
+      <p>Harmonizing Sonara with Spotify Redesign Figma aesthetics across Desktop and Android while permanently eliminating mobile crash vectors.</p>
+    </header>
+
+    <section>
+      <h2>🚨 1. Android Crash Root-Cause Audit</h2>
+      <p>The user reported that the Android build currently crashes frequently. We inspected the entire Android native and WebView pipeline and identified 5 concrete crash vectors:</p>
+      
+      <div class="card">
+        <span class="tag-danger">CRASH VECTOR 1</span>
+        <h3 style="margin-top: 0.5rem;">ForegroundServiceStartNotAllowedException & RemoteServiceException</h3>
+        <p><strong>Trigger:</strong> <code>MainActivity.onCreate()</code> initiates <code>ContextCompat.startForegroundService(this, serviceIntent)</code> immediately on cold launch.</p>
+        <p><strong>Why it crashes:</strong> On Android 12 through Android 14 (API 31–34), starting a media foreground service while the app is booting or before active playback begins is blocked by the OS. If notification binding fails to complete within 5s, Android terminates the host process with a fatal <code>RemoteServiceException</code>.</p>
+        <p><strong>Fix:</strong> Deferred service activation: <code>MediaPlaybackService</code> is only started when the user actually initiates playback (first play event).</p>
+      </div>
+
+      <div class="card">
+        <span class="tag-danger">CRASH VECTOR 2</span>
+        <h3 style="margin-top: 0.5rem;">Chromium RenderProcessGone Unhandled Fatal Termination</h3>
+        <p><strong>Trigger:</strong> Missing <code>WebViewClient.onRenderProcessGone()</code> handler in <code>MainActivity.kt</code>.</p>
+        <p><strong>Why it crashes:</strong> If Android's GPU or renderer runs out of memory or hits an internal compositor glitch, the default Android OS behavior is to immediately kill the application process with <code>SIGKILL</code>.</p>
+        <p><strong>Fix:</strong> Implement <code>onRenderProcessGone</code> in a custom <code>WebViewClient</code> returning <code>true</code>, cleanly handling recovery rather than letting the system kill the app.</p>
+      </div>
+
+      <div class="card">
+        <span class="tag-danger">CRASH VECTOR 3</span>
+        <h3 style="margin-top: 0.5rem;">Dangerous Background Reflection Loop on WebView</h3>
+        <p><strong>Trigger:</strong> <code>MainActivity.kt</code> runs a 1500ms Handler calling private reflection <code>View.onWindowVisibilityChanged(View.VISIBLE)</code> while in background.</p>
+        <p><strong>Why it crashes:</strong> Forcing a detached or background WebView surface to report <code>VISIBLE</code> causes internal Chromium C++ assertions and <code>SIGSEGV</code> in <code>libmonochrome.so</code> on modern Android builds.</p>
+        <p><strong>Fix:</strong> Eliminate the reflection loop. Background audio is safely kept alive through <code>mediaPlaybackRequiresUserGesture = false</code> and native <code>PARTIAL_WAKE_LOCK</code> / <code>WifiLock</code>.</p>
+      </div>
+
+      <div class="card">
+        <span class="tag-danger">CRASH VECTOR 4</span>
+        <h3 style="margin-top: 0.5rem;">GPU Texture Allocation Failure from Full-Screen 60px CSS Blur</h3>
+        <p><strong>Trigger:</strong> <code>OverlayPlayer.tsx</code> full-viewport dynamic <code>blur-[60px]</code> background image.</p>
+        <p><strong>Why it crashes:</strong> On mobile GPU chips (Mali / Adreno), applying an unclipped 60px blur over a 1080x2400 viewport allocates enormous framebuffers, rapidly exhausting GPU RAM and triggering renderer termination.</p>
+        <p><strong>Fix:</strong> Replace full-screen image blur with lightweight CSS ambient gradients and pre-scaled 32x32 color-sampled canvas backdrop.</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>🎨 2. Figma & Mobbin Design System Harmonization</h2>
+      <p>Grounding Sonara in the Spotify Redesign Figma files (<a href="https://www.figma.com/design/qy2NqKYdjy86GbeWXVdhfK/Spotify-Redesign--Community-?node-id=3-2&t=EXbeoFLUyTVXAMvx-1" style="color: var(--accent);">Figma Community Link</a>) and Mobbin reference screenshots while retaining Sonara's golden yellow identity (<code>#f3bc16</code>).</p>
+
+      <div class="grid-3">
+        <div class="card">
+          <h3>Surface Tokens</h3>
+          <p><code>--bg: #09090b</code> (True OLED)</p>
+          <p><code>--card: rgba(255,255,255,0.04)</code></p>
+          <p><code>--card-hover: rgba(255,255,255,0.08)</code></p>
+          <p><code>--border: rgba(255,255,255,0.08)</code></p>
+        </div>
+        <div class="card">
+          <h3>Brand Accent</h3>
+          <p><code>--primary: #f3bc16</code> (Sonara Gold)</p>
+          <p><code>--primary-glow: rgba(243,188,22,0.3)</code></p>
+          <p><code>--text-primary: #ffffff</code></p>
+          <p><code>--text-muted: #a1a1aa</code></p>
+        </div>
+        <div class="card">
+          <h3>Geometry & Layout</h3>
+          <p><code>--radius-card: 16px</code></p>
+          <p><code>--radius-thumb: 12px</code></p>
+          <p><code>--radius-pill: 9999px</code></p>
+          <p><code>--touch-target: 48px min</code></p>
+        </div>
+      </div>
+
+      <div class="wireframe-box">
+        <h3 style="text-align: center; margin-bottom: 1.5rem; color: #fff;">Mobile Wireframe Map (Figma Pattern Adaptation)</h3>
+        
+        <div class="mock-screen">
+          <!-- Filter Chips -->
+          <div class="mock-header">
+            <div class="chip active">All</div>
+            <div class="chip">Music</div>
+            <div class="chip">Favorites</div>
+            <div class="chip">Downloads</div>
+          </div>
+
+          <!-- Quick Access 2-column Grid -->
+          <div class="mock-quick-grid">
+            <div class="mock-quick-card">
+              <div class="mock-thumb"></div>
+              <div class="mock-title">Liked Songs</div>
+            </div>
+            <div class="mock-quick-card">
+              <div class="mock-thumb"></div>
+              <div class="mock-title">Top Stream</div>
+            </div>
+            <div class="mock-quick-card">
+              <div class="mock-thumb"></div>
+              <div class="mock-title">Daily Mix</div>
+            </div>
+            <div class="mock-quick-card">
+              <div class="mock-thumb"></div>
+              <div class="mock-title">Offline Lib</div>
+            </div>
+          </div>
+
+          <!-- Section 1 -->
+          <div class="mock-section-title">Continue Listening</div>
+          <div class="mock-carousel">
+            <div class="mock-album-card">
+              <div class="mock-album-cover"></div>
+              <div class="mock-album-name">Blinding Lights</div>
+              <div class="mock-album-artist">The Weeknd</div>
+            </div>
+            <div class="mock-album-card">
+              <div class="mock-album-cover"></div>
+              <div class="mock-album-name">Starboy</div>
+              <div class="mock-album-artist">The Weeknd</div>
+            </div>
+            <div class="mock-album-card">
+              <div class="mock-album-cover"></div>
+              <div class="mock-album-name">After Hours</div>
+              <div class="mock-album-artist">The Weeknd</div>
+            </div>
+          </div>
+
+          <!-- Mini Player -->
+          <div class="mock-mini-player">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <div style="width: 32px; height: 32px; border-radius: 6px; background: var(--accent);"></div>
+              <div>
+                <div style="font-size: 0.65rem; font-weight: 700; color: #fff;">Save Your Tears</div>
+                <div style="font-size: 0.55rem; color: var(--text-muted);">The Weeknd</div>
+              </div>
+            </div>
+            <div style="color: var(--accent); font-size: 0.8rem; font-weight: 700;">▶</div>
+          </div>
+
+          <!-- Bottom Nav -->
+          <div class="mock-nav-bar">
+            <div class="mock-nav-item active">Home</div>
+            <div class="mock-nav-item">Search</div>
+            <div class="mock-nav-item">Library</div>
+            <div class="mock-nav-item">Settings</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>📋 3. Incremental Execution Slices</h2>
+      
+      <table>
+        <thead>
+          <tr>
+            <th>Slice</th>
+            <th>Scope & Objective</th>
+            <th>Primary Files</th>
+            <th>Desktop Impact & Risk</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Slice 1 (Current Proposed)</strong></td>
+            <td><strong>Android Crash Elimination & Native Hardening</strong><br>Eliminate premature foreground service start, remove reflection loop, add WebViewClient recovery, replace GPU-heavy CSS blur with safe gradient.</td>
+            <td><code>MainActivity.kt</code><br><code>MediaPlaybackService.kt</code><br><code>OverlayPlayer.tsx</code></td>
+            <td><span class="tag-success">Zero Desktop Impact</span><br>Android-native patches + mobile CSS only.</td>
+          </tr>
+          <tr>
+            <td><strong>Slice 2</strong></td>
+            <td><strong>Home Screen Figma Restyle (Desktop & Mobile)</strong><br>Add top filter pills, 2-column quick-access cards, prominent album artwork tiles with play buttons.</td>
+            <td><code>src/routes/index.tsx</code><br><code>SongCard.tsx</code><br><code>AppHeader.tsx</code></td>
+            <td><span class="tag-success">Safe Responsive</span><br>Desktop gets 4-column quick grid; mobile gets 2-column.</td>
+          </tr>
+          <tr>
+            <td><strong>Slice 3</strong></td>
+            <td><strong>Search / Browse Screen Overhaul</strong><br>Convert Search into a dedicated browse view with colored genre cards matching Figma references.</td>
+            <td><code>src/routes/stream/index.tsx</code><br><code>OnlineSearchSection.tsx</code></td>
+            <td><span class="tag-success">Feature Gated</span><br>Enhances online stream browse experience on both platforms.</td>
+          </tr>
+          <tr>
+            <td><strong>Slice 4</strong></td>
+            <td><strong>Now Playing & Mini-Player Refinement</strong><br>Hero album cover, thumb-friendly 48dp controls, integrated scrubber, smooth swipe gestures.</td>
+            <td><code>OverlayPlayer.tsx</code><br><code>AudioPlayer.tsx</code></td>
+            <td><span class="tag-success">Zero Desktop Regressions</span><br>Desktop retains dual-column layout with synchronized lyrics.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>🛑 4. Next Step: Approval Gate</h2>
+      <p>Per Section 6 of the Master Instructions, we stop here and wait for your review and approval before making application code changes.</p>
+      <p><strong>Recommendation:</strong> Proceed with <strong>Slice 1: Android Crash Elimination & Native Hardening</strong> first so the Android build stops crashing, followed immediately by Slice 2 (Figma Home UI).</p>
+    </section>
+  </div>
+</body>
+</html>

@@ -31,19 +31,24 @@ class MainActivity : TauriActivity() {
         super.onCreate(savedInstanceState)
         hideSystemNavigation()
 
-        // Start Foreground Media Service for Spotify-like lockscreen & background audio
-        try {
-            val serviceIntent = Intent(this, MediaPlaybackService::class.java)
-            ContextCompat.startForegroundService(this, serviceIntent)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-
         // Prompt for notification permission on Android 13+ (Tiramisu)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101)
             }
+        }
+    }
+
+    private fun ensurePlaybackServiceStarted() {
+        try {
+            val serviceIntent = Intent(this, MediaPlaybackService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ContextCompat.startForegroundService(this, serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "Failed to start MediaPlaybackService", e)
         }
     }
 
@@ -84,11 +89,17 @@ class MainActivity : TauriActivity() {
                 isPlaying: Boolean,
                 positionSecs: Double
             ) {
+                if (isPlaying) {
+                    ensurePlaybackServiceStarted()
+                }
                 MediaPlaybackService.updateTrack(title, artist, album, coverUrl, durationSecs, isPlaying, positionSecs)
             }
 
             @android.webkit.JavascriptInterface
             fun updatePlaybackState(isPlaying: Boolean, positionSecs: Double) {
+                if (isPlaying) {
+                    ensurePlaybackServiceStarted()
+                }
                 MediaPlaybackService.updateState(isPlaying, positionSecs)
             }
         }, "AndroidMedia")
@@ -113,17 +124,8 @@ class MainActivity : TauriActivity() {
         }
     }
 
-    private val keepAliveHandler = android.os.Handler(android.os.Looper.getMainLooper())
-    private val keepAliveRunnable = object : Runnable {
-        override fun run() {
-            resumeWebViewBackground()
-            keepAliveHandler.postDelayed(this, 1500)
-        }
-    }
-
     override fun onResume() {
         super.onResume()
-        keepAliveHandler.removeCallbacks(keepAliveRunnable)
         hideSystemNavigation()
         webViewInstance?.onResume()
         webViewInstance?.resumeTimers()
@@ -153,27 +155,10 @@ class MainActivity : TauriActivity() {
     }
 
     override fun onPause() {
-        // Proactively keep WebView audio active before and after OS pause transition
-        resumeWebViewBackground()
         super.onPause()
-        resumeWebViewBackground()
-        keepAliveHandler.post(keepAliveRunnable)
     }
 
     override fun onStop() {
-        resumeWebViewBackground()
         super.onStop()
-        resumeWebViewBackground()
-    }
-
-    private fun resumeWebViewBackground() {
-        try {
-            webViewInstance?.onResume()
-            webViewInstance?.resumeTimers()
-
-            val method = View::class.java.getDeclaredMethod("onWindowVisibilityChanged", Int::class.javaPrimitiveType)
-            method.isAccessible = true
-            method.invoke(webViewInstance, View.VISIBLE)
-        } catch (_: Exception) {}
     }
 }

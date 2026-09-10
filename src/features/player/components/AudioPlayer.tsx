@@ -54,6 +54,7 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
   const muted = useAppStore((state) => state.muted);
   const setMuted = useAppStore((state) => state.setMuted);
   const volume = useAppStore((state) => state.volume);
+  const setVolume = useAppStore((state) => state.setVolume);
 
   const repeatMode = useAppStore((state) => state.repeatMode);
   const toggleRepeatMode = useAppStore((state) => state.toggleRepeatMode);
@@ -448,10 +449,136 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
           </div>
         </section>
 
-        {/* Desktop Full Player (>= md) */}
-        <section className="hidden md:grid w-full h-full grid-cols-10 items-center">
-          <div className="col-span-2 flex items-center justify-start gap-x-2 2xl:gap-x-4 min-w-0">
-            <div className="size-12 rounded-md bg-linear-to-br from-primary/50 to-primary/30 shrink-0 flex items-center justify-center overflow-hidden">
+        {/* Desktop Full Player (>= md) - Figma 3-Zone Architecture */}
+        <section className="hidden md:flex w-full h-full items-center justify-between gap-4 lg:gap-6 px-2">
+          {/* Zone 1: Left - Transport Controls */}
+          <div className="flex items-center gap-2 lg:gap-3 shrink-0">
+            <Button
+              variant={isShuffle ? "default" : "ghost"}
+              size="icon"
+              className={`rounded-full size-9 transition-colors ${
+                isShuffle ? "text-primary" : "text-neutral-400 hover:text-white"
+              }`}
+              onClick={() => setIsShuffle(!isShuffle)}
+              aria-label="Shuffle"
+            >
+              <Shuffle className="size-4.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full size-9 text-neutral-300 hover:text-white active:scale-90 transition-transform"
+              onClick={handlePrevious}
+              aria-label="Previous Song"
+            >
+              <SkipBack className="size-5" />
+            </Button>
+            {isResolvingStream ? (
+              <Button
+                variant="default"
+                size="icon"
+                className="rounded-full size-11 bg-primary text-black shadow-lg shadow-primary/25"
+                disabled
+              >
+                <Loader2 className="size-5 animate-spin text-black" />
+              </Button>
+            ) : isPlaying ? (
+              <Button
+                variant="default"
+                size="icon"
+                className="rounded-full size-11 bg-primary text-black hover:scale-105 active:scale-95 transition-all shadow-lg shadow-primary/25"
+                onClick={pauseAudio}
+                aria-label="Pause"
+              >
+                <Pause className="size-5 fill-current" />
+              </Button>
+            ) : (
+              <Button
+                variant="default"
+                size="icon"
+                className="rounded-full size-11 bg-primary text-black hover:scale-105 active:scale-95 transition-all shadow-lg shadow-primary/25"
+                onClick={playAudio}
+                aria-label="Play"
+              >
+                <Play className="size-5 fill-current ml-0.5" />
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full size-9 text-neutral-300 hover:text-white active:scale-90 transition-transform"
+              onClick={handleNext}
+              aria-label="Next Song"
+            >
+              <SkipForward className="size-5" />
+            </Button>
+            <Button
+              variant={repeatMode !== "off" ? "default" : "ghost"}
+              size="icon"
+              className={`rounded-full size-9 transition-colors ${
+                repeatMode !== "off" ? "text-primary" : "text-neutral-400 hover:text-white"
+              }`}
+              onClick={toggleRepeatMode}
+              aria-label="Repeat Mode"
+            >
+              {repeatMode === "off" && <Repeat className="size-4.5" />}
+              {repeatMode === "one" && <Repeat1 className="size-4.5" />}
+              {repeatMode === "all" && <Repeat className="size-4.5" />}
+            </Button>
+          </div>
+
+          {/* Zone 2: Center - Timeline Scrubber & Volume Slider */}
+          <div className="flex-1 max-w-2xl flex items-center gap-3 min-w-0">
+            <span className="text-xs font-mono text-neutral-400 shrink-0 w-9 text-right select-none">
+              {getFormattedDuration(currentTime)}
+            </span>
+            <Slider
+              defaultValue={[0]}
+              max={duration || 1}
+              value={[currentTime]}
+              onValueChange={(value) => {
+                handleSeek(value[0]);
+              }}
+              className="flex-1 cursor-pointer"
+            />
+            <span className="text-xs font-mono text-neutral-400 shrink-0 w-9 text-left select-none">
+              {getFormattedDuration(duration)}
+            </span>
+
+            {/* Inline Volume Controls */}
+            <div className="flex items-center gap-1.5 shrink-0 pl-2 border-l border-white/10">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-full size-8 text-neutral-400 hover:text-white"
+                onClick={handleMuteToggle}
+                aria-label={muted ? "Unmute" : "Mute"}
+              >
+                {muted || volume === 0 ? (
+                  <VolumeOff className="size-4 text-red-400" />
+                ) : (
+                  <Volume2 className="size-4" />
+                )}
+              </Button>
+              <Slider
+                min={0}
+                max={100}
+                value={[muted ? 0 : volume]}
+                onValueChange={(val) => {
+                  if (muted) setMuted(false);
+                  setVolume(val[0]);
+                }}
+                className="w-16 lg:w-20 cursor-pointer"
+              />
+            </div>
+          </div>
+
+          {/* Zone 3: Right - Now Playing Track Info & Quick Actions */}
+          <div className="flex items-center justify-end gap-3 shrink-0 min-w-0">
+            <div
+              className="size-12 rounded-lg bg-linear-to-br from-primary/30 to-primary/10 shrink-0 flex items-center justify-center overflow-hidden border border-white/10 shadow-sm cursor-pointer hover:opacity-90 transition-opacity"
+              onClick={() => setIsExpanded(true)}
+            >
               {coverSrc ? (
                 <img
                   src={coverSrc}
@@ -462,92 +589,62 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
                 <Music className="size-5 text-primary" />
               )}
             </div>
-            <div className="min-w-0 space-y-px">
-              <MarqueeText
-                text={currentSong.title}
-                className="text-sm font-medium font-heading"
-              />
-              <MarqueeText
-                text={`${currentSong.artist_name} - ${currentSong.album_name}`}
-                className="text-xs text-muted-foreground"
-              />
-            </div>
-          </div>
-          <div className="col-span-1 flex items-center justify-center gap-x-2 2xl:gap-x-4">
-            <Button variant="ghost" size="icon" onClick={handleFavoriteToggle}>
-              {currentSong.is_favorite ? (
-                <Heart className="text-primary" fill="currentColor" />
-              ) : (
-                <Heart />
-              )}
-            </Button>
-            <Button variant="ghost" size="icon" onClick={handleMuteToggle}>
-              {muted ? <VolumeOff /> : <Volume2 />}
-            </Button>
-          </div>
-          <div className="col-span-4 w-full grid grid-cols-10 items-center justify-center">
-            <span className="text-sm font-heading font-medium text-muted-foreground text-center">
-              {getFormattedDuration(currentTime)}
-            </span>
-            <Slider
-              defaultValue={[0]}
-              max={duration}
-              value={[currentTime]}
-              onValueChange={(value) => {
-                handleSeek(value[0]);
-              }}
-              className="col-span-8 w-full"
-            />
-            <span className="text-sm font-heading font-medium text-muted-foreground text-center">
-              {getFormattedDuration(duration)}
-            </span>
-          </div>
-          <div className="col-span-2 flex items-center justify-center gap-x-2 2xl:gap-x-4">
-            <Button
-              variant={isShuffle ? "default" : "ghost"}
-              size="icon"
-              onClick={() => setIsShuffle(!isShuffle)}
-            >
-              <Shuffle />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={handlePrevious}>
-              <SkipBack />
-            </Button>
-            {isResolvingStream ? (
-              <Button variant="ghost" size="icon" disabled>
-                <Loader2 className="size-4 animate-spin text-primary" />
-              </Button>
-            ) : isPlaying ? (
-              <Button variant="ghost" size="icon" onClick={pauseAudio}>
-                <Pause />
-              </Button>
-            ) : (
-              <Button variant="ghost" size="icon" onClick={playAudio}>
-                <Play />
-              </Button>
-            )}
-            <Button variant="ghost" size="icon" onClick={handleNext}>
-              <SkipForward />
-            </Button>
-            <Button
-              variant={repeatMode !== "off" ? "default" : "ghost"}
-              size="icon"
-              onClick={toggleRepeatMode}
-            >
-              {repeatMode === "off" && <Repeat />}
-              {repeatMode === "one" && <Repeat1 />}
-              {repeatMode === "all" && <Repeat />}
-            </Button>
-          </div>
-          <div className="col-span-1 flex items-center justify-end gap-x-2 2xl:gap-x-4">
-            <Button
-              variant="ghost"
-              size="icon"
+
+            <div
+              className="min-w-0 max-w-[130px] lg:max-w-[170px] space-y-0.5 cursor-pointer select-none"
               onClick={() => setIsExpanded(true)}
             >
-              <ChevronUp />
-            </Button>
-            <PlaybackQueue />
+              <MarqueeText
+                text={currentSong.title}
+                className="text-sm font-semibold font-heading text-white truncate"
+              />
+              <p className="text-xs text-neutral-400 truncate">
+                {currentSong.artist_name || "Unknown Artist"}
+                {currentSong.album_name ? ` • ${currentSong.album_name}` : ""}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-1 shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-full size-8 text-neutral-400 hover:text-white active:scale-90 transition-transform"
+                onClick={handleFavoriteToggle}
+                aria-label="Toggle Favorite"
+              >
+                {currentSong.is_favorite ? (
+                  <Heart className="size-4.5 text-primary fill-current" />
+                ) : (
+                  <Heart className="size-4.5" />
+                )}
+              </Button>
+
+              <AddToPlaylistDialog
+                song={currentSong}
+                trigger={
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-full size-8 text-neutral-400 hover:text-white active:scale-90 transition-transform"
+                    aria-label="Add to Playlist"
+                  >
+                    <SquarePlus className="size-4.5" />
+                  </Button>
+                }
+              />
+
+              <PlaybackQueue />
+
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-full size-8 text-neutral-400 hover:text-white active:scale-90 transition-transform"
+                onClick={() => setIsExpanded(true)}
+                aria-label="Open Now Playing"
+              >
+                <ChevronUp className="size-4.5" />
+              </Button>
+            </div>
           </div>
         </section>
       </footer>

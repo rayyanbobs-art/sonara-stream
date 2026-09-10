@@ -42,8 +42,15 @@ function Index() {
                 <Play size={18} className="text-primary" />
                 Continue Listening
               </h2>
+              <Link
+                to={"/songs"}
+                className="text-xs text-muted-foreground underline hover:text-primary"
+              >
+                See all
+              </Link>
             </div>
-            <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+            {/* Desktop: grid, Mobile: horizontal scroll */}
+            <div className="hidden sm:grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {data.recently_played_songs.slice(0, 4).map((song) => (
                 <SongCard
                   key={song.id}
@@ -52,6 +59,18 @@ function Index() {
                     handlePlaySong(song, data.recently_played_songs)
                   }
                 />
+              ))}
+            </div>
+            <div className="flex sm:hidden gap-3 overflow-x-auto pb-1 -mx-2 px-2 snap-x snap-mandatory scrollbar-none">
+              {data.recently_played_songs.slice(0, 6).map((song) => (
+                <div key={song.id} className="min-w-[75vw] snap-start">
+                  <SongCard
+                    song={song}
+                    handleClick={() =>
+                      handlePlaySong(song, data.recently_played_songs)
+                    }
+                  />
+                </div>
               ))}
             </div>
           </section>
@@ -64,7 +83,8 @@ function Index() {
               Browse Library
             </h2>
           </div>
-          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+          {/* Desktop: grid */}
+          <div className="hidden sm:grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Link to={"/songs"} className="w-full">
               <StatsCard
                 icon={<Music size={20} />}
@@ -94,6 +114,33 @@ function Index() {
               />
             </Link>
           </div>
+          {/* Mobile: compact horizontal row */}
+          <div className="flex sm:hidden gap-2 overflow-x-auto pb-1 -mx-2 px-2 scrollbar-none">
+            <Link to={"/songs"} className="shrink-0">
+              <div className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-card border border-border">
+                <Music size={16} className="text-primary" />
+                <span className="text-sm font-medium">{data.stats.total_songs} Songs</span>
+              </div>
+            </Link>
+            <Link to={"/artists"} className="shrink-0">
+              <div className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-card border border-border">
+                <User size={16} className="text-primary" />
+                <span className="text-sm font-medium">{data.stats.total_artists} Artists</span>
+              </div>
+            </Link>
+            <Link to={"/albums"} className="shrink-0">
+              <div className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-card border border-border">
+                <Album size={16} className="text-primary" />
+                <span className="text-sm font-medium">{data.stats.total_albums} Albums</span>
+              </div>
+            </Link>
+            <Link to={"/favorites"} className="shrink-0">
+              <div className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-card border border-border">
+                <Heart size={16} className="text-primary" />
+                <span className="text-sm font-medium">{data.stats.total_favorites} Favs</span>
+              </div>
+            </Link>
+          </div>
         </section>
 
         {data.most_played_songs.length > 0 && (
@@ -110,7 +157,7 @@ function Index() {
                 View All
               </Link>
             </div>
-            <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="hidden sm:grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {data.most_played_songs.map((song) => (
                 <SongCard
                   key={song.id}
@@ -119,6 +166,18 @@ function Index() {
                     handlePlaySong(song, data.most_played_songs)
                   }
                 />
+              ))}
+            </div>
+            <div className="flex sm:hidden gap-3 overflow-x-auto pb-1 -mx-2 px-2 snap-x snap-mandatory scrollbar-none">
+              {data.most_played_songs.map((song) => (
+                <div key={song.id} className="min-w-[75vw] snap-start">
+                  <SongCard
+                    song={song}
+                    handleClick={() =>
+                      handlePlaySong(song, data.most_played_songs)
+                    }
+                  />
+                </div>
               ))}
             </div>
           </section>
@@ -137,7 +196,7 @@ function Index() {
               View All
             </Link>
           </div>
-          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="hidden sm:grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {data.recently_added_songs.map((song) => (
               <SongCard
                 key={song.id}
@@ -146,6 +205,18 @@ function Index() {
                   handlePlaySong(song, data.recently_added_songs)
                 }
               />
+            ))}
+          </div>
+          <div className="flex sm:hidden gap-3 overflow-x-auto pb-1 -mx-2 px-2 snap-x snap-mandatory scrollbar-none">
+            {data.recently_added_songs.map((song) => (
+              <div key={song.id} className="min-w-[75vw] snap-start">
+                <SongCard
+                  song={song}
+                  handleClick={() =>
+                    handlePlaySong(song, data.recently_added_songs)
+                  }
+                />
+              </div>
             ))}
           </div>
         </section>

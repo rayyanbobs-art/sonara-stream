@@ -76,10 +76,28 @@
 
 ---
 
+- **Slice 4: Now Playing & Mini-Player Refinement (COMPLETED 2026-09-11)**
+  - Floating mini-player elevated above mobile nav bar with 12px rounded artwork, marquee text, favorite toggle, and integrated 2px progress bar.
+  - Full-screen expanded player aligned with Figma Spotify Redesign: context title ("PLAYING FROM LIBRARY"), left-aligned song/artist with right-aligned favorite heart.
+  - Precision timeline scrubber with tabular monospace timestamps.
+  - Thumb-reachable 5-button transport controls with 64px central circular Play/Pause button in Sonara golden yellow (`#f3bc16`).
+  - Bottom utility row: Online track download button, lyrics toggle pill, and playback queue sheet trigger.
+  - Full desktop playback controls and dual-column view preserved without regressions.
+  - Critic Review & Verification passed (Score: 9.63/10).
+
+---
+
+## 5. Verification Baseline
+- `bun run test` (TypeScript typecheck): Pass (0 errors)
+- `bun run build` (Vite production build): Pass (3.50s)
+- `cargo test --lib` (Rust backend unit tests): Pass (29 passed, 0 failed, 3 ignored)
+- Android CI build: `.github/workflows/android.yml`
+
+---
+
 ## 6. The Exact Next Task
-**Slice 4: Now Playing & Mini-Player Refinement (Figma / Mobbin Polish)**:
-- Hero square artwork with 24px corner radius and deep shadow.
-- Scrubber with smooth progress and precision timestamps (`0:00` / `duration`).
-- Control row: `Shuffle`, `Previous`, 64dp central circular `Play/Pause` with Sonara yellow `#f3bc16`, `Next`, `Repeat`.
-- Auxiliary row: Heart / Favorite, Device/Quality, Lyrics sheet toggle, and Queue sheet.
-- Mini-player floating pill with safe-area spacing and progress line.
+**Slice 5: Library, Playlists & Navigation Polish (Mobile Tab 3 & 4)**:
+- Polish `src/routes/songs/index.tsx` and `src/routes/favorites/index.tsx` for mobile touch interaction (48dp list item height, swipe actions, compact album art).
+- Refine playlist header and track list views to match modern streaming aesthetics.
+- Verify safe-area insets and scroll clearance above mini-player.
+

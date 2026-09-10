@@ -359,7 +359,7 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
 
   return (
     <>
-      <footer className="fixed bottom-[60px] md:bottom-2 left-2 right-2 rounded-2xl md:rounded-3xl p-2 md:p-4 shadow-xl border border-muted-foreground/30 bg-muted/90 md:bg-muted/50 dark:bg-sidebar/90 md:dark:bg-sidebar/50 backdrop-blur-xl z-30">
+      <footer className="fixed bottom-[calc(3.75rem+env(safe-area-inset-bottom,0px))] md:bottom-2 left-2 right-2 rounded-2xl md:rounded-3xl p-2 md:p-4 shadow-2xl border border-white/10 bg-card/95 md:bg-muted/50 dark:bg-sidebar/95 md:dark:bg-sidebar/50 backdrop-blur-2xl z-30 transition-all">
         <audio
           ref={playerRef}
           onEnded={handleEnded}
@@ -381,15 +381,15 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
           onTouchEnd={(e) => {
             const startY = Number((e.currentTarget as HTMLElement).dataset.touchStartY || 0);
             const endY = e.changedTouches[0].clientY;
-            if (startY - endY > 50) setIsExpanded(true);
+            if (startY - endY > 40) setIsExpanded(true);
           }}
         >
           <div className="flex items-center justify-between gap-3 px-1 py-0.5">
             <div
               onClick={() => setIsExpanded(true)}
-              className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer"
+              className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer select-none"
             >
-              <div className="size-12 rounded-lg bg-linear-to-br from-primary/50 to-primary/30 shrink-0 flex items-center justify-center overflow-hidden shadow-xs">
+              <div className="size-12 rounded-xl bg-linear-to-br from-primary/30 to-primary/10 shrink-0 flex items-center justify-center overflow-hidden shadow-sm border border-white/10">
                 {coverSrc ? (
                   <img
                     src={coverSrc}
@@ -403,22 +403,27 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
               <div className="min-w-0 space-y-0.5 flex-1 pr-1">
                 <MarqueeText
                   text={currentSong.title}
-                  className="text-sm font-semibold font-heading truncate"
+                  className="text-sm font-semibold font-heading truncate text-foreground"
                 />
-                <p className="text-xs text-muted-foreground truncate">
+                <p className="text-xs text-muted-foreground truncate font-medium">
                   {currentSong.artist_name || "Unknown Artist"}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
               <Button
                 variant="ghost"
                 size="icon"
-                className="rounded-full size-9"
-                onClick={handlePrevious}
+                className="rounded-full size-9 text-muted-foreground hover:text-foreground active:scale-90 transition-transform"
+                onClick={handleFavoriteToggle}
+                aria-label="Toggle Favorite"
               >
-                <SkipBack className="size-4" />
+                {currentSong.is_favorite ? (
+                  <Heart className="size-4.5 text-primary fill-current" />
+                ) : (
+                  <Heart className="size-4.5" />
+                )}
               </Button>
               {isResolvingStream ? (
                 <Button variant="ghost" size="icon" className="rounded-full size-10" disabled>
@@ -428,33 +433,36 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
                 <Button
                   variant="default"
                   size="icon"
-                  className="rounded-full size-10 shadow-md shadow-primary/20"
+                  className="rounded-full size-10 shadow-md shadow-primary/20 active:scale-95 transition-transform"
                   onClick={pauseAudio}
+                  aria-label="Pause"
                 >
-                  <Pause className="size-5" />
+                  <Pause className="size-5 fill-current" />
                 </Button>
               ) : (
                 <Button
                   variant="default"
                   size="icon"
-                  className="rounded-full size-10 shadow-md shadow-primary/20"
+                  className="rounded-full size-10 shadow-md shadow-primary/20 active:scale-95 transition-transform"
                   onClick={playAudio}
+                  aria-label="Play"
                 >
-                  <Play className="size-5 ml-0.5" />
+                  <Play className="size-5 fill-current ml-0.5" />
                 </Button>
               )}
               <Button
                 variant="ghost"
                 size="icon"
-                className="rounded-full size-9"
+                className="rounded-full size-9 text-muted-foreground hover:text-foreground active:scale-90 transition-transform"
                 onClick={handleNext}
+                aria-label="Next Song"
               >
-                <SkipForward className="size-4" />
+                <SkipForward className="size-4.5" />
               </Button>
             </div>
           </div>
-          {/* Thin progress bar */}
-          <div className="w-full h-[2px] bg-muted-foreground/20 rounded-full mt-1 overflow-hidden">
+          {/* Integrated 2px progress bar */}
+          <div className="w-full h-[2px] bg-white/10 rounded-full mt-1.5 overflow-hidden">
             <div
               className="h-full bg-primary rounded-full transition-[width] duration-300 ease-linear"
               style={{ width: duration > 0 ? `${(currentTime / duration) * 100}%` : "0%" }}

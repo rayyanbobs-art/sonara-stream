@@ -118,47 +118,31 @@ const OverlayPlayer = ({
           isExpanded ? "translate-y-0" : "translate-y-full"
         } transition-transform duration-300 ease-out pointer-events-auto overflow-hidden safe-top safe-bottom will-change-transform`}
       >
-        {/* Top Header Bar */}
+        {/* Top Header Bar (Figma Spotify Style) */}
         <div
           data-tauri-drag-region={isMacOS}
           className="w-full h-14 shrink-0 flex items-center justify-between px-4 pt-1"
         >
-          <Button variant="ghost" size="icon" onClick={collapse} className="rounded-full">
+          <Button variant="ghost" size="icon" onClick={collapse} className="rounded-full" aria-label="Collapse Player">
             <ChevronDown className="size-5" />
           </Button>
 
-          {/* Mobile Tab Switcher */}
-          <div className="flex md:hidden items-center p-1 bg-muted/60 rounded-full border border-border/40 text-xs font-medium">
-            <button
-              onClick={() => setMobileTab("track")}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-full transition-all ${
-                mobileTab === "track"
-                  ? "bg-primary text-primary-foreground shadow-xs font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Disc3 className="size-3.5" />
-              <span>Track</span>
-            </button>
-            <button
-              onClick={() => setMobileTab("lyrics")}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-full transition-all ${
-                mobileTab === "lyrics"
-                  ? "bg-primary text-primary-foreground shadow-xs font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Mic2 className="size-3.5" />
-              <span>Lyrics</span>
-            </button>
+          {/* Mobile Context Title */}
+          <div className="flex md:hidden flex-col items-center justify-center text-center">
+            <span className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground/70">
+              Playing from library
+            </span>
+            <span className="text-xs font-bold font-heading text-foreground truncate max-w-[180px]">
+              {song.album_name || "Sonara Stream"}
+            </span>
           </div>
 
-          <div className="flex items-center gap-x-2">
+          <div className="flex items-center gap-x-1.5">
             {isOnline && (
               <Button
                 variant="ghost"
                 size="icon"
-                className="rounded-full"
+                className="hidden md:flex rounded-full"
                 disabled={downloadMutation.isPending || downloadMutation.isSuccess}
                 onClick={() => downloadMutation.mutate({ song })}
               >
@@ -174,7 +158,9 @@ const OverlayPlayer = ({
             <ActionsDropdown song={song}>
               <AddToPlaylistDialog song={song} />
             </ActionsDropdown>
-            <PlaybackQueue />
+            <div className="hidden md:block">
+              <PlaybackQueue />
+            </div>
           </div>
         </div>
 
@@ -308,12 +294,12 @@ const OverlayPlayer = ({
           </div>
 
           {/* Mobile Layout (visible on screens < md) */}
-          <div className="flex md:hidden flex-col h-full overflow-y-auto">
+          <div className="flex md:hidden flex-col h-full overflow-hidden">
             {mobileTab === "track" ? (
-              <div className="flex-1 flex flex-col justify-between py-2 max-w-sm mx-auto w-full">
+              <div className="flex-1 flex flex-col justify-between py-2 max-w-sm mx-auto w-full px-4 overflow-y-auto">
                 {/* Artwork */}
-                <div className="flex-1 min-h-0 flex items-center justify-center px-4 py-2">
-                  <div className="w-full max-w-[85vw] max-h-[50vh] aspect-square rounded-3xl bg-linear-to-br from-primary/30 to-primary/10 flex items-center justify-center overflow-hidden shadow-2xl border border-white/10">
+                <div className="flex-1 min-h-0 flex items-center justify-center py-2">
+                  <div className="w-full max-w-[82vw] aspect-square rounded-2xl bg-linear-to-br from-primary/30 to-primary/10 flex items-center justify-center overflow-hidden shadow-2xl border border-white/10">
                     {coverSrc ? (
                       <img
                         src={coverSrc}
@@ -321,102 +307,185 @@ const OverlayPlayer = ({
                         className="w-full h-full object-cover object-center"
                       />
                     ) : (
-                      <Music className="size-24 text-primary/70" />
+                      <Music className="size-20 text-primary/70" />
                     )}
                   </div>
                 </div>
 
-                {/* Track Details */}
-                <div className="space-y-1 text-center py-2">
-                  <MarqueeText
-                    text={song.title}
-                    className="text-lg font-bold leading-tight font-heading"
-                  />
-                  <MarqueeText
-                    text={`${song.artist_name || "Unknown Artist"} • ${song.album_name || "Unknown Album"}`}
-                    className="text-xs text-muted-foreground font-medium"
-                  />
+                {/* Track Details & Favorite */}
+                <div className="flex items-center justify-between py-2">
+                  <div className="min-w-0 flex-1 pr-3 space-y-0.5">
+                    <MarqueeText
+                      text={song.title}
+                      className="text-xl font-bold leading-tight font-heading truncate"
+                    />
+                    <MarqueeText
+                      text={song.artist_name || "Unknown Artist"}
+                      className="text-sm text-muted-foreground font-medium truncate"
+                    />
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-full size-11 shrink-0 text-muted-foreground hover:text-foreground active:scale-90 transition-transform"
+                    onClick={toggleFavorite}
+                    aria-label="Toggle Favorite"
+                  >
+                    {song.is_favorite ? (
+                      <Heart className="size-6 text-primary fill-current" />
+                    ) : (
+                      <Heart className="size-6" />
+                    )}
+                  </Button>
                 </div>
 
-                {/* Sliders & Controls */}
-                <div className="space-y-3 pt-2">
-                  <div className="space-y-1">
-                    <Slider
-                      defaultValue={[0]}
-                      max={duration || 100}
-                      value={[position]}
-                      onValueChange={(value) => onSeek(value[0])}
-                      className="w-full"
-                    />
-                    <div className="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
-                      <span>{getFormattedDuration(position)}</span>
-                      <span>{getFormattedDuration(duration)}</span>
-                    </div>
+                {/* Timeline Scrubber */}
+                <div className="space-y-1.5 pt-1 pb-2">
+                  <Slider
+                    defaultValue={[0]}
+                    max={duration || 100}
+                    value={[position]}
+                    onValueChange={(value) => onSeek(value[0])}
+                    className="w-full"
+                  />
+                  <div className="flex items-center justify-between text-xs font-mono font-medium text-muted-foreground px-0.5">
+                    <span>{getFormattedDuration(position)}</span>
+                    <span>{getFormattedDuration(duration)}</span>
+                  </div>
+                </div>
+
+                {/* Transport Controls (5 buttons, 64px central play) */}
+                <div className="flex items-center justify-between px-1 py-1">
+                  <Button
+                    variant={isShuffle ? "default" : "ghost"}
+                    size="icon"
+                    className={`rounded-full size-10 ${isShuffle ? "bg-primary/20 text-primary hover:bg-primary/30" : "text-muted-foreground hover:text-foreground"}`}
+                    onClick={() => setIsShuffle(!isShuffle)}
+                    aria-label="Shuffle"
+                  >
+                    <Shuffle className="size-[18px]" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-full size-12 text-foreground active:scale-90 transition-transform"
+                    onClick={onPrevious}
+                    aria-label="Previous Track"
+                  >
+                    <SkipBack className="size-6" />
+                  </Button>
+                  <Button
+                    size="icon-lg"
+                    className="rounded-full size-16 bg-primary text-primary-foreground hover:bg-primary/90 shadow-xl shadow-primary/25 active:scale-95 transition-transform"
+                    onClick={isPlaying ? onPause : onPlay}
+                    aria-label={isPlaying ? "Pause" : "Play"}
+                  >
+                    {isPlaying ? (
+                      <Pause className="size-7 fill-current" />
+                    ) : (
+                      <Play className="size-7 fill-current ml-0.5" />
+                    )}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-full size-12 text-foreground active:scale-90 transition-transform"
+                    onClick={onNext}
+                    aria-label="Next Track"
+                  >
+                    <SkipForward className="size-6" />
+                  </Button>
+                  <Button
+                    variant={repeatMode !== "off" ? "default" : "ghost"}
+                    size="icon"
+                    className={`rounded-full size-10 ${repeatMode !== "off" ? "bg-primary/20 text-primary hover:bg-primary/30" : "text-muted-foreground hover:text-foreground"}`}
+                    onClick={toggleRepeatMode}
+                    aria-label="Repeat Mode"
+                  >
+                    {repeatMode === "off" && <Repeat className="size-[18px]" />}
+                    {repeatMode === "one" && <Repeat1 className="size-[18px]" />}
+                    {repeatMode === "all" && <Repeat className="size-[18px]" />}
+                  </Button>
+                </div>
+
+                {/* Bottom Utility Row: Download / Lyrics Switcher / Queue */}
+                <div className="flex items-center justify-between pt-3 pb-2 px-2 border-t border-white/5">
+                  <div className="w-10 flex items-center justify-start">
+                    {isOnline ? (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="rounded-full size-10 text-muted-foreground hover:text-foreground"
+                        disabled={downloadMutation.isPending || downloadMutation.isSuccess}
+                        onClick={() => downloadMutation.mutate({ song })}
+                        aria-label="Download Song"
+                      >
+                        {downloadMutation.isPending ? (
+                          <Loader2 className="size-4.5 animate-spin text-primary" />
+                        ) : downloadMutation.isSuccess ? (
+                          <Check className="size-4.5 text-emerald-500" />
+                        ) : (
+                          <Download className="size-4.5" />
+                        )}
+                      </Button>
+                    ) : (
+                      <div className="size-10" />
+                    )}
                   </div>
 
-                  <div className="flex items-center justify-between px-2">
-                    <Button
-                      variant={isShuffle ? "default" : "ghost"}
-                      size="icon"
-                      className="rounded-full size-10"
-                      onClick={() => setIsShuffle(!isShuffle)}
-                    >
-                      <Shuffle className="size-[18px]" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="rounded-full size-12"
-                      onClick={onPrevious}
-                    >
-                      <SkipBack className="size-6" />
-                    </Button>
-                    <Button
-                      size="icon-lg"
-                      className="rounded-full size-16 shadow-lg shadow-primary/25"
-                      onClick={isPlaying ? onPause : onPlay}
-                    >
-                      {isPlaying ? <Pause className="size-7" /> : <Play className="size-7 ml-0.5" />}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="rounded-full size-12"
-                      onClick={onNext}
-                    >
-                      <SkipForward className="size-6" />
-                    </Button>
-                    <Button
-                      variant={repeatMode !== "off" ? "default" : "ghost"}
-                      size="icon"
-                      className="rounded-full size-10"
-                      onClick={toggleRepeatMode}
-                    >
-                      {repeatMode === "off" && <Repeat className="size-[18px]" />}
-                      {repeatMode === "one" && <Repeat1 className="size-[18px]" />}
-                      {repeatMode === "all" && <Repeat className="size-[18px]" />}
-                    </Button>
-                  </div>
+                  <button
+                    onClick={() => setMobileTab("lyrics")}
+                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white/5 hover:bg-white/10 active:scale-95 transition-all text-xs font-medium text-muted-foreground hover:text-foreground border border-white/10"
+                    aria-label="Open Lyrics"
+                  >
+                    <Mic2 className="size-3.5 text-primary" />
+                    <span>Lyrics</span>
+                  </button>
 
-                  <div className="flex items-center justify-center pt-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="rounded-full size-10"
-                      onClick={toggleFavorite}
-                    >
-                      {song.is_favorite ? (
-                        <Heart className="size-5 text-primary fill-current" />
-                      ) : (
-                        <Heart className="size-5" />
-                      )}
-                    </Button>
+                  <div className="w-10 flex items-center justify-end">
+                    <PlaybackQueue />
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="flex-1 h-full overflow-hidden">
-                <LyricsSection song={song} position={position} />
+              /* Mobile Lyrics View */
+              <div className="flex-1 flex flex-col justify-between py-2 max-w-sm mx-auto w-full px-4 overflow-hidden">
+                <div className="flex-1 overflow-hidden py-2">
+                  <LyricsSection song={song} position={position} />
+                </div>
+
+                <div className="flex items-center justify-between px-2 pt-2 border-t border-white/5 shrink-0">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <Button
+                      size="icon"
+                      className="rounded-full size-10 bg-primary text-primary-foreground shadow-md shadow-primary/25 shrink-0"
+                      onClick={isPlaying ? onPause : onPlay}
+                      aria-label={isPlaying ? "Pause" : "Play"}
+                    >
+                      {isPlaying ? (
+                        <Pause className="size-5 fill-current" />
+                      ) : (
+                        <Play className="size-5 fill-current ml-0.5" />
+                      )}
+                    </Button>
+                    <div className="min-w-0 pr-2">
+                      <p className="text-xs font-semibold truncate text-foreground">{song.title}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{song.artist_name || "Unknown"}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => setMobileTab("track")}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-semibold shadow-xs active:scale-95 transition-transform"
+                      aria-label="Back to Track View"
+                    >
+                      <Disc3 className="size-3.5" />
+                      <span>Track</span>
+                    </button>
+                    <PlaybackQueue />
+                  </div>
+                </div>
               </div>
             )}
           </div>

@@ -24,9 +24,10 @@ import useGetAllPlaylistsQuery from "@/features/playlists/api/useGetAllPlaylists
 
 type AddToPlaylistDialogProps = {
   song: Song;
+  trigger?: React.ReactNode;
 };
 
-const AddToPlaylistDialog = ({ song }: AddToPlaylistDialogProps) => {
+const AddToPlaylistDialog = ({ song, trigger }: AddToPlaylistDialogProps) => {
   const [selectedId, setSelectedId] = useState<string>("");
   const [open, setOpen] = useState(false);
 
@@ -48,15 +49,19 @@ const AddToPlaylistDialog = ({ song }: AddToPlaylistDialogProps) => {
     <Dialog open={open} onOpenChange={setOpen}>
       <form onSubmit={handleSubmit} id="add-to-playlist-form">
         <DialogTrigger asChild>
-          <DropdownMenuItem
-            className="text-xs"
-            onSelect={(e) => e.preventDefault()}
-            onClick={(e) => e.stopPropagation()}
-          >
-            Add to Playlist
-          </DropdownMenuItem>
+          {trigger ? (
+            trigger
+          ) : (
+            <DropdownMenuItem
+              className="text-xs"
+              onSelect={(e) => e.preventDefault()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              Add to Playlist
+            </DropdownMenuItem>
+          )}
         </DialogTrigger>
-        <DialogContent className="max-w-40" showCloseButton={false}>
+        <DialogContent className="max-w-xs sm:max-w-sm" showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>Add to Playlist</DialogTitle>
             <DialogDescription>

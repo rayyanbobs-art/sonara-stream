@@ -9,6 +9,7 @@ import {
   Shuffle,
   SkipBack,
   SkipForward,
+  SquarePlus,
   Volume2,
   VolumeOff,
 } from "lucide-react";
@@ -22,6 +23,7 @@ import useAppStore from "@/store/app-store";
 import useToggleFavoriteMutation from "@/features/songs/api/useToggleFavoriteMutation";
 import PlaybackQueue from "@/features/queue/components/PlaybackQueue";
 import OverlayPlayer from "@/features/player/components/OverlayPlayer";
+import AddToPlaylistDialog from "@/features/playlists/components/AddToPlaylistDialog";
 import useMediaSession from "@/hooks/useMediaSession";
 import MarqueeText from "@/components/custom/MarqueText";
 import { isOnlineSong, getOnlineVideoId } from "@/lib/onlineTrack";
@@ -382,7 +384,21 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 shrink-0">
+            <div className="flex items-center gap-1 shrink-0">
+              <AddToPlaylistDialog
+                song={currentSong}
+                trigger={
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-full size-9 text-muted-foreground hover:text-foreground active:scale-90 transition-transform"
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label="Add to Playlist"
+                  >
+                    <SquarePlus className="size-5" />
+                  </Button>
+                }
+              />
               <Button
                 variant="ghost"
                 size="icon"
@@ -421,15 +437,6 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
                   <Play className="size-5 fill-current ml-0.5" />
                 </Button>
               )}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="rounded-full size-9 text-muted-foreground hover:text-foreground active:scale-90 transition-transform"
-                onClick={handleNext}
-                aria-label="Next Song"
-              >
-                <SkipForward className="size-4.5" />
-              </Button>
             </div>
           </div>
           {/* Integrated 2px progress bar */}

@@ -98,18 +98,26 @@ function RouteComponent() {
               {getFormattedDuration(totalDuration)}
             </p>
 
-            <div className="flex items-center justify-center sm:justify-start gap-3 mt-3">
-              <Button onClick={handlePlayAll} className="gap-2 text-xs h-9 sm:h-10 px-4 rounded-xl shadow-md shadow-primary/20">
-                <Play size={16} fill="currentColor" />
-                Play All
-              </Button>
+            <div className="flex items-center justify-center sm:justify-start gap-4 mt-4">
               <Button
-                onClick={handleShuffle}
-                variant={isShuffle ? "default" : "outline"}
-                className="gap-2 text-xs h-9 sm:h-10 px-4 rounded-xl border border-muted-foreground/30"
+                size="icon-lg"
+                onClick={handlePlayAll}
+                aria-label="Play All"
+                className="size-12 sm:size-13 rounded-full bg-primary text-black hover:bg-primary/90 shadow-xl shadow-primary/30 hover:scale-105 active:scale-95 transition-transform"
               >
-                <Shuffle size={16} />
-                Shuffle
+                <Play size={22} className="fill-current ml-0.5" />
+              </Button>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleShuffle}
+                aria-label="Shuffle"
+                className={`rounded-full size-10 ${
+                  isShuffle ? "text-primary bg-primary/10" : "text-neutral-400 hover:text-white"
+                }`}
+              >
+                <Shuffle size={20} />
               </Button>
             </div>
           </div>

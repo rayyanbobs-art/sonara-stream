@@ -11,7 +11,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { Link } from "@tanstack/react-router";
-import { Settings } from "lucide-react";
+import { Library, ListMusic, Settings } from "lucide-react";
 import { homeRoutes } from "@/constants/constants";
 import CreatePlaylistDialog from "@/features/playlists/components/CreatePlaylistDialog";
 import useGetAllPlaylistsQuery from "@/features/playlists/api/useGetAllPlaylistsQuery";
@@ -20,31 +20,32 @@ const AppSidebar = () => {
   const { data: playlists } = useGetAllPlaylistsQuery();
 
   return (
-    <Sidebar variant="floating" className="pb-25">
+    <Sidebar variant="floating" className="pb-25 bg-[#121212]/95 border-r border-white/5 backdrop-blur-2xl">
       <SidebarHeader
         data-tauri-drag-region
         className="flex justify-center items-center h-10"
       >
         {/* <WindowControlButtons /> */}
       </SidebarHeader>
-      <SidebarContent className="overscroll-contain w-full h-full">
+      <SidebarContent className="overscroll-contain w-full h-full px-1">
         <SidebarGroup className="space-y-1">
-          <SidebarGroupLabel className="font-semibold font-heading">
-            Your Library
+          <SidebarGroupLabel className="font-semibold font-heading flex items-center gap-2 text-foreground/90 px-4 pt-1">
+            <Library className="size-4 text-primary" />
+            <span className="text-sm font-bold tracking-tight">My Library</span>
           </SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu className="space-y-1">
+            <SidebarMenu className="space-y-0.5">
               {homeRoutes.map((route) => (
                 <SidebarMenuItem key={route.name}>
-                  <SidebarMenuButton className="w-full h-10 p-0">
+                  <SidebarMenuButton className="w-full h-9 p-0">
                     <Link
                       to={route.href}
-                      className="w-full h-full text-xs font-medium px-6 flex items-center gap-3"
+                      className="w-full h-full text-xs font-medium px-4 rounded-xl flex items-center gap-3 text-neutral-400 hover:text-white hover:bg-white/5 transition-colors"
                       activeProps={{
-                        className: "text-primary-foreground bg-primary",
+                        className: "text-white bg-white/10 font-semibold",
                       }}
                     >
-                      <route.icon />
+                      <route.icon className="size-4 shrink-0" />
                       {route.name}
                     </Link>
                   </SidebarMenuButton>
@@ -54,24 +55,25 @@ const AppSidebar = () => {
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup className="space-y-1">
-          <SidebarGroupLabel className="font-semibold font-heading flex items-center justify-between">
-            Your Playlists
+          <SidebarGroupLabel className="font-semibold font-heading flex items-center justify-between text-neutral-400 px-4 text-xs">
+            <span>Playlists</span>
             <CreatePlaylistDialog />
           </SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu className="space-y-1">
+            <SidebarMenu className="space-y-0.5">
               {playlists?.map((playlist) => (
                 <SidebarMenuItem key={playlist.id}>
-                  <SidebarMenuButton className="w-full h-10 p-0">
+                  <SidebarMenuButton className="w-full h-9 p-0">
                     <Link
                       to={"/playlists/$id"}
                       params={{ id: playlist.id.toString() }}
-                      className="w-full h-full text-xs font-medium px-6 flex items-center truncate"
+                      className="w-full h-full text-xs font-medium px-4 rounded-xl flex items-center gap-3 text-neutral-400 hover:text-white hover:bg-white/5 truncate transition-colors"
                       activeProps={{
-                        className: "text-primary-foreground bg-primary",
+                        className: "text-white bg-white/10 font-semibold",
                       }}
                     >
-                      {playlist.name}
+                      <ListMusic className="size-4 shrink-0 text-neutral-500" />
+                      <span className="truncate">{playlist.name}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -80,18 +82,18 @@ const AppSidebar = () => {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="border-t border-muted-foreground/20">
+      <SidebarFooter className="border-t border-white/5 p-2">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton className="w-full p-0">
+            <SidebarMenuButton className="w-full h-9 p-0">
               <Link
                 to={"/settings"}
-                className="w-full h-full text-xs px-6 flex items-center gap-3"
+                className="w-full h-full text-xs px-4 rounded-xl flex items-center gap-3 text-neutral-400 hover:text-white hover:bg-white/5 transition-colors"
                 activeProps={{
-                  className: "text-primary-foreground bg-primary",
+                  className: "text-white bg-white/10 font-semibold",
                 }}
               >
-                <Settings />
+                <Settings className="size-4 shrink-0" />
                 Settings
               </Link>
             </SidebarMenuButton>

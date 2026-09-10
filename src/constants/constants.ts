@@ -23,14 +23,19 @@ const homeRoutes: HomeRoute[] = [
     icon: Home,
   },
   {
-    name: "Online Stream",
-    href: "/stream",
-    icon: Radio,
+    name: "Liked Songs",
+    href: "/favorites",
+    icon: Heart,
   },
   {
-    name: "Songs",
+    name: "All Songs",
     href: "/songs",
     icon: Music,
+  },
+  {
+    name: "Discover & Stream",
+    href: "/stream",
+    icon: Radio,
   },
   {
     name: "Artists",
@@ -41,11 +46,6 @@ const homeRoutes: HomeRoute[] = [
     name: "Albums",
     href: "/albums",
     icon: BookImage,
-  },
-  {
-    name: "Favorites",
-    href: "/favorites",
-    icon: Heart,
   },
 ];
 

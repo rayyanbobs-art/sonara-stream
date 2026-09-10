@@ -1,9 +1,9 @@
 import { useRef } from "react";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Home, Settings, Sparkles, User } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { platform } from "@tauri-apps/plugin-os";
 import { Button } from "@/components/ui/button";
-import { useCanGoBack, useRouter } from "@tanstack/react-router";
+import { Link, useCanGoBack, useRouter } from "@tanstack/react-router";
 import SearchDialog from "@/features/search/components/SearchDialog";
 import ImportButton from "@/features/import/components/ImportButton";
 
@@ -44,21 +44,66 @@ const AppHeader = () => {
       style={{
         top: "max(0.5rem, env(safe-area-inset-top, 0px))",
       }}
-      className="h-14 px-2.5 sm:px-3 py-2 fixed right-2 left-2 md:left-64 rounded-2xl md:rounded-3xl shadow-md border border-muted-foreground/30 bg-muted/90 md:bg-muted/50 dark:bg-sidebar/90 md:dark:bg-sidebar/50 backdrop-blur-lg z-20 flex items-center justify-between gap-2 overflow-hidden"
+      className="h-14 px-2.5 sm:px-4 py-2 fixed right-2 left-2 md:left-64 rounded-2xl md:rounded-3xl shadow-xl border border-white/10 bg-[#121212]/90 backdrop-blur-2xl z-20 flex items-center justify-between gap-3 overflow-hidden"
     >
       <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
         <Button
           variant="outline"
-          className="border border-muted-foreground/30 shrink-0 size-9 rounded-xl"
+          className="border border-white/10 shrink-0 size-9 rounded-xl bg-white/5 text-neutral-300 hover:text-white"
           size="icon"
           onClick={handleBack}
         >
           <ChevronLeft className="size-4" />
         </Button>
-        <SearchDialog />
+
+        {/* Desktop Navigation Pills (Figma Desktop Top Nav) */}
+        <div className="hidden md:flex items-center gap-1.5 shrink-0">
+          <Link
+            to="/"
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold text-neutral-300 hover:text-white hover:bg-white/10 transition-colors"
+            activeProps={{
+              className: "bg-white/15 text-white font-bold",
+            }}
+          >
+            <Home className="size-4" />
+            <span>Home</span>
+          </Link>
+
+          <Link
+            to="/stream"
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold text-neutral-300 hover:text-white hover:bg-white/10 transition-colors"
+            activeProps={{
+              className: "bg-white/15 text-white font-bold",
+            }}
+          >
+            <Sparkles className="size-4" />
+            <span>Discover</span>
+          </Link>
+        </div>
+
+        {/* Search Bar / Dialog */}
+        <div className="flex-1 max-w-md">
+          <SearchDialog />
+        </div>
       </div>
-      <div className="shrink-0 flex items-center">
+
+      {/* Right Utility Group */}
+      <div className="shrink-0 flex items-center gap-1.5 sm:gap-2">
         <ImportButton />
+        <Link
+          to="/settings"
+          className="hidden md:flex items-center justify-center size-9 rounded-full bg-white/5 border border-white/10 text-neutral-300 hover:text-white hover:bg-white/10 transition-colors"
+          aria-label="Settings"
+        >
+          <Settings className="size-4" />
+        </Link>
+        <Link
+          to="/settings"
+          className="flex items-center justify-center size-8 sm:size-9 rounded-full bg-linear-to-br from-primary/30 to-primary/10 border border-primary/20 text-primary hover:opacity-90 transition-opacity"
+          aria-label="User Profile"
+        >
+          <User className="size-4 sm:size-4.5" />
+        </Link>
       </div>
     </header>
   );

@@ -8,6 +8,7 @@ mod spotify;
 mod ytdlp_updater;
 mod recommend;
 mod media_controls;
+mod local_server;
 
 use db::{connection::get_connection, migrations::run_migrations};
 use std::{sync::Mutex, time::Duration};
@@ -127,6 +128,10 @@ pub fn run() {
                 youtube::init_search_cache(app_data);
             }
 
+            tauri::async_runtime::spawn(async {
+                let _ = local_server::start_local_server().await;
+            });
+
             let _ = media_controls::init_media_controls(app);
 
             Ok(())
@@ -155,6 +160,7 @@ pub fn run() {
             commands::download::is_track_downloaded,
             commands::song::record_song_play,
             commands::song::read_audio_file,
+            local_server::get_local_audio_url,
             commands::lyrics::get_song_lyrics,
             commands::lyrics::update_song_lyrics,
             commands::playlist::get_all_playlists,

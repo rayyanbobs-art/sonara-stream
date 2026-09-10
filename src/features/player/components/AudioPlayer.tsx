@@ -27,30 +27,6 @@ import MarqueeText from "@/components/custom/MarqueText";
 import { isOnlineSong, getOnlineVideoId } from "@/lib/onlineTrack";
 import { getOptimizedThumbnail } from "@/utils/thumbnail";
 
-const getAudioMimeType = (path: string): string => {
-  const ext = path.split(".").pop()?.toLowerCase();
-  switch (ext) {
-    case "m4a":
-      return "audio/mp4";
-    case "mp3":
-      return "audio/mpeg";
-    case "flac":
-      return "audio/flac";
-    case "wav":
-      return "audio/wav";
-    case "ogg":
-      return "audio/ogg";
-    case "opus":
-      return "audio/opus";
-    case "aac":
-      return "audio/aac";
-    case "webm":
-      return "audio/webm";
-    default:
-      return "audio/mpeg";
-  }
-};
-
 type AudioPlayerProps = {
   currentSong: Song;
 };
@@ -292,23 +268,18 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
       let isCancelled = false;
       const loadAndPlayLocal = async () => {
         try {
-          // Read binary data via Rust IPC to prevent Android WebView asset protocol range crashes
-          const fileData = await invoke<ArrayBuffer | Uint8Array>("read_audio_file", {
-            path: currentSong.path,
-          });
-          if (isCancelled || !playerRef.current) return;
-
           if (activeBlobUrlRef.current) {
             URL.revokeObjectURL(activeBlobUrlRef.current);
             activeBlobUrlRef.current = null;
           }
 
-          const mimeType = getAudioMimeType(currentSong.path);
-          const blob = new Blob([fileData], { type: mimeType });
-          const blobUrl = URL.createObjectURL(blob);
-          activeBlobUrlRef.current = blobUrl;
+          // Stream audio via local HTTP 206 server (zero-copy range streaming, safe for Android & desktop)
+          const localUrl = await invoke<string>("get_local_audio_url", {
+            path: currentSong.path,
+          });
+          if (isCancelled || !playerRef.current) return;
 
-          player.src = blobUrl;
+          player.src = localUrl;
           const playPromise = player.play();
           if (playPromise !== undefined) {
             playPromise.catch((err) => {
@@ -318,7 +289,7 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
             });
           }
         } catch (err) {
-          console.warn("read_audio_file fallback to convertFileSrc:", err);
+          console.warn("get_local_audio_url fallback to convertFileSrc:", err);
           if (isCancelled || !playerRef.current) return;
           if (activeBlobUrlRef.current) {
             URL.revokeObjectURL(activeBlobUrlRef.current);

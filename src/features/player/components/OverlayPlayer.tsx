@@ -15,11 +15,11 @@ import {
   Shuffle,
   SkipBack,
   SkipForward,
-  Volume2,
-  VolumeOff,
   Mic2,
   Disc3,
   Check,
+  SquarePlus,
+  User,
 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { getFormattedDuration } from "@/lib/helpers";
@@ -63,6 +63,7 @@ const OverlayPlayer = ({
   toggleFavorite,
 }: OverlayPlayerProps) => {
   const [mobileTab, setMobileTab] = useState<"track" | "lyrics">("track");
+  const [desktopTab, setDesktopTab] = useState<"lyrics" | "credits">("lyrics");
   const downloadMutation = useDownloadTrack();
   const isOnline = isOnlineSong(song);
 
@@ -72,16 +73,6 @@ const OverlayPlayer = ({
   const repeatMode = useAppStore((state) => state.repeatMode);
   const toggleRepeatMode = useAppStore((state) => state.toggleRepeatMode);
 
-  const muted = useAppStore((state) => state.muted);
-  const setMuted = useAppStore((state) => state.setMuted);
-
-  const volume = useAppStore((state) => state.volume);
-  const setVolume = useAppStore((state) => state.setVolume);
-
-  const handleVolumeChange = (value: number) => {
-    setVolume(value);
-    setMuted(value === 0);
-  };
 
   const currentPlatform = platform();
   const isMacOS = currentPlatform === "macos";
@@ -166,11 +157,12 @@ const OverlayPlayer = ({
 
         {/* Content Container: Dual-column on desktop, Tab-switched on mobile */}
         <div className="flex-1 w-full max-w-6xl mx-auto overflow-hidden px-4 pb-6">
-          {/* Desktop Grid Layout (visible on md screens and above) */}
-          <div className="hidden md:grid md:grid-cols-2 h-full gap-8 items-center">
-            {/* Left: Player & Controls */}
-            <div className="w-full h-full flex flex-col justify-center items-center gap-y-6">
-              <div className="size-72 xl:size-80 rounded-2xl bg-linear-to-br from-primary/30 to-primary/10 flex items-center justify-center overflow-hidden shadow-2xl border border-border/40">
+          {/* Desktop Layout Matching Figma desktop_song.png (>= md) */}
+          <div className="hidden md:flex flex-col h-full overflow-y-auto custom-scrollbar gap-6 pr-2 pb-12">
+            {/* Upper Hero Section */}
+            <div className="flex items-start gap-8 lg:gap-10 pt-4">
+              {/* Hero Artwork */}
+              <div className="size-60 lg:size-72 xl:size-80 rounded-2xl bg-linear-to-br from-primary/30 to-primary/10 flex items-center justify-center overflow-hidden shadow-2xl border border-white/10 shrink-0">
                 {coverSrc ? (
                   <img
                     src={coverSrc}
@@ -182,114 +174,168 @@ const OverlayPlayer = ({
                 )}
               </div>
 
-              <div className="space-y-1.5 text-center w-full max-w-sm">
-                <MarqueeText
-                  text={song.title}
-                  className="text-xl font-bold leading-tight font-heading"
-                />
-                <MarqueeText
-                  text={`${song.artist_name || "Unknown Artist"} • ${song.album_name || "Unknown Album"}`}
-                  className="text-sm text-muted-foreground font-medium"
-                />
-              </div>
-
-              <div className="w-full max-w-md space-y-4">
-                {/* Seek Bar */}
-                <div className="w-full space-y-1.5">
-                  <Slider
-                    defaultValue={[0]}
-                    max={duration || 100}
-                    value={[position]}
-                    onValueChange={(value) => onSeek(value[0])}
-                    className="w-full"
-                  />
-                  <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
-                    <span>{getFormattedDuration(position)}</span>
-                    <span>{getFormattedDuration(duration)}</span>
+              {/* Song Information & Actions */}
+              <div className="flex-1 min-w-0 space-y-4 pt-1">
+                <div className="space-y-2">
+                  <h1 className="text-2xl lg:text-3xl xl:text-4xl font-black font-heading tracking-tight text-white leading-tight">
+                    {song.title}
+                  </h1>
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-neutral-400 font-medium">
+                    <div className="flex items-center gap-1.5 text-white">
+                      <User className="size-3.5 text-primary" />
+                      <span>{song.artist_name || "Unknown Artist"}</span>
+                    </div>
+                    {song.album_name && (
+                      <>
+                        <span>•</span>
+                        <div className="flex items-center gap-1.5">
+                          <Disc3 className="size-3.5 text-neutral-400" />
+                          <span>{song.album_name}</span>
+                        </div>
+                      </>
+                    )}
+                    <span>•</span>
+                    <span className="font-mono">{getFormattedDuration(duration)}</span>
                   </div>
                 </div>
 
-                {/* Primary Controls */}
-                <div className="flex items-center justify-between gap-x-4">
-                  <Button
-                    variant={isShuffle ? "default" : "ghost"}
-                    size="icon"
-                    className="rounded-full"
-                    onClick={() => setIsShuffle(!isShuffle)}
-                  >
-                    <Shuffle className="size-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="rounded-full"
-                    onClick={onPrevious}
-                  >
-                    <SkipBack className="size-5" />
-                  </Button>
+                {/* Primary Action Button Row (Figma Style) */}
+                <div className="flex items-center gap-3 pt-1">
                   <Button
                     size="icon-lg"
-                    className="rounded-full size-14 shadow-lg shadow-primary/25"
+                    className="rounded-full size-12 bg-primary text-black hover:bg-primary/90 shadow-lg shadow-primary/25 hover:scale-105 active:scale-95 transition-all"
                     onClick={isPlaying ? onPause : onPlay}
+                    aria-label={isPlaying ? "Pause" : "Play"}
                   >
-                    {isPlaying ? <Pause className="size-6" /> : <Play className="size-6 ml-0.5" />}
+                    {isPlaying ? <Pause className="size-6 fill-current" /> : <Play className="size-6 fill-current ml-0.5" />}
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="rounded-full"
-                    onClick={onNext}
-                  >
-                    <SkipForward className="size-5" />
-                  </Button>
-                  <Button
-                    variant={repeatMode !== "off" ? "default" : "ghost"}
-                    size="icon"
-                    className="rounded-full"
-                    onClick={toggleRepeatMode}
-                  >
-                    {repeatMode === "off" && <Repeat className="size-4" />}
-                    {repeatMode === "one" && <Repeat1 className="size-4" />}
-                    {repeatMode === "all" && <Repeat className="size-4" />}
-                  </Button>
-                </div>
 
-                {/* Secondary Controls (Volume & Favorite) */}
-                <div className="flex items-center justify-between gap-3 pt-2">
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="rounded-full"
-                    onClick={() => setMuted(!muted)}
-                  >
-                    {muted ? <VolumeOff className="size-4" /> : <Volume2 className="size-4" />}
-                  </Button>
-                  <Slider
-                    defaultValue={[0]}
-                    max={100}
-                    value={[volume]}
-                    onValueChange={(value) => handleVolumeChange(value[0])}
-                    className={`w-full flex-1 ${muted ? "opacity-50" : ""}`}
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="rounded-full"
+                    className="rounded-full size-10 text-neutral-400 hover:text-white active:scale-90 transition-transform"
                     onClick={toggleFavorite}
+                    aria-label="Toggle Favorite"
                   >
                     {song.is_favorite ? (
-                      <Heart className="size-4 text-primary fill-current" />
+                      <Heart className="size-5 text-primary fill-current" />
                     ) : (
-                      <Heart className="size-4" />
+                      <Heart className="size-5" />
                     )}
                   </Button>
+
+                  <AddToPlaylistDialog
+                    song={song}
+                    trigger={
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="rounded-full size-10 text-neutral-400 hover:text-white active:scale-90 transition-transform"
+                        aria-label="Add to Playlist"
+                      >
+                        <SquarePlus className="size-5" />
+                      </Button>
+                    }
+                  />
+
+                  {isOnline && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="rounded-full size-10 text-neutral-400 hover:text-white active:scale-90 transition-transform"
+                      disabled={downloadMutation.isPending || downloadMutation.isSuccess}
+                      onClick={() => downloadMutation.mutate({ song })}
+                      aria-label="Download Track"
+                    >
+                      {downloadMutation.isPending ? (
+                        <Loader2 className="size-5 animate-spin text-primary" />
+                      ) : downloadMutation.isSuccess ? (
+                        <Check className="size-5 text-emerald-400" />
+                      ) : (
+                        <Download className="size-5" />
+                      )}
+                    </Button>
+                  )}
+
+                  <ActionsDropdown song={song}>
+                    <AddToPlaylistDialog song={song} />
+                  </ActionsDropdown>
+                </div>
+
+                {/* Genre Tags (Figma desktop_song.png) */}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {["Electronic", "Pop", "Streaming", "Favorites"].map((tag) => (
+                    <span
+                      key={tag}
+                      className="px-3 py-1 rounded-full text-[11px] font-semibold bg-white/5 border border-white/10 text-neutral-300 hover:bg-white/10 cursor-pointer transition-colors"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+
+                {/* Artist Credits Card */}
+                <div className="flex items-center gap-3 pt-3 border-t border-white/10 max-w-md">
+                  <div className="size-10 rounded-full bg-linear-to-br from-primary/30 to-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0">
+                    <User className="size-4.5" />
+                  </div>
+                  <div className="min-w-0 space-y-0.5">
+                    <p className="text-sm font-bold text-white truncate">
+                      {song.artist_name || "Unknown Artist"}
+                    </p>
+                    <p className="text-xs text-neutral-400">
+                      Main artist &bull; Composer
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Right: Synced Lyrics */}
-            <div className="w-full h-full overflow-hidden flex flex-col justify-center">
-              <LyricsSection song={song} position={position} />
+            {/* Lower Section: Tabs & Synced Lyrics */}
+            <div className="space-y-4 pt-4 border-t border-white/10">
+              {/* Tabs matching Figma */}
+              <div className="flex items-center gap-6 border-b border-white/10 pb-2">
+                <button
+                  onClick={() => setDesktopTab("lyrics")}
+                  className={`text-sm font-bold pb-2 transition-colors relative ${
+                    desktopTab === "lyrics" ? "text-white" : "text-neutral-400 hover:text-white"
+                  }`}
+                >
+                  Lyrics
+                  {desktopTab === "lyrics" && (
+                    <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-primary rounded-full" />
+                  )}
+                </button>
+                <button
+                  onClick={() => setDesktopTab("credits")}
+                  className={`text-sm font-bold pb-2 transition-colors relative ${
+                    desktopTab === "credits" ? "text-white" : "text-neutral-400 hover:text-white"
+                  }`}
+                >
+                  Credits
+                  {desktopTab === "credits" && (
+                    <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-primary rounded-full" />
+                  )}
+                </button>
+              </div>
+
+              {/* Tab Content */}
+              {desktopTab === "lyrics" ? (
+                <div className="w-full min-h-[260px] flex flex-col justify-center">
+                  <LyricsSection song={song} position={position} />
+                </div>
+              ) : (
+                <div className="p-6 rounded-2xl bg-white/5 border border-white/10 max-w-xl space-y-3">
+                  <h3 className="text-base font-bold text-white">Track Credits</h3>
+                  <div className="space-y-2 text-xs text-neutral-300">
+                    <p><span className="text-neutral-500 font-semibold">Title:</span> {song.title}</p>
+                    <p><span className="text-neutral-500 font-semibold">Artist:</span> {song.artist_name || "Unknown"}</p>
+                    <p><span className="text-neutral-500 font-semibold">Album:</span> {song.album_name || "Unknown"}</p>
+                    <p><span className="text-neutral-500 font-semibold">Duration:</span> {getFormattedDuration(duration)}</p>
+                    <p><span className="text-neutral-500 font-semibold">Source:</span> {isOnline ? "Online Stream" : "Local Audio"}</p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

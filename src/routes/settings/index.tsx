@@ -38,7 +38,7 @@ function RouteComponent() {
   };
 
   return (
-    <main className="space-y-8 p-2 pt-18 pb-25 w-full h-screen overflow-y-auto custom-scrollbar">
+    <main className="space-y-8 p-3 sm:p-6 pt-18 pb-36 md:pb-25 w-full h-screen overflow-y-auto custom-scrollbar">
       <h1 className="text-3xl font-bold font-heading flex items-center gap-3 mb-2">
         <Settings size={24} />
         Settings

@@ -28,7 +28,7 @@ function RouteComponent() {
   const rowVirtualizer = useVirtualizer({
     count: songs?.length ?? 0,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 45,
+    estimateSize: () => 48,
     overscan: 8,
     getItemKey: (index) => songs?.[index].id ?? index,
   });
@@ -65,11 +65,11 @@ function RouteComponent() {
     return (
       <main
         ref={parentRef}
-        className="p-2 pt-18 pb-25 w-full h-screen space-y-6 overflow-y-auto custom-scrollbar"
+        className="p-3 sm:p-6 pt-18 pb-36 md:pb-25 w-full h-screen space-y-6 overflow-y-auto custom-scrollbar"
       >
-        <div className="flex flex-col gap-6 mb-8 border-b border-muted-foreground/30 pb-8">
-          <div className="flex flex-col gap-4">
-            <h1 className="text-4xl font-bold font-heading tracking-tight">
+        <div className="flex flex-col gap-5 mb-6 border-b border-muted-foreground/20 pb-6">
+          <div className="flex flex-col gap-2">
+            <h1 className="text-2xl sm:text-4xl font-bold font-heading tracking-tight">
               {data?.playlist.name}
             </h1>
             <div className="flex items-center gap-2">
@@ -77,21 +77,21 @@ function RouteComponent() {
               <DeletePlaylistAlert playlistId={Number(id)} />
             </div>
 
-            <p className="text-muted-foreground mt-1">
+            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
               {songs.length} {songs.length === 1 ? "Song" : "Songs"} -{" "}
               {getFormattedDuration(totalDuration)}
             </p>
           </div>
 
-          <div className="flex items-center gap-4">
-            <Button onClick={handlePlayAll} className="gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button onClick={handlePlayAll} className="gap-2 text-xs h-9 sm:h-10 px-4 rounded-xl shadow-md shadow-primary/20">
               <Play size={16} fill="currentColor" />
               Play All
             </Button>
             <Button
               onClick={handleShuffle}
               variant={isShuffle ? "default" : "outline"}
-              className="gap-2 text-xs border border-muted-foreground/30"
+              className="gap-2 text-xs h-9 sm:h-10 px-4 rounded-xl border border-muted-foreground/30"
             >
               <Shuffle size={16} />
               Shuffle

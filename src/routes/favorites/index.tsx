@@ -30,7 +30,7 @@ function RouteComponent() {
   const rowVirtualizer = useVirtualizer({
     count: data?.length ?? 0,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 45,
+    estimateSize: () => 48,
     overscan: 8,
     getItemKey: (index) => data?.[index].id ?? index,
   });
@@ -75,7 +75,7 @@ function RouteComponent() {
 
   return (
     <main
-      className="p-2 pt-18 pb-25 w-full h-screen overflow-y-auto custom-scrollbar"
+      className="p-2 sm:p-4 pt-18 pb-36 md:pb-25 w-full h-screen overflow-y-auto custom-scrollbar"
       ref={parentRef}
     >
       <div

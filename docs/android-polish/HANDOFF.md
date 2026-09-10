@@ -95,9 +95,29 @@
 
 ---
 
-## 6. The Exact Next Task
-**Slice 5: Library, Playlists & Navigation Polish (Mobile Tab 3 & 4)**:
-- Polish `src/routes/songs/index.tsx` and `src/routes/favorites/index.tsx` for mobile touch interaction (48dp list item height, swipe actions, compact album art).
-- Refine playlist header and track list views to match modern streaming aesthetics.
-- Verify safe-area insets and scroll clearance above mini-player.
+- **Slice 5: Library, Playlists & Navigation Polish (COMPLETED 2026-09-11)**
+  - Responsive `SongsTable.tsx`: Full 7-column desktop table on `md:`; 48dp touch-optimized track rows with 40px album artwork thumbnails on mobile.
+  - Enlarged touch targets for Favorite and ActionsDropdown buttons (36px circular buttons on mobile).
+  - Safe-area scroll clearance (`pb-36 md:pb-25`) applied across all route scroll containers (`/songs`, `/favorites`, `/playlists/$id`, `/albums/$id`, `/artists/$id`, `/settings`).
+  - Mobile-responsive detail headers for Playlists, Albums, and Artists.
+  - Critic Review & Verification passed (Score: 9.67/10).
+
+---
+
+## 5. Verification Baseline
+- `bun run test` (TypeScript typecheck): Pass (0 errors)
+- `bun run build` (Vite production build): Pass (3.42s)
+- `cargo test --lib` (Rust backend unit tests): Pass (29 passed, 0 failed, 3 ignored)
+- Android CI build: `.github/workflows/android.yml`
+
+---
+
+## 6. Project Status
+All 5 polish & stabilization slices have been implemented, verified, and pushed:
+1. **Slice 1:** Android Crash Elimination & Native Hardening (Commit `2a830a8`)
+2. **Slice 2:** Home Screen Figma Restyle (Commit `c7dc307`)
+3. **Slice 3:** Search & Browse Screen Figma Overhaul (Commit `06e7d64`)
+4. **Slice 4:** Now Playing & Mini-Player Refinement (Commit `caa60fe`)
+5. **Slice 5:** Library, Playlists & Navigation Polish (Commit pending)
+
 

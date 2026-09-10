@@ -31,7 +31,7 @@ function RouteComponent() {
   const rowVirtualizer = useVirtualizer({
     count: songs?.length ?? 0,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 45,
+    estimateSize: () => 48,
     overscan: 8,
     getItemKey: (index) => songs?.[index].id ?? index,
   });
@@ -59,11 +59,11 @@ function RouteComponent() {
     return (
       <main
         ref={parentRef}
-        className="p-2 pt-18 pb-25 w-full h-screen space-y-6 overflow-y-auto custom-scrollbar"
+        className="p-3 sm:p-6 pt-18 pb-36 md:pb-25 w-full h-screen space-y-6 overflow-y-auto custom-scrollbar"
       >
-        <div className="flex items-center gap-x-6 border-b border-muted-foreground/30 pb-8 mb-4">
-          <div className="relative group">
-            <div className="size-50 rounded-lg overflow-hidden bg-linear-to-br from-primary/30 to-primary/10 flex items-center justify-center">
+        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6 text-center sm:text-left border-b border-muted-foreground/20 pb-6 mb-4">
+          <div className="relative group shrink-0">
+            <div className="size-40 sm:size-50 rounded-2xl overflow-hidden bg-linear-to-br from-primary/30 to-primary/10 flex items-center justify-center shadow-xl border border-white/10">
               {data.album.cover_path ? (
                 <img
                   src={convertFileSrc(data.album.cover_path)}
@@ -78,35 +78,35 @@ function RouteComponent() {
             </div>
             <UpdateAlbumCoverButton albumId={data.album.id} />
           </div>
-          <div className="flex flex-col gap-y-2">
-            <h1 className="text-3xl font-bold font-heading tracking-tight">
+          <div className="flex flex-col gap-y-1.5 min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-bold font-heading tracking-tight">
               {data.album.name}
             </h1>
-            <p className="text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               by{" "}
               <Link
                 to={"/artists/$id"}
                 params={{ id: data.album.artist_id.toString() }}
-                className="font-semibold hover:text-primary transition-colors"
+                className="font-semibold text-foreground hover:text-primary transition-colors"
               >
                 {data.album.artist_name}
               </Link>
             </p>
 
-            <p className="text-muted-foreground">
-              {songs.length} {songs.length === 1 ? "Song" : "Songs"} -{" "}
+            <p className="text-xs text-muted-foreground">
+              {songs.length} {songs.length === 1 ? "Song" : "Songs"} •{" "}
               {getFormattedDuration(totalDuration)}
             </p>
 
-            <div className="flex items-center gap-4 mt-4">
-              <Button onClick={handlePlayAll} className="gap-2 text-xs">
+            <div className="flex items-center justify-center sm:justify-start gap-3 mt-3">
+              <Button onClick={handlePlayAll} className="gap-2 text-xs h-9 sm:h-10 px-4 rounded-xl shadow-md shadow-primary/20">
                 <Play size={16} fill="currentColor" />
                 Play All
               </Button>
               <Button
                 onClick={handleShuffle}
                 variant={isShuffle ? "default" : "outline"}
-                className="gap-2 text-xs border border-muted-foreground/30"
+                className="gap-2 text-xs h-9 sm:h-10 px-4 rounded-xl border border-muted-foreground/30"
               >
                 <Shuffle size={16} />
                 Shuffle

@@ -13,9 +13,10 @@ import EditSongInfoDialog from "@/features/songs/components/EditSongInfoDialog";
 type ActionsDropdownProps = {
   song: Song;
   children: React.ReactNode;
+  className?: string;
 };
 
-const ActionsDropdown = ({ song, children }: ActionsDropdownProps) => {
+const ActionsDropdown = ({ song, children, className }: ActionsDropdownProps) => {
   const addToQueue = useAppStore((state) => state.addToQueue);
 
   return (
@@ -24,7 +25,7 @@ const ActionsDropdown = ({ song, children }: ActionsDropdownProps) => {
         <Button
           variant="ghost"
           size="icon"
-          className="size-4 hover:text-primary"
+          className={className || "size-4 hover:text-primary"}
         >
           <Ellipsis size={14} />
           <span className="sr-only">Open menu</span>

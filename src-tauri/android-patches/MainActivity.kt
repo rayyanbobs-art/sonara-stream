@@ -15,6 +15,12 @@ class MainActivity : TauriActivity() {
 
     companion object {
         var webViewInstance: WebView? = null
+        var lastTitle: String = "Sonara Stream"
+        var lastArtist: String = "Streaming Audio"
+        var lastAlbum: String? = "Sonara"
+        var lastCoverUrl: String? = null
+        var lastDurationSecs: Double = 0.0
+        var lastPositionSecs: Double = 0.0
 
         fun dispatchMediaEvent(eventName: String, payload: Double? = null) {
             val js = if (payload != null) {
@@ -32,15 +38,10 @@ class MainActivity : TauriActivity() {
         super.onCreate(savedInstanceState)
         hideSystemNavigation()
 
-        // Keep app and playback active in background when Back is pressed during playback
+        // Always move task to back when Back is pressed on root screen, keeping background playback and preventing activity teardown crashes
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (MediaPlaybackService.isPlaybackActive()) {
-                    moveTaskToBack(true)
-                } else {
-                    isEnabled = false
-                    onBackPressedDispatcher.onBackPressed()
-                }
+                moveTaskToBack(true)
             }
         })
 
@@ -117,6 +118,13 @@ class MainActivity : TauriActivity() {
                 isPlaying: Boolean,
                 positionSecs: Double
             ) {
+                lastTitle = title
+                lastArtist = artist
+                lastAlbum = album
+                lastCoverUrl = coverUrl
+                lastDurationSecs = durationSecs
+                lastPositionSecs = positionSecs
+
                 if (isPlaying) {
                     ensurePlaybackServiceStarted()
                 }
@@ -194,11 +202,7 @@ class MainActivity : TauriActivity() {
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        if (MediaPlaybackService.isPlaybackActive()) {
-            moveTaskToBack(true)
-        } else {
-            super.onBackPressed()
-        }
+        moveTaskToBack(true)
     }
 
     override fun onPause() {

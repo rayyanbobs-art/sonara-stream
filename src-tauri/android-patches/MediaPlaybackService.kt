@@ -109,6 +109,23 @@ class MediaPlaybackService : Service() {
         acquireLocks()
         initMediaSession()
 
+        // Populate metadata from MainActivity cache if available
+        currentTitle = MainActivity.lastTitle
+        currentArtist = MainActivity.lastArtist
+        currentAlbum = MainActivity.lastAlbum ?: "Sonara Stream"
+        currentDurationSecs = MainActivity.lastDurationSecs
+        currentPositionSecs = MainActivity.lastPositionSecs
+        val cachedCover = MainActivity.lastCoverUrl
+        if (!cachedCover.isNullOrBlank() && cachedCover != currentCoverUrl) {
+            currentCoverUrl = cachedCover
+            Thread {
+                currentArtBitmap = loadArtworkBitmap(cachedCover)
+                mainHandler.post {
+                    syncMediaState()
+                }
+            }.start()
+        }
+
         val filter = IntentFilter().apply {
             addAction(ACTION_PLAY)
             addAction(ACTION_PAUSE)
@@ -357,6 +374,7 @@ class MediaPlaybackService : Service() {
             }
         } catch (e: Exception) {
             Log.e("MediaPlaybackService", "Failed to startForegroundWithNotification", e)
+            isForegroundService = true
             try {
                 val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
                 notificationManager?.notify(NOTIFICATION_ID, buildNotification())

@@ -260,7 +260,7 @@ const useMediaSession = ({
         }
       }
     }
-  }, [isTauri, song?.id, song?.title, song?.artist_name, artworkPath]);
+  }, [isTauri, song?.id, song?.title, song?.artist_name, artworkPath, isPlaying, duration]);
 
   // 5. Update Playback State (Playing / Paused)
   useEffect(() => {

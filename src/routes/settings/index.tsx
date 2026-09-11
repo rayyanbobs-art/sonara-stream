@@ -1,6 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Settings } from "lucide-react";
+import {
+  ChevronLeft,
+  Disc3,
+  ExternalLink,
+  Folder,
+  Music,
+  RefreshCw,
+  Settings,
+  Sparkles,
+  User,
+} from "lucide-react";
 import { useTheme } from "@/components/custom/ThemeProvider";
 import {
   Card,
@@ -38,165 +48,246 @@ function RouteComponent() {
   };
 
   return (
-    <main className="space-y-8 p-3 sm:p-6 pt-18 pb-36 md:pb-25 w-full h-screen overflow-y-auto custom-scrollbar">
-      <h1 className="text-3xl font-bold font-heading flex items-center gap-3 mb-2">
-        <Settings size={24} />
-        Settings
-      </h1>
-      <p className="text-sm text-muted-foreground">
-        Customize your music player experience
-      </p>
-      <div className="space-y-7">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Theme</CardTitle>
-            <CardDescription>Choose your preferred theme</CardDescription>
-          </CardHeader>
-          <CardContent className="flex items-center gap-8 mt-2">
-            {themeOptions.map((option) => (
-              <div key={option} className="flex items-center gap-2">
-                <Input
-                  id={option}
-                  type="radio"
-                  name="theme"
-                  value={option}
-                  className="size-5 checked:bg-primary"
-                  checked={theme === option}
-                  onChange={() => setTheme(option)}
-                />
-                <Label htmlFor={option} className="capitalize">
-                  {option}
-                </Label>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Accent Color</CardTitle>
-            <CardDescription>
-              Choose your preferred accent color
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex items-center gap-4 mt-2">
-            {colorOptions.map((c) => (
-              <button
-                key={c.name}
-                style={{ backgroundColor: c.hex }}
-                className={`size-8 rounded-full ${color === c.name ? "ring-2 ring-muted-foreground ring-offset-2" : ""}`}
-                onClick={() => setColor(c.name)}
-              />
-            ))}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Playback Behavior</CardTitle>
-            <CardDescription>
-              Configure default playback settings. Changes take effect on next
-              launch.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 mt-2">
-            <div className="flex items-center justify-between w-full">
-              <div className="space-y-1">
-                <Label className="text-sm font-medium">
-                  Default Shuffle On
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Start playback with shuffle enabled by default.
-                </p>
-              </div>
-              <Input
-                type="checkbox"
-                className="size-5"
-                checked={isShuffleConfig}
-                onChange={(e) => setShuffleConfig(e.target.checked)}
-              />
+    <main className="p-3 sm:p-6 pt-16 sm:pt-20 pb-36 md:pb-28 w-full h-screen overflow-y-auto custom-scrollbar">
+      <div className="max-w-4xl mx-auto space-y-6">
+        {/* Top Back Navigation */}
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => window.history.back()}
+            aria-label="Go Back"
+            className="size-9 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 text-white"
+          >
+            <ChevronLeft size={18} />
+          </Button>
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Profile & Settings
+          </span>
+        </div>
+
+        {/* User Profile Hero Card (Figma Mobile & Desktop Matched) */}
+        <div className="relative rounded-2xl overflow-hidden p-6 sm:p-8 bg-gradient-to-b from-primary/15 via-white/5 to-transparent border border-white/10 shadow-2xl">
+          <div className="flex flex-col sm:flex-row items-center gap-6 text-center sm:text-left">
+            <div className="size-20 sm:size-24 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 border-2 border-primary/40 shadow-xl flex items-center justify-center text-primary shrink-0">
+              <User className="size-10 sm:size-12" />
             </div>
-            <Separator />
-            <div className="flex items-center justify-between w-full">
-              <div className="space-y-1">
-                <Label className="text-sm font-medium">
-                  Default Repeat Mode
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Choose how tracks repeat
-                </p>
+
+            <div className="space-y-1.5 flex-1 min-w-0">
+              <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-[11px] font-semibold text-primary uppercase tracking-wider">
+                <span className="size-1.5 rounded-full bg-primary animate-pulse" />
+                Active Library
               </div>
-              <select
-                className="bg-popover border border-border rounded-md h-8 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
-                value={repeatModeConfig}
-                onChange={(e) =>
-                  setRepeatModeConfig(e.target.value as "off" | "one" | "all")
-                }
-              >
-                <option value="off">Off</option>
-                <option value="one">One</option>
-                <option value="all">All</option>
-              </select>
+              <h1 className="text-2xl sm:text-3xl font-black font-heading text-white tracking-tight">
+                Sonara Listener
+              </h1>
+              <p className="text-xs sm:text-sm text-neutral-400">
+                Personalized offline & stream audio workspace
+              </p>
+
+              {/* Quick Stat Badges */}
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-2">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-white/5 border border-white/10 text-neutral-200">
+                  <Music size={12} className="text-primary" />
+                  {data?.total_songs ?? 0} Songs
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-white/5 border border-white/10 text-neutral-200">
+                  <Disc3 size={12} className="text-primary" />
+                  {data?.total_albums ?? 0} Albums
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-white/5 border border-white/10 text-neutral-200">
+                  <User size={12} className="text-primary" />
+                  {data?.total_artists ?? 0} Artists
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-white/5 border border-white/10 text-neutral-200">
+                  <Folder size={12} className="text-primary" />
+                  {data?.total_folders ?? 0} Folders
+                </span>
+              </div>
             </div>
-          </CardContent>
-        </Card>
-        <LibraryManagement />
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">About Sonara</CardTitle>
-            <CardDescription>
-              Information about the application.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="flex items-center gap-4">
-              <img
-                src="/128x128@2x.png"
-                alt="Sonara"
-                className="size-16 rounded-xl"
-              />
+          </div>
+        </div>
+
+        {/* Settings Sections */}
+        <div className="space-y-6">
+          {/* Appearance Card */}
+          <Card className="border-white/10 bg-white/5 backdrop-blur-xs rounded-2xl shadow-xl">
+            <CardHeader>
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <Sparkles size={18} className="text-primary" />
+                Appearance
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Customize your visual theme and accent color
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {/* Theme Selection */}
               <div>
-                <h3 className="font-semibold text-lg">Sonara</h3>
-                <p className="text-sm text-muted-foreground">
-                  Sonara is a lightweight desktop music player focused on speed,
-                  simplicity, and your local music library.
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Version {data?.app_version}
-                </p>
+                <Label className="text-xs font-semibold text-neutral-400 uppercase tracking-wider block mb-3">
+                  Theme Mode
+                </Label>
+                <div className="flex items-center gap-4">
+                  {themeOptions.map((option) => (
+                    <label
+                      key={option}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-xs font-medium cursor-pointer transition-all ${
+                        theme === option
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-white/10 bg-white/5 text-neutral-300 hover:border-white/20"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="theme"
+                        value={option}
+                        checked={theme === option}
+                        onChange={() => setTheme(option)}
+                        className="hidden"
+                      />
+                      <span className="capitalize">{option}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
-            </div>
-            <Separator />
-            <div className="grid grid-cols-2 gap-y-3 text-sm">
-              <span className="text-muted-foreground">🎵 Songs</span>
-              <span className="text-right">{data?.total_songs}</span>
-              <span className="text-muted-foreground">👤 Artists</span>
-              <span className="text-right">{data?.total_artists}</span>
-              <span className="text-muted-foreground">💿 Albums</span>
-              <span className="text-right">{data?.total_albums}</span>
-              <span className="text-muted-foreground">📁 Folders</span>
-              <span className="text-right">{data?.total_folders}</span>
-            </div>
-            <Separator />
-            <div className="flex flex-col items-center justify-center gap-4">
-              <Button
-                className="text-xs rounded-full"
-                onClick={() => checkForAppUpdates({ showNoUpdate: true })}
-              >
-                Check for Updates
-              </Button>
-              <Button
-                variant={"outline"}
-                className="text-xs rounded-full"
-                onClick={handleViewOnGitHub}
-              >
-                View on GitHub
-              </Button>
-            </div>
-            <Separator />
-            <p className="text-xs text-muted-foreground text-center">
-              © 2026 Sonara • Made with Rust, Tauri and React
-            </p>
-          </CardContent>
-        </Card>
+
+              <Separator className="bg-white/10" />
+
+              {/* Accent Color Swatches */}
+              <div>
+                <Label className="text-xs font-semibold text-neutral-400 uppercase tracking-wider block mb-3">
+                  Accent Color
+                </Label>
+                <div className="flex items-center gap-3">
+                  {colorOptions.map((c) => (
+                    <button
+                      key={c.name}
+                      style={{ backgroundColor: c.hex }}
+                      aria-label={`Select ${c.name} accent`}
+                      className={`size-8 rounded-full transition-transform hover:scale-110 active:scale-95 cursor-pointer ${
+                        color === c.name
+                          ? "ring-2 ring-white ring-offset-2 ring-offset-black scale-105"
+                          : "opacity-80 hover:opacity-100"
+                      }`}
+                      onClick={() => setColor(c.name)}
+                    />
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Playback Behavior */}
+          <Card className="border-white/10 bg-white/5 backdrop-blur-xs rounded-2xl shadow-xl">
+            <CardHeader>
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <Settings size={18} className="text-primary" />
+                Playback Behavior
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Configure default audio playback settings
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between w-full">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-medium text-white">
+                    Default Shuffle
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Start playback with shuffle enabled by default
+                  </p>
+                </div>
+                <Input
+                  type="checkbox"
+                  className="size-5 rounded-md accent-primary cursor-pointer"
+                  checked={isShuffleConfig}
+                  onChange={(e) => setShuffleConfig(e.target.checked)}
+                />
+              </div>
+
+              <Separator className="bg-white/10" />
+
+              <div className="flex items-center justify-between w-full">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-medium text-white">
+                    Default Repeat Mode
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Choose repeat behavior for tracks
+                  </p>
+                </div>
+                <select
+                  className="bg-neutral-900 border border-white/10 rounded-xl px-3 h-9 text-xs text-white focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                  value={repeatModeConfig}
+                  onChange={(e) =>
+                    setRepeatModeConfig(e.target.value as "off" | "one" | "all")
+                  }
+                >
+                  <option value="off">Off</option>
+                  <option value="one">Repeat One</option>
+                  <option value="all">Repeat All</option>
+                </select>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Library Management */}
+          <LibraryManagement />
+
+          {/* About Sonara Card */}
+          <Card className="border-white/10 bg-white/5 backdrop-blur-xs rounded-2xl shadow-xl">
+            <CardHeader>
+              <CardTitle className="text-base font-bold">About Sonara</CardTitle>
+              <CardDescription className="text-xs">
+                Application details and system updates
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="flex items-center gap-4">
+                <img
+                  src="/128x128@2x.png"
+                  alt="Sonara"
+                  className="size-14 rounded-2xl border border-white/10 shadow-lg"
+                />
+                <div className="space-y-1">
+                  <h3 className="font-bold text-base text-white">Sonara Stream</h3>
+                  <p className="text-xs text-muted-foreground">
+                    High-performance local & stream music player built with Tauri, Rust, and React.
+                  </p>
+                  <p className="text-[11px] font-mono text-primary">
+                    v{data?.app_version || "1.0.0"}
+                  </p>
+                </div>
+              </div>
+
+              <Separator className="bg-white/10" />
+
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  className="text-xs rounded-full bg-primary text-black hover:bg-primary/90 font-bold px-5 h-9"
+                  onClick={() => checkForAppUpdates({ showNoUpdate: true })}
+                >
+                  <RefreshCw size={13} className="mr-1.5" />
+                  Check for Updates
+                </Button>
+                <Button
+                  variant="outline"
+                  className="text-xs rounded-full border-white/20 text-white hover:bg-white/10 px-5 h-9"
+                  onClick={handleViewOnGitHub}
+                >
+                  <ExternalLink size={13} className="mr-1.5" />
+                  View on GitHub
+                </Button>
+              </div>
+
+              <Separator className="bg-white/10" />
+              <p className="text-xs text-neutral-500 text-center">
+                &copy; 2026 Sonara &bull; Crafted with Rust, Tauri, and React
+              </p>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </main>
   );

@@ -1,12 +1,12 @@
 import { Link } from "@tanstack/react-router";
-import { Home, Search, Library, Heart, User } from "lucide-react";
+import { Home, Sparkle, Library, Heart, User } from "lucide-react";
 
 export const BottomNavBar = () => {
   const navItems = [
     { name: "Home", href: "/", icon: Home },
-    { name: "Search", href: "/stream", icon: Search },
-    { name: "Library", href: "/songs", icon: Library },
+    { name: "Discover", href: "/stream", icon: Sparkle },
     { name: "Favorites", href: "/favorites", icon: Heart },
+    { name: "Library", href: "/songs", icon: Library },
     { name: "Me", href: "/settings", icon: User },
   ];
 

@@ -29,6 +29,15 @@ import MarqueeText from "@/components/custom/MarqueText";
 import { isOnlineSong, getOnlineVideoId } from "@/lib/onlineTrack";
 import { getOptimizedThumbnail } from "@/utils/thumbnail";
 import { toast } from "sonner";
+import {
+  isAndroidPlatform,
+  androidLoadTrack,
+  androidPlay,
+  androidPause,
+  androidSeek,
+  androidSetVolume,
+  androidStop,
+} from "@/services/androidPlayback";
 
 const getAudioMimeType = (path: string): string => {
   const ext = path.split(".").pop()?.toLowerCase();
@@ -112,7 +121,9 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
   };
 
   const handleStopAndDismiss = () => {
-    if (playerRef.current) {
+    if (isAndroidPlatform()) {
+      androidStop();
+    } else if (playerRef.current) {
       playerRef.current.pause();
       playerRef.current.currentTime = 0;
       playerRef.current.src = "";
@@ -147,13 +158,19 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
   };
 
   const playAudio = () => {
-    if (playerRef.current) {
+    if (isAndroidPlatform()) {
+      androidPlay();
+      setIsPlaying(true);
+    } else if (playerRef.current) {
       playerRef.current.play();
     }
   };
 
   const pauseAudio = () => {
-    if (playerRef.current) {
+    if (isAndroidPlatform()) {
+      androidPause();
+      setIsPlaying(false);
+    } else if (playerRef.current) {
       playerRef.current.pause();
     }
   };
@@ -299,7 +316,10 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
   };
 
   const handleSeek = (value: number) => {
-    if (playerRef.current) {
+    if (isAndroidPlatform()) {
+      androidSeek(value);
+      setCurrentTime(value);
+    } else if (playerRef.current) {
       playerRef.current.currentTime = value;
       setCurrentTime(value);
     }
@@ -317,16 +337,19 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
   };
 
   useEffect(() => {
-    const player = playerRef.current;
-
-    if (!player) return;
-
-    player.volume = volume / 100;
-    player.muted = muted;
+    if (isAndroidPlatform()) {
+      androidSetVolume(muted ? 0 : volume / 100);
+    } else {
+      const player = playerRef.current;
+      if (!player) return;
+      player.volume = volume / 100;
+      player.muted = muted;
+    }
   }, [muted, volume, currentSong.id]);
 
-  // Synchronize store isPlaying state with the HTMLAudioElement
+  // Synchronize store isPlaying state with the HTMLAudioElement (desktop only)
   useEffect(() => {
+    if (isAndroidPlatform()) return;
     const player = playerRef.current;
     if (!player || !player.src) return;
 
@@ -386,8 +409,9 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
 
   // Song switching
   useEffect(() => {
+    const isAndroid = isAndroidPlatform();
     const player = playerRef.current;
-    if (!player) return;
+    if (!isAndroid && !player) return;
 
     if (isOnlineSong(currentSong)) {
       if (activeBlobUrlRef.current) {
@@ -404,14 +428,26 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
         .then((streamUrl) => {
           if (activeRequestIdRef.current !== videoId) return;
 
-          player.src = streamUrl;
-          const playPromise = player.play();
-          if (playPromise !== undefined) {
-            playPromise.catch((err) => {
-              if (err.name !== "AbortError") {
-                console.error("Online audio play failed:", err);
-              }
-            });
+          if (isAndroid) {
+            androidLoadTrack(
+              streamUrl,
+              false,
+              currentSong.id,
+              currentSong.title,
+              currentSong.artist_name,
+              currentSong.album_cover_path || null,
+              currentSong.duration || 0
+            );
+          } else if (playerRef.current) {
+            playerRef.current.src = streamUrl;
+            const playPromise = playerRef.current.play();
+            if (playPromise !== undefined) {
+              playPromise.catch((err) => {
+                if (err.name !== "AbortError") {
+                  console.error("Online audio play failed:", err);
+                }
+              });
+            }
           }
         })
         .catch((err) => {
@@ -429,6 +465,19 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
     } else {
       activeRequestIdRef.current = null;
       setIsResolvingStream(false);
+
+      if (isAndroid) {
+        androidLoadTrack(
+          currentSong.path,
+          true,
+          currentSong.id,
+          currentSong.title,
+          currentSong.artist_name,
+          currentSong.album_cover_path || null,
+          currentSong.duration || 0
+        );
+        return;
+      }
 
       let isCancelled = false;
       const loadAndPlayLocal = async () => {
@@ -477,8 +526,8 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
 
           if (isCancelled || !playerRef.current) return;
 
-          player.src = loadedUrl;
-          const playPromise = player.play();
+          playerRef.current.src = loadedUrl;
+          const playPromise = playerRef.current.play();
           if (playPromise !== undefined) {
             playPromise.catch((err) => {
               if (err.name !== "AbortError") {
@@ -498,6 +547,74 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
       };
     }
   }, [currentSong.id, currentSong.path, playerRef]);
+
+  // Android Native Playback Event Listeners
+  useEffect(() => {
+    if (!isAndroidPlatform()) return;
+
+    const handlePlaybackState = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (!detail) return;
+
+      if (typeof detail.position === "number") {
+        setCurrentTime(detail.position);
+      }
+      if (typeof detail.duration === "number" && detail.duration > 0) {
+        setDuration(detail.duration);
+      }
+      if (typeof detail.isPlaying === "boolean") {
+        setIsPlaying(detail.isPlaying);
+      }
+    };
+
+    const handlePlaybackEnded = () => {
+      handleEnded();
+    };
+
+    const handlePlaybackError = () => {
+      handleAudioError();
+    };
+
+    window.addEventListener("sonara-playback-state", handlePlaybackState);
+    window.addEventListener("sonara-playback-ended", handlePlaybackEnded);
+    window.addEventListener("sonara-playback-error", handlePlaybackError);
+
+    return () => {
+      window.removeEventListener("sonara-playback-state", handlePlaybackState);
+      window.removeEventListener("sonara-playback-ended", handlePlaybackEnded);
+      window.removeEventListener("sonara-playback-error", handlePlaybackError);
+    };
+  }, [currentSong.id, duration]);
+
+  // Android Native Play Count Logging
+  useEffect(() => {
+    if (!isAndroidPlatform()) return;
+    if (currentTime < 1 || hasCountedPlayRef.current || duration <= 0) return;
+
+    const playThreshold = Math.min(30, duration * 0.5);
+    if (currentTime >= playThreshold) {
+      hasCountedPlayRef.current = true;
+      if (currentSong.id > 0) {
+        invoke("record_song_play", { songId: currentSong.id })
+          .then(() => console.log("Recorded song play:", currentSong.id))
+          .catch((err) => console.error(err));
+      } else {
+        invoke("record_play_event", {
+          track: {
+            id: currentSong.online_id || String(currentSong.id),
+            title: currentSong.title,
+            artist: currentSong.artist_name,
+            duration: Math.round(duration || 0),
+            thumbnail: currentSong.album_cover_path || "",
+            source: currentSong.online_id ? "youtube" : "local",
+            signature: "",
+          },
+          completed: false,
+          skipped_before_seconds: null,
+        }).catch((err) => console.warn("Failed to log play event:", err));
+      }
+    }
+  }, [currentTime, duration, currentSong.id]);
 
   const isCoverUrl =
     currentSong.album_cover_path?.startsWith("http://") ||

@@ -85,32 +85,56 @@ def configure_android():
     with open(manifest_path, "w", encoding="utf-8") as f:
         f.write(content)
 
-    # 3. Patch app/build.gradle.kts for androidx.media dependency
+    # 3. Patch app/build.gradle.kts for androidx.media and androidx.media3 dependencies
     gradle_path = os.path.join(gen_android_dir, "app", "build.gradle.kts")
     if os.path.exists(gradle_path):
         with open(gradle_path, "r", encoding="utf-8") as f:
             gradle_content = f.read()
-        if "androidx.media:media" not in gradle_content:
-            gradle_content = gradle_content.replace(
-                "dependencies {",
-                'dependencies {\n    implementation("androidx.media:media:1.7.0")'
+        if "androidx.media3:media3-exoplayer" not in gradle_content:
+            media3_deps = (
+                'dependencies {\n'
+                '    implementation("androidx.media:media:1.7.0")\n'
+                '    implementation("androidx.media3:media3-exoplayer:1.3.1")\n'
+                '    implementation("androidx.media3:media3-common:1.3.1")'
             )
+            if 'implementation("androidx.media:media:1.7.0")' in gradle_content:
+                gradle_content = gradle_content.replace(
+                    'implementation("androidx.media:media:1.7.0")',
+                    'implementation("androidx.media:media:1.7.0")\n    implementation("androidx.media3:media3-exoplayer:1.3.1")\n    implementation("androidx.media3:media3-common:1.3.1")'
+                )
+            else:
+                gradle_content = gradle_content.replace(
+                    "dependencies {",
+                    media3_deps
+                )
             with open(gradle_path, "w", encoding="utf-8") as f:
                 f.write(gradle_content)
-            print("Added androidx.media:media:1.7.0 dependency to build.gradle.kts")
+            print("Added androidx.media3 dependencies to build.gradle.kts")
     else:
         gradle_groovy_path = os.path.join(gen_android_dir, "app", "build.gradle")
         if os.path.exists(gradle_groovy_path):
             with open(gradle_groovy_path, "r", encoding="utf-8") as f:
                 gradle_content = f.read()
-            if "androidx.media:media" not in gradle_content:
-                gradle_content = gradle_content.replace(
-                    "dependencies {",
-                    "dependencies {\n    implementation 'androidx.media:media:1.7.0'"
+            if "androidx.media3:media3-exoplayer" not in gradle_content:
+                media3_deps = (
+                    "dependencies {\n"
+                    "    implementation 'androidx.media:media:1.7.0'\n"
+                    "    implementation 'androidx.media3:media3-exoplayer:1.3.1'\n"
+                    "    implementation 'androidx.media3:media3-common:1.3.1'"
                 )
+                if "implementation 'androidx.media:media:1.7.0'" in gradle_content:
+                    gradle_content = gradle_content.replace(
+                        "implementation 'androidx.media:media:1.7.0'",
+                        "implementation 'androidx.media:media:1.7.0'\n    implementation 'androidx.media3:media3-exoplayer:1.3.1'\n    implementation 'androidx.media3:media3-common:1.3.1'"
+                    )
+                else:
+                    gradle_content = gradle_content.replace(
+                        "dependencies {",
+                        media3_deps
+                    )
                 with open(gradle_groovy_path, "w", encoding="utf-8") as f:
                     f.write(gradle_content)
-                print("Added androidx.media:media:1.7.0 dependency to build.gradle")
+                print("Added androidx.media3 dependencies to build.gradle")
 
     # 4. Patch styles/themes to ensure dark window background
     res_dir = os.path.join(gen_android_dir, "app", "src", "main", "res")

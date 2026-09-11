@@ -32,6 +32,28 @@ class MainActivity : TauriActivity() {
                 webViewInstance?.evaluateJavascript(js, null)
             }
         }
+
+        fun dispatchPlaybackState(isPlaying: Boolean, positionSecs: Double, durationSecs: Double) {
+            val js = "window.dispatchEvent(new CustomEvent('sonara-playback-state', { detail: { isPlaying: $isPlaying, position: $positionSecs, duration: $durationSecs } }));"
+            webViewInstance?.post {
+                webViewInstance?.evaluateJavascript(js, null)
+            }
+        }
+
+        fun dispatchPlaybackEnded() {
+            val js = "window.dispatchEvent(new CustomEvent('sonara-playback-ended'));"
+            webViewInstance?.post {
+                webViewInstance?.evaluateJavascript(js, null)
+            }
+        }
+
+        fun dispatchPlaybackError(message: String, songId: Long) {
+            val escaped = message.replace("'", "\\'").replace("\n", " ")
+            val js = "window.dispatchEvent(new CustomEvent('sonara-playback-error', { detail: { message: '$escaped', songId: $songId } }));"
+            webViewInstance?.post {
+                webViewInstance?.evaluateJavascript(js, null)
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -148,6 +170,57 @@ class MainActivity : TauriActivity() {
                 }
             }
         }, "AndroidMedia")
+
+        // Native ExoPlayer Playback Bridge
+        webView.addJavascriptInterface(object {
+            @android.webkit.JavascriptInterface
+            fun loadTrack(
+                source: String,
+                isLocal: Boolean,
+                songId: Long,
+                title: String,
+                artist: String,
+                albumArtUri: String?,
+                durationSecs: Long
+            ) {
+                lastTitle = title
+                lastArtist = artist
+                lastCoverUrl = albumArtUri
+                lastDurationSecs = durationSecs.toDouble()
+                ensurePlaybackServiceStarted()
+                MediaPlaybackService.loadTrack(source, isLocal, songId, title, artist, albumArtUri, durationSecs)
+            }
+
+            @android.webkit.JavascriptInterface
+            fun play() {
+                ensurePlaybackServiceStarted()
+                MediaPlaybackService.play()
+            }
+
+            @android.webkit.JavascriptInterface
+            fun pause() {
+                MediaPlaybackService.pause()
+            }
+
+            @android.webkit.JavascriptInterface
+            fun seekTo(positionSecs: Double) {
+                MediaPlaybackService.seekTo(positionSecs)
+            }
+
+            @android.webkit.JavascriptInterface
+            fun setVolume(volume: Float) {
+                MediaPlaybackService.setVolume(volume)
+            }
+
+            @android.webkit.JavascriptInterface
+            fun stop() {
+                try {
+                    MediaPlaybackService.stopPlayback()
+                } catch (e: Exception) {
+                    android.util.Log.w("MainActivity", "Failed to stop playback service", e)
+                }
+            }
+        }, "AndroidPlayback")
 
         // Handle direct file download navigations
         webView.setDownloadListener { url, _, _, _, _ ->

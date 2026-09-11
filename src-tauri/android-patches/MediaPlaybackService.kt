@@ -24,8 +24,13 @@ import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.common.PlaybackException
+import androidx.media3.exoplayer.ExoPlayer
 import java.io.File
-import java.net.URI
 import java.net.URL
 import java.net.URLDecoder
 
@@ -34,6 +39,7 @@ class MediaPlaybackService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
     private var mediaSession: MediaSessionCompat? = null
+    private var exoPlayer: ExoPlayer? = null
 
     private var isForegroundService: Boolean = false
 
@@ -44,18 +50,95 @@ class MediaPlaybackService : Service() {
     private var currentArtBitmap: Bitmap? = null
     private var currentDurationSecs: Double = 0.0
     private var currentPositionSecs: Double = 0.0
+    private var currentSongId: Long = 0L
     private var isCurrentlyPlaying: Boolean = false
+
+    private val playerListener = object : Player.Listener {
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            isCurrentlyPlaying = isPlaying
+            setLocksHeld(isPlaying)
+            if (isPlaying) {
+                startPositionUpdates()
+            } else {
+                stopPositionUpdates()
+            }
+            syncMediaState()
+            dispatchStateToJs()
+        }
+
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            when (playbackState) {
+                Player.STATE_ENDED -> {
+                    isCurrentlyPlaying = false
+                    setLocksHeld(false)
+                    stopPositionUpdates()
+                    syncMediaState()
+                    MainActivity.dispatchPlaybackEnded()
+                }
+                Player.STATE_READY -> {
+                    val durMs = exoPlayer?.duration ?: 0L
+                    if (durMs > 0) {
+                        currentDurationSecs = durMs / 1000.0
+                    }
+                    syncMediaState()
+                    dispatchStateToJs()
+                }
+                Player.STATE_BUFFERING -> {}
+                Player.STATE_IDLE -> {}
+            }
+        }
+
+        override fun onPlayerError(error: PlaybackException) {
+            Log.e("MediaPlaybackService", "ExoPlayer playback error: ${error.errorCodeName}", error)
+            MainActivity.dispatchPlaybackError(error.localizedMessage ?: error.errorCodeName, currentSongId)
+        }
+    }
+
+    private val positionUpdateRunnable = object : Runnable {
+        override fun run() {
+            if (isCurrentlyPlaying) {
+                val posMs = exoPlayer?.currentPosition ?: 0L
+                val durMs = exoPlayer?.duration ?: 0L
+                currentPositionSecs = posMs / 1000.0
+                if (durMs > 0) {
+                    currentDurationSecs = durMs / 1000.0
+                }
+                dispatchStateToJs()
+                mainHandler.postDelayed(this, 1000)
+            }
+        }
+    }
+
+    private fun startPositionUpdates() {
+        mainHandler.removeCallbacks(positionUpdateRunnable)
+        mainHandler.post(positionUpdateRunnable)
+    }
+
+    private fun stopPositionUpdates() {
+        mainHandler.removeCallbacks(positionUpdateRunnable)
+    }
+
+    private fun dispatchStateToJs() {
+        val pos = (exoPlayer?.currentPosition ?: 0L) / 1000.0
+        val dur = if ((exoPlayer?.duration ?: 0L) > 0) (exoPlayer?.duration ?: 0L) / 1000.0 else currentDurationSecs
+        MainActivity.dispatchPlaybackState(isCurrentlyPlaying, pos, dur)
+    }
 
     private val actionReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
-                ACTION_PLAY -> MainActivity.dispatchMediaEvent("sonara-media-play")
-                ACTION_PAUSE -> MainActivity.dispatchMediaEvent("sonara-media-pause")
-                ACTION_TOGGLE -> MainActivity.dispatchMediaEvent("sonara-media-toggle")
+                ACTION_PLAY -> exoPlayer?.play()
+                ACTION_PAUSE -> exoPlayer?.pause()
+                ACTION_TOGGLE -> {
+                    if (exoPlayer?.isPlaying == true) {
+                        exoPlayer?.pause()
+                    } else {
+                        exoPlayer?.play()
+                    }
+                }
                 ACTION_NEXT -> MainActivity.dispatchMediaEvent("sonara-media-next")
                 ACTION_PREV -> MainActivity.dispatchMediaEvent("sonara-media-prev")
                 ACTION_STOP_SERVICE -> {
-                    MainActivity.dispatchMediaEvent("sonara-media-stop")
                     stopPlaybackInternal()
                 }
             }
@@ -74,6 +157,34 @@ class MediaPlaybackService : Service() {
         const val ACTION_STOP_SERVICE = "com.sonara.stream.ACTION_STOP"
 
         var instance: MediaPlaybackService? = null
+
+        fun loadTrack(
+            source: String,
+            isLocal: Boolean,
+            songId: Long,
+            title: String,
+            artist: String,
+            albumArtUri: String?,
+            durationSecs: Long
+        ) {
+            instance?.loadTrackInternal(source, isLocal, songId, title, artist, albumArtUri, durationSecs)
+        }
+
+        fun play() {
+            instance?.playInternal()
+        }
+
+        fun pause() {
+            instance?.pauseInternal()
+        }
+
+        fun seekTo(positionSecs: Double) {
+            instance?.seekToInternal(positionSecs)
+        }
+
+        fun setVolume(volume: Float) {
+            instance?.setVolumeInternal(volume)
+        }
 
         fun updateTrack(
             title: String,
@@ -106,7 +217,7 @@ class MediaPlaybackService : Service() {
         super.onCreate()
         instance = this
         createNotificationChannel()
-        acquireLocks()
+        initExoPlayer()
         initMediaSession()
 
         // Populate metadata from MainActivity cache if available
@@ -141,6 +252,24 @@ class MediaPlaybackService : Service() {
         }
     }
 
+    private fun initExoPlayer() {
+        try {
+            val audioAttributes = AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA)
+                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                .build()
+
+            exoPlayer = ExoPlayer.Builder(this)
+                .setAudioAttributes(audioAttributes, true)
+                .setHandleAudioBecomingNoisy(true)
+                .build().apply {
+                    addListener(playerListener)
+                }
+        } catch (e: Exception) {
+            Log.e("MediaPlaybackService", "Error initializing ExoPlayer", e)
+        }
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP_SERVICE) {
             stopPlaybackInternal()
@@ -155,11 +284,11 @@ class MediaPlaybackService : Service() {
         mediaSession = MediaSessionCompat(this, "SonaraStreamMediaSession").apply {
             setCallback(object : MediaSessionCompat.Callback() {
                 override fun onPlay() {
-                    MainActivity.dispatchMediaEvent("sonara-media-play")
+                    exoPlayer?.play()
                 }
 
                 override fun onPause() {
-                    MainActivity.dispatchMediaEvent("sonara-media-pause")
+                    exoPlayer?.pause()
                 }
 
                 override fun onSkipToNext() {
@@ -171,14 +300,94 @@ class MediaPlaybackService : Service() {
                 }
 
                 override fun onSeekTo(pos: Long) {
-                    MainActivity.dispatchMediaEvent("sonara-media-seek", pos / 1000.0)
+                    currentPositionSecs = pos / 1000.0
+                    exoPlayer?.seekTo(pos)
+                    syncMediaState()
+                    dispatchStateToJs()
                 }
 
                 override fun onStop() {
-                    MainActivity.dispatchMediaEvent("sonara-media-stop")
+                    stopPlaybackInternal()
                 }
             })
             isActive = true
+        }
+    }
+
+    fun loadTrackInternal(
+        source: String,
+        isLocal: Boolean,
+        songId: Long,
+        title: String,
+        artist: String,
+        albumArtUri: String?,
+        durationSecs: Long
+    ) {
+        mainHandler.post {
+            try {
+                currentTitle = title
+                currentArtist = artist
+                currentAlbum = "Sonara Stream"
+                currentDurationSecs = durationSecs.toDouble()
+                currentPositionSecs = 0.0
+                currentSongId = songId
+
+                val mediaItem = if (isLocal) {
+                    val cleanPath = source.removePrefix("file://")
+                    val file = File(cleanPath)
+                    MediaItem.fromUri(android.net.Uri.fromFile(file))
+                } else {
+                    MediaItem.fromUri(android.net.Uri.parse(source))
+                }
+
+                exoPlayer?.let { player ->
+                    player.setMediaItem(mediaItem)
+                    player.prepare()
+                    player.playWhenReady = true
+                }
+
+                if (!albumArtUri.isNullOrBlank() && albumArtUri != currentCoverUrl) {
+                    currentCoverUrl = albumArtUri
+                    Thread {
+                        currentArtBitmap = loadArtworkBitmap(albumArtUri)
+                        mainHandler.post {
+                            syncMediaState()
+                        }
+                    }.start()
+                } else {
+                    syncMediaState()
+                }
+            } catch (e: Exception) {
+                Log.e("MediaPlaybackService", "Error loading track: $source", e)
+                MainActivity.dispatchPlaybackError("Failed to load track: ${e.message}", songId)
+            }
+        }
+    }
+
+    fun playInternal() {
+        mainHandler.post {
+            exoPlayer?.play()
+        }
+    }
+
+    fun pauseInternal() {
+        mainHandler.post {
+            exoPlayer?.pause()
+        }
+    }
+
+    fun seekToInternal(positionSecs: Double) {
+        mainHandler.post {
+            currentPositionSecs = positionSecs
+            exoPlayer?.seekTo((positionSecs * 1000).toLong())
+            syncMediaState()
+            dispatchStateToJs()
+        }
+    }
+
+    fun setVolumeInternal(volume: Float) {
+        mainHandler.post {
+            exoPlayer?.volume = volume.coerceIn(0f, 1f)
         }
     }
 
@@ -297,6 +506,8 @@ class MediaPlaybackService : Service() {
             try {
                 isCurrentlyPlaying = false
                 currentArtBitmap = null
+                stopPositionUpdates()
+                exoPlayer?.stop()
                 mediaSession?.isActive = false
                 releaseLocks()
                 val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
@@ -451,28 +662,44 @@ class MediaPlaybackService : Service() {
         }
     }
 
+    private fun setLocksHeld(held: Boolean) {
+        if (held) {
+            acquireLocks()
+        } else {
+            releaseLocks()
+        }
+    }
+
     private fun acquireLocks() {
         try {
-            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-            wakeLock = powerManager.newWakeLock(
-                PowerManager.PARTIAL_WAKE_LOCK,
-                "SonaraStream::MediaPlaybackWakeLock"
-            ).apply {
-                setReferenceCounted(false)
-                acquire()
+            if (wakeLock == null) {
+                val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+                wakeLock = powerManager.newWakeLock(
+                    PowerManager.PARTIAL_WAKE_LOCK,
+                    "SonaraStream::MediaPlaybackWakeLock"
+                ).apply {
+                    setReferenceCounted(false)
+                }
+            }
+            if (wakeLock?.isHeld != true) {
+                wakeLock?.acquire()
             }
 
-            val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-            @Suppress("DEPRECATION")
-            wifiLock = wifiManager?.createWifiLock(
-                WifiManager.WIFI_MODE_FULL_HIGH_PERF,
-                "SonaraStream::MediaWifiLock"
-            )?.apply {
-                setReferenceCounted(false)
-                acquire()
+            if (wifiLock == null) {
+                val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+                @Suppress("DEPRECATION")
+                wifiLock = wifiManager?.createWifiLock(
+                    WifiManager.WIFI_MODE_FULL_HIGH_PERF,
+                    "SonaraStream::MediaWifiLock"
+                )?.apply {
+                    setReferenceCounted(false)
+                }
+            }
+            if (wifiLock?.isHeld != true) {
+                wifiLock?.acquire()
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.w("MediaPlaybackService", "Error acquiring locks", e)
         }
     }
 
@@ -481,7 +708,7 @@ class MediaPlaybackService : Service() {
             wakeLock?.let { if (it.isHeld) it.release() }
             wifiLock?.let { if (it.isHeld) it.release() }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.w("MediaPlaybackService", "Error releasing locks", e)
         } finally {
             wakeLock = null
             wifiLock = null
@@ -513,6 +740,10 @@ class MediaPlaybackService : Service() {
         try {
             unregisterReceiver(actionReceiver)
         } catch (_: Exception) {}
+        stopPositionUpdates()
+        exoPlayer?.removeListener(playerListener)
+        exoPlayer?.release()
+        exoPlayer = null
         mediaSession?.isActive = false
         mediaSession?.release()
         mediaSession = null

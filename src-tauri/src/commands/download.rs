@@ -44,12 +44,7 @@ pub fn resolve_downloads_dir(app_handle: &AppHandle) -> std::path::PathBuf {
 }
 
 pub fn get_download_http_client() -> reqwest::Client {
-    let roots = webpki_root_certs::TLS_SERVER_ROOT_CERTS
-        .iter()
-        .filter_map(|cert| reqwest::Certificate::from_der(cert.as_ref()).ok());
-
     reqwest::Client::builder()
-        .tls_certs_only(roots)
         .timeout(Duration::from_secs(300)) // 5 minutes for full track downloads
         .connect_timeout(Duration::from_secs(15))
         .pool_idle_timeout(Duration::from_secs(90))

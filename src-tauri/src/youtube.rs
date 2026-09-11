@@ -43,12 +43,7 @@ pub fn get_ytdlp_semaphore() -> &'static tokio::sync::Semaphore {
 
 pub fn get_http_client() -> &'static reqwest::Client {
     SHARED_HTTP_CLIENT.get_or_init(|| {
-        let roots = webpki_root_certs::TLS_SERVER_ROOT_CERTS
-            .iter()
-            .filter_map(|cert| reqwest::Certificate::from_der(cert.as_ref()).ok());
-
         reqwest::Client::builder()
-            .tls_certs_only(roots)
             .timeout(Duration::from_secs(10))
             .connect_timeout(Duration::from_secs(4))
             .pool_idle_timeout(Duration::from_secs(90))

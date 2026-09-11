@@ -59,7 +59,7 @@ function RouteComponent() {
 
   return (
     <main
-      className="p-3 sm:p-6 pt-3 sm:pt-6 md:pt-20 pb-36 md:pb-28 w-full h-screen overflow-y-auto custom-scrollbar"
+      className="p-3 sm:p-6 pt-[calc(4.75rem+env(safe-area-inset-top,0px))] md:pt-20 pb-36 md:pb-28 w-full h-screen overflow-y-auto custom-scrollbar"
       ref={parentRef}
     >
       <div className="max-w-7xl mx-auto space-y-4">

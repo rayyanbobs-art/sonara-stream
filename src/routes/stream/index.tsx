@@ -8,7 +8,7 @@ export const Route = createFileRoute("/stream/")({
 
 function StreamRouteComponent() {
   return (
-    <div className="w-full h-full overflow-y-auto px-3 sm:px-6 pt-3 sm:pt-6 md:pt-20 pb-32 sm:pb-36 space-y-6 custom-scrollbar">
+    <div className="w-full h-full overflow-y-auto px-3 sm:px-6 pt-[calc(4.75rem+env(safe-area-inset-top,0px))] md:pt-20 pb-32 sm:pb-36 space-y-6 custom-scrollbar">
       <div className="max-w-7xl mx-auto space-y-2">
         <div className="flex items-center gap-3">
           <div className="size-10 sm:size-11 rounded-2xl bg-primary/15 flex items-center justify-center text-primary shadow-sm shadow-primary/20">

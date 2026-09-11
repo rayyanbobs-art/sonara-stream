@@ -96,7 +96,7 @@ function RouteComponent() {
 
   if (songs.length === 0) {
     return (
-      <main className="p-4 pt-20 pb-36 md:pb-28 w-full h-screen overflow-y-auto flex items-center justify-center">
+      <main className="p-4 pt-[calc(4.75rem+env(safe-area-inset-top,0px))] md:pt-20 pb-36 md:pb-28 w-full h-screen overflow-y-auto flex items-center justify-center">
         <Empty>
           <EmptyHeader>
             <div className="size-24 rounded-3xl bg-gradient-to-br from-indigo-700 via-purple-600 to-pink-600 flex items-center justify-center shadow-xl border border-white/10 mb-4 mx-auto">
@@ -127,7 +127,7 @@ function RouteComponent() {
   return (
     <main
       ref={parentRef}
-      className="p-3 sm:p-6 pt-3 sm:pt-6 md:pt-20 pb-36 md:pb-28 w-full h-screen overflow-y-auto custom-scrollbar"
+      className="p-3 sm:p-6 pt-[calc(4.75rem+env(safe-area-inset-top,0px))] md:pt-20 pb-36 md:pb-28 w-full h-screen overflow-y-auto custom-scrollbar"
     >
       <div className="flex flex-col lg:flex-row gap-8 items-start max-w-7xl mx-auto">
         {/* Left Column: Header, Actions, and Songs Table */}

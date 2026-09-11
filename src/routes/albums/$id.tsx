@@ -59,7 +59,7 @@ function RouteComponent() {
     return (
       <main
         ref={parentRef}
-        className="p-3 sm:p-6 pt-18 pb-36 md:pb-25 w-full h-screen space-y-6 overflow-y-auto custom-scrollbar"
+        className="p-3 sm:p-6 pt-[calc(4.75rem+env(safe-area-inset-top,0px))] md:pt-20 pb-36 md:pb-25 w-full h-screen space-y-6 overflow-y-auto custom-scrollbar"
       >
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6 text-center sm:text-left border-b border-muted-foreground/20 pb-6 mb-4">
           <div className="relative group shrink-0">

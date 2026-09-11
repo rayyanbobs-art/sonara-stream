@@ -107,7 +107,7 @@ function RouteComponent() {
   return (
     <main
       ref={parentRef}
-      className="p-3 sm:p-6 pt-16 sm:pt-20 pb-36 md:pb-28 w-full h-screen space-y-6 overflow-y-auto custom-scrollbar"
+      className="p-3 sm:p-6 pt-[calc(4.75rem+env(safe-area-inset-top,0px))] md:pt-20 pb-36 md:pb-28 w-full h-screen space-y-6 overflow-y-auto custom-scrollbar"
     >
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Back navigation button */}

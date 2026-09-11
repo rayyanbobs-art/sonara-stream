@@ -54,7 +54,7 @@ function Index() {
     ).slice(0, 6);
 
     return (
-      <main className="p-3 sm:p-6 pt-3 sm:pt-6 md:pt-20 pb-28 sm:pb-32 w-full h-screen space-y-6 sm:space-y-8 overflow-y-auto custom-scrollbar">
+      <main className="p-3 sm:p-6 pt-[calc(4.75rem+env(safe-area-inset-top,0px))] md:pt-20 pb-28 sm:pb-32 w-full h-screen space-y-6 sm:space-y-8 overflow-y-auto custom-scrollbar">
         {/* Top Category Filter Chips (Figma Spotify Redesign Pattern) */}
         <section className="flex items-center justify-between gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
           <div className="flex items-center gap-2">

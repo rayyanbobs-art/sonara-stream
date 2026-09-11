@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "test": "tsc --noEmit",
+    "test": "tsc --noEmit && vitest run",
+    "test:unit": "vitest run",
+    "test:types": "tsc --noEmit",
     "preview": "vite preview",
     "tauri": "tauri",
     "serve": "tauri dev --config src-tauri/tauri.dev.conf.json",
@@ -51,7 +53,8 @@
     "eslint": "^10.7.0",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.64.0",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vitest": "^5.0.0"
   },
   "packageManager": "bun@1.4.2"
 }

@@ -107,7 +107,7 @@ function RouteComponent() {
   return (
     <main
       ref={parentRef}
-      className="p-3 sm:p-6 pt-16 sm:pt-20 pb-36 md:pb-28 w-full h-screen overflow-y-auto custom-scrollbar"
+      className="p-3 sm:p-6 pt-3 sm:pt-6 md:pt-20 pb-36 md:pb-28 w-full h-screen overflow-y-auto custom-scrollbar"
     >
       <div className="flex flex-col lg:flex-row gap-8 items-start max-w-7xl mx-auto">
         {/* Left Column: Header, Actions, and Songs Table */}

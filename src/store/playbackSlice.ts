@@ -26,6 +26,7 @@ export interface PlaybackState {
   // select current song
   setCurrentQueueItem: (item: QueueItem | null) => void;
   setCurrentSong: (song: Song | null) => void;
+  stopPlayback: () => void;
 
   // add to queue
   addToQueue: (song: Song) => void;
@@ -78,6 +79,12 @@ const createPlaybackSlice: StateCreator<
   },
 
   setCurrentSong: (song) => set({ currentSong: song }),
+  stopPlayback: () =>
+    set({
+      currentSong: null,
+      currentQueueItem: null,
+      isPlaying: false,
+    }),
 
   playSong: (song, songs) => {
     set((state) => {

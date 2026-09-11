@@ -61,6 +61,7 @@ class MainActivity : TauriActivity() {
         webView.settings.allowContentAccess = true
         webView.settings.domStorageEnabled = true
         webView.settings.databaseEnabled = true
+        webView.settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
 
         // Bridge to allow frontend to open external URLs / download APKs directly
         webView.addJavascriptInterface(object {
@@ -101,6 +102,15 @@ class MainActivity : TauriActivity() {
                     ensurePlaybackServiceStarted()
                 }
                 MediaPlaybackService.updateState(isPlaying, positionSecs)
+            }
+
+            @android.webkit.JavascriptInterface
+            fun stopPlayback() {
+                try {
+                    MediaPlaybackService.instance?.stopPlayback()
+                } catch (e: Exception) {
+                    android.util.Log.w("MainActivity", "Failed to stop playback service", e)
+                }
             }
         }, "AndroidMedia")
 

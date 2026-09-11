@@ -34,12 +34,16 @@ export function onlineTrackToSong(track: OnlineTrack): Song {
 
 export function isOnlineSong(song: Song | null | undefined): boolean {
   if (!song) return false;
-  return (
-    song.is_online === true ||
-    song.path.startsWith("online://") ||
-    song.path.startsWith("http://") ||
-    song.path.startsWith("https://")
-  );
+  if (!song.path) return Boolean(song.is_online);
+  // If the path is a local file on disk, it is strictly NOT an online stream
+  if (
+    !song.path.startsWith("online://") &&
+    !song.path.startsWith("http://") &&
+    !song.path.startsWith("https://")
+  ) {
+    return false;
+  }
+  return true;
 }
 
 export function getOnlineVideoId(song: Song | null | undefined): string | null {

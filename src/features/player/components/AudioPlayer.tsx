@@ -28,6 +28,7 @@ import useMediaSession from "@/hooks/useMediaSession";
 import MarqueeText from "@/components/custom/MarqueText";
 import { isOnlineSong, getOnlineVideoId } from "@/lib/onlineTrack";
 import { getOptimizedThumbnail } from "@/utils/thumbnail";
+import { toast } from "sonner";
 
 type AudioPlayerProps = {
   currentSong: Song;
@@ -44,6 +45,7 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
 
   const next = useAppStore((state) => state.next);
   const previous = useAppStore((state) => state.previous);
+  const stopPlayback = useAppStore((state) => state.stopPlayback);
 
   const isPlaying = useAppStore((state) => state.isPlaying);
   const setIsPlaying = useAppStore((state) => state.setIsPlaying);
@@ -62,6 +64,11 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
+  // Swipe to dismiss/stop states
+  const [dragX, setDragX] = useState(0);
+  const [isSwiping, setIsSwiping] = useState(false);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
   const { mutate } = useToggleFavoriteMutation();
 
   const [isResolvingStream, setIsResolvingStream] = useState(false);
@@ -69,6 +76,32 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
 
   const collapse = () => {
     setIsExpanded(false);
+  };
+
+  const handleStopAndDismiss = () => {
+    if (playerRef.current) {
+      playerRef.current.pause();
+      playerRef.current.currentTime = 0;
+      playerRef.current.src = "";
+    }
+    if (activeBlobUrlRef.current) {
+      URL.revokeObjectURL(activeBlobUrlRef.current);
+      activeBlobUrlRef.current = null;
+    }
+    if (activeRequestIdRef.current) {
+      invoke("cancel_stream_request", { videoId: activeRequestIdRef.current }).catch(() => {});
+      activeRequestIdRef.current = null;
+    }
+    if (typeof window !== "undefined" && typeof (window as any).AndroidMedia?.stopPlayback === "function") {
+      try {
+        (window as any).AndroidMedia.stopPlayback();
+      } catch (err) {
+        console.warn("AndroidMedia.stopPlayback error:", err);
+      }
+    }
+    setIsPlaying(false);
+    stopPlayback();
+    toast.info("Playback stopped", { duration: 1200 });
   };
 
   const handleFavoriteToggle = () => {
@@ -121,6 +154,24 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
           }
         })
         .catch((err) => console.error("Stream retry failed:", err));
+    } else if (playerRef.current && currentSong?.path) {
+      // Local audio playback error: seamlessly switch between local HTTP 206 server and Tauri asset protocol
+      const currentSrc = playerRef.current.src;
+      const assetSrc = convertFileSrc(currentSong.path);
+      if (!currentSrc.includes("asset.localhost") && !currentSrc.startsWith("asset:")) {
+        console.warn("Local server HTTP error in offline mode, switching to convertFileSrc asset protocol");
+        playerRef.current.src = assetSrc;
+        playerRef.current.play().catch((err) => console.error("Asset fallback play failed:", err));
+      } else {
+        invoke<string>("get_local_audio_url", { path: currentSong.path })
+          .then((url) => {
+            if (playerRef.current && url && playerRef.current.src !== url) {
+              playerRef.current.src = url;
+              playerRef.current.play().catch(() => {});
+            }
+          })
+          .catch(() => {});
+      }
     }
   };
 
@@ -276,23 +327,40 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
             activeBlobUrlRef.current = null;
           }
 
-          // Stream audio via local HTTP 206 server (zero-copy range streaming, safe for Android & desktop)
-          const localUrl = await invoke<string>("get_local_audio_url", {
-            path: currentSong.path,
-          });
+          // Stream audio via local HTTP 206 server with offline asset protocol fallback
+          let targetUrl: string;
+          try {
+            const localUrl = await invoke<string>("get_local_audio_url", {
+              path: currentSong.path,
+            });
+            if (localUrl && (localUrl.startsWith("http://") || localUrl.startsWith("https://"))) {
+              targetUrl = localUrl;
+            } else {
+              targetUrl = convertFileSrc(currentSong.path);
+            }
+          } catch (serverErr) {
+            console.warn("get_local_audio_url error, using convertFileSrc:", serverErr);
+            targetUrl = convertFileSrc(currentSong.path);
+          }
+
           if (isCancelled || !playerRef.current) return;
 
-          player.src = localUrl;
+          player.src = targetUrl;
           const playPromise = player.play();
           if (playPromise !== undefined) {
             playPromise.catch((err) => {
               if (err.name !== "AbortError") {
-                console.error("Audio play failed:", err);
+                console.error("Audio play failed, retrying via asset protocol:", err);
+                const assetUrl = convertFileSrc(currentSong.path);
+                if (playerRef.current && targetUrl !== assetUrl) {
+                  playerRef.current.src = assetUrl;
+                  playerRef.current.play().catch(() => {});
+                }
               }
             });
           }
         } catch (err) {
-          console.warn("get_local_audio_url fallback to convertFileSrc:", err);
+          console.warn("loadAndPlayLocal fallback:", err);
           if (isCancelled || !playerRef.current) return;
           if (activeBlobUrlRef.current) {
             URL.revokeObjectURL(activeBlobUrlRef.current);
@@ -303,7 +371,7 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
           if (playPromise !== undefined) {
             playPromise.catch((e) => {
               if (e.name !== "AbortError") {
-                console.error("Audio play failed:", e);
+                console.error("Asset fallback play failed:", e);
               }
             });
           }
@@ -345,22 +413,55 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
           muted={muted}
         />
 
-        {/* Mobile Mini Player (< md) */}
+        {/* Mobile Mini Player (< md) - Horizontal Swipe to Stop / Dismiss */}
         <section
-          className="flex md:hidden flex-col"
+          className={`flex md:hidden flex-col select-none touch-pan-y ${isSwiping ? "" : "transition-all duration-200"}`}
+          style={{
+            transform: `translateX(${dragX}px)`,
+            opacity: isSwiping ? Math.max(0.15, 1 - Math.abs(dragX) / 250) : 1,
+          }}
           onTouchStart={(e) => {
             const touch = e.touches[0];
-            (e.currentTarget as HTMLElement).dataset.touchStartY = String(touch.clientY);
+            touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+            setIsSwiping(true);
+          }}
+          onTouchMove={(e) => {
+            if (!touchStartRef.current) return;
+            const deltaX = e.touches[0].clientX - touchStartRef.current.x;
+            const deltaY = e.touches[0].clientY - touchStartRef.current.y;
+            if (Math.abs(deltaX) > Math.abs(deltaY)) {
+              setDragX(deltaX);
+            }
           }}
           onTouchEnd={(e) => {
-            const startY = Number((e.currentTarget as HTMLElement).dataset.touchStartY || 0);
-            const endY = e.changedTouches[0].clientY;
-            if (startY - endY > 40) setIsExpanded(true);
+            if (!touchStartRef.current) return;
+            const deltaY = touchStartRef.current.y - e.changedTouches[0].clientY;
+            const currentDrag = dragX;
+            setIsSwiping(false);
+            touchStartRef.current = null;
+
+            // Swipe left or right past 75px -> Immediately stop playback and remove song
+            if (Math.abs(currentDrag) > 75) {
+              setDragX(currentDrag > 0 ? 450 : -450);
+              setTimeout(() => {
+                handleStopAndDismiss();
+              }, 120);
+            } else {
+              // Swipe up to expand player
+              if (deltaY > 40 && Math.abs(currentDrag) < 20) {
+                setIsExpanded(true);
+              }
+              setDragX(0);
+            }
           }}
         >
           <div className="flex items-center justify-between gap-3 px-1 py-0.5">
             <div
-              onClick={() => setIsExpanded(true)}
+              onClick={() => {
+                if (Math.abs(dragX) < 10) {
+                  setIsExpanded(true);
+                }
+              }}
               className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer select-none"
             >
               <div className="size-12 rounded-xl bg-linear-to-br from-primary/30 to-primary/10 shrink-0 flex items-center justify-center overflow-hidden shadow-sm border border-white/10">

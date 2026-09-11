@@ -44,7 +44,7 @@ const AppHeader = () => {
       style={{
         top: "max(0.5rem, env(safe-area-inset-top, 0px))",
       }}
-      className="h-14 px-2.5 sm:px-4 py-2 fixed right-2 left-2 md:left-64 rounded-2xl md:rounded-3xl shadow-xl border border-white/10 bg-[#121212]/90 backdrop-blur-2xl z-20 flex items-center justify-between gap-3 overflow-hidden"
+      className="h-14 px-2.5 sm:px-4 py-2 fixed right-2 left-2 md:left-64 rounded-2xl md:rounded-3xl shadow-xl border border-white/10 bg-[#121212]/90 backdrop-blur-2xl z-20 hidden md:flex items-center justify-between gap-3 overflow-hidden"
     >
       <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
         <Button

@@ -88,6 +88,10 @@ class MediaPlaybackService : Service() {
         fun updateState(isPlaying: Boolean, positionSecs: Double) {
             instance?.updateStateInternal(isPlaying, positionSecs)
         }
+
+        fun stopPlayback() {
+            instance?.stopPlaybackInternal()
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -166,12 +170,22 @@ class MediaPlaybackService : Service() {
                         BitmapFactory.decodeFile(rawPath)
                     } else null
                 }
+                coverUrl.startsWith("http://127.0.0.1") || coverUrl.startsWith("http://localhost") -> {
+                    val pathIdx = coverUrl.indexOf("path=")
+                    if (pathIdx != -1) {
+                        val encoded = coverUrl.substring(pathIdx + 5).substringBefore('&')
+                        val rawPath = URLDecoder.decode(encoded, "UTF-8")
+                        if (File(rawPath).exists()) BitmapFactory.decodeFile(rawPath) else null
+                    } else null
+                }
                 coverUrl.startsWith("file://") -> {
-                    val path = URI(coverUrl).path
-                    if (File(path).exists()) BitmapFactory.decodeFile(path) else null
+                    val raw = coverUrl.removePrefix("file://")
+                    val rawPath = URLDecoder.decode(raw, "UTF-8")
+                    if (File(rawPath).exists()) BitmapFactory.decodeFile(rawPath) else null
                 }
                 coverUrl.startsWith("/") -> {
-                    if (File(coverUrl).exists()) BitmapFactory.decodeFile(coverUrl) else null
+                    val rawPath = URLDecoder.decode(coverUrl, "UTF-8")
+                    if (File(rawPath).exists()) BitmapFactory.decodeFile(rawPath) else null
                 }
                 coverUrl.startsWith("http://") || coverUrl.startsWith("https://") -> {
                     val url = URL(coverUrl)
@@ -248,6 +262,23 @@ class MediaPlaybackService : Service() {
         currentPositionSecs = positionSecs
         mainHandler.post {
             syncMediaState()
+        }
+    }
+
+    fun stopPlaybackInternal() {
+        mainHandler.post {
+            try {
+                isCurrentlyPlaying = false
+                currentArtBitmap = null
+                mediaSession?.isActive = false
+                releaseLocks()
+                val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                notificationManager?.cancel(NOTIFICATION_ID)
+                ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            } catch (e: Exception) {
+                Log.e("MediaPlaybackService", "Error stopping playback service", e)
+            }
         }
     }
 

@@ -43,6 +43,7 @@ pub fn format_local_image_url(port: u16, path: &str) -> String {
     )
 }
 
+#[allow(dead_code)]
 pub fn get_local_audio_url_sync(path: &str) -> String {
     if let Some(port) = get_server_port() {
         format_local_audio_url(port, path)
@@ -306,9 +307,15 @@ pub async fn start_local_server() -> Result<u16, String> {
         return Ok(*port);
     }
 
-    let listener = TcpListener::bind("127.0.0.1:0")
-        .await
-        .map_err(|e| format!("Failed to bind local media streaming server to 127.0.0.1:0: {}", e))?;
+    let listener = match TcpListener::bind("127.0.0.1:0").await {
+        Ok(l) => l,
+        Err(e1) => {
+            tracing::warn!(target: "sonara_stream::local_server", "Failed to bind 127.0.0.1:0 ({}), attempting 0.0.0.0:0", e1);
+            TcpListener::bind("0.0.0.0:0")
+                .await
+                .map_err(|e2| format!("Failed to bind local media streaming server (127.0.0.1: {}, 0.0.0.0: {})", e1, e2))?
+        }
+    };
 
     let port = listener
         .local_addr()
@@ -325,7 +332,7 @@ pub async fn start_local_server() -> Result<u16, String> {
 
     tracing::info!(
         target: "sonara_stream::local_server",
-        "Local media streaming server initialized on 127.0.0.1:{}",
+        "Local media streaming server initialized on port {}",
         port
     );
 
@@ -333,8 +340,9 @@ pub async fn start_local_server() -> Result<u16, String> {
 }
 
 #[tauri::command]
-pub fn get_local_audio_url(path: String) -> String {
-    get_local_audio_url_sync(&path)
+pub async fn get_local_audio_url(path: String) -> Result<String, String> {
+    let port = start_local_server().await?;
+    Ok(format_local_audio_url(port, &path))
 }
 
 #[cfg(test)]

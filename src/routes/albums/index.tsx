@@ -43,7 +43,7 @@ function RouteComponent() {
   }
 
   return (
-    <main className="p-3 sm:p-6 pt-16 sm:pt-20 pb-36 md:pb-28 w-full h-screen overflow-y-auto custom-scrollbar">
+    <main className="p-3 sm:p-6 pt-3 sm:pt-6 md:pt-20 pb-36 md:pb-28 w-full h-screen overflow-y-auto custom-scrollbar">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Top Navigation & Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

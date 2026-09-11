@@ -397,12 +397,15 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
     localRetryCountRef.current = 0;
   }, [currentSong.id]);
 
-  // Clean up any existing blob url on unmount
+  // Clean up any existing blob url and stop native playback on unmount
   useEffect(() => {
     return () => {
       if (activeBlobUrlRef.current) {
         URL.revokeObjectURL(activeBlobUrlRef.current);
         activeBlobUrlRef.current = null;
+      }
+      if (isAndroidPlatform()) {
+        androidStop();
       }
     };
   }, []);

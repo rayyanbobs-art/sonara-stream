@@ -3,8 +3,15 @@ package com.sonara.stream
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.View
+import android.webkit.RenderProcessGoneDetail
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.activity.OnBackPressedCallback
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
@@ -75,7 +82,9 @@ class MainActivity : TauriActivity() {
         }
     }
 
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var isActivityInForeground: Boolean = false
+    private var rendererTerminated: Boolean = false
 
     override fun onStart() {
         super.onStart()
@@ -113,6 +122,90 @@ class MainActivity : TauriActivity() {
         webView.settings.databaseEnabled = true
         webView.settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
 
+        // Decorate WebViewClient to survive render process death under memory pressure
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val existingClient = webView.webViewClient
+            webView.webViewClient = object : WebViewClient() {
+                override fun shouldInterceptRequest(
+                    view: WebView?,
+                    request: WebResourceRequest?
+                ): WebResourceResponse? {
+                    return existingClient?.shouldInterceptRequest(view, request)
+                        ?: super.shouldInterceptRequest(view, request)
+                }
+
+                @Suppress("DEPRECATION")
+                override fun shouldInterceptRequest(
+                    view: WebView?,
+                    url: String?
+                ): WebResourceResponse? {
+                    return existingClient?.shouldInterceptRequest(view, url)
+                        ?: super.shouldInterceptRequest(view, url)
+                }
+
+                override fun shouldOverrideUrlLoading(
+                    view: WebView?,
+                    request: WebResourceRequest?
+                ): Boolean {
+                    return existingClient?.shouldOverrideUrlLoading(view, request)
+                        ?: super.shouldOverrideUrlLoading(view, request)
+                }
+
+                @Suppress("DEPRECATION")
+                override fun shouldOverrideUrlLoading(
+                    view: WebView?,
+                    url: String?
+                ): Boolean {
+                    return existingClient?.shouldOverrideUrlLoading(view, url)
+                        ?: super.shouldOverrideUrlLoading(view, url)
+                }
+
+                override fun onPageStarted(
+                    view: WebView?,
+                    url: String?,
+                    favicon: android.graphics.Bitmap?
+                ) {
+                    existingClient?.onPageStarted(view, url, favicon) ?: super.onPageStarted(view, url, favicon)
+                }
+
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    existingClient?.onPageFinished(view, url) ?: super.onPageFinished(view, url)
+                }
+
+                override fun onReceivedError(
+                    view: WebView?,
+                    request: WebResourceRequest?,
+                    error: WebResourceError?
+                ) {
+                    existingClient?.onReceivedError(view, request, error)
+                        ?: super.onReceivedError(view, request, error)
+                }
+
+                override fun onRenderProcessGone(
+                    view: WebView?,
+                    detail: RenderProcessGoneDetail?
+                ): Boolean {
+                    val didCrash = detail?.didCrash() ?: false
+                    android.util.Log.e("MainActivity", "WebView render process gone! (didCrash=$didCrash)")
+                    try {
+                        view?.let {
+                            (it.parent as? android.view.ViewGroup)?.removeView(it)
+                            it.destroy()
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w("MainActivity", "Error destroying terminated webView", e)
+                    }
+                    webViewInstance = null
+                    rendererTerminated = true
+                    if (isActivityInForeground) {
+                        rendererTerminated = false
+                        mainHandler.post { recreate() }
+                    }
+                    return true
+                }
+            }
+        }
+
         // Bridge to allow frontend to open external URLs / download APKs directly
         webView.addJavascriptInterface(object {
             @android.webkit.JavascriptInterface
@@ -147,31 +240,37 @@ class MainActivity : TauriActivity() {
                 lastDurationSecs = durationSecs
                 lastPositionSecs = positionSecs
 
-                if (isPlaying) {
-                    ensurePlaybackServiceStarted()
+                mainHandler.post {
+                    if (isPlaying) {
+                        ensurePlaybackServiceStarted()
+                    }
+                    MediaPlaybackService.updateTrack(title, artist, album, coverUrl, durationSecs, isPlaying, positionSecs)
                 }
-                MediaPlaybackService.updateTrack(title, artist, album, coverUrl, durationSecs, isPlaying, positionSecs)
             }
 
             @android.webkit.JavascriptInterface
             fun updatePlaybackState(isPlaying: Boolean, positionSecs: Double) {
-                if (isPlaying) {
-                    ensurePlaybackServiceStarted()
+                mainHandler.post {
+                    if (isPlaying) {
+                        ensurePlaybackServiceStarted()
+                    }
+                    MediaPlaybackService.updateState(isPlaying, positionSecs)
                 }
-                MediaPlaybackService.updateState(isPlaying, positionSecs)
             }
 
             @android.webkit.JavascriptInterface
             fun stopPlayback() {
-                try {
-                    MediaPlaybackService.stopPlayback()
-                } catch (e: Exception) {
-                    android.util.Log.w("MainActivity", "Failed to stop playback service", e)
+                mainHandler.post {
+                    try {
+                        MediaPlaybackService.stopPlayback()
+                    } catch (e: Exception) {
+                        android.util.Log.w("MainActivity", "Failed to stop playback service", e)
+                    }
                 }
             }
         }, "AndroidMedia")
 
-        // Native ExoPlayer Playback Bridge
+        // Native ExoPlayer Playback Bridge with explicit Main Looper dispatch
         webView.addJavascriptInterface(object {
             @android.webkit.JavascriptInterface
             fun loadTrack(
@@ -187,37 +286,49 @@ class MainActivity : TauriActivity() {
                 lastArtist = artist
                 lastCoverUrl = albumArtUri
                 lastDurationSecs = durationSecs.toDouble()
-                ensurePlaybackServiceStarted()
-                MediaPlaybackService.loadTrack(source, isLocal, songId, title, artist, albumArtUri, durationSecs)
+                mainHandler.post {
+                    ensurePlaybackServiceStarted()
+                    MediaPlaybackService.loadTrack(source, isLocal, songId, title, artist, albumArtUri, durationSecs)
+                }
             }
 
             @android.webkit.JavascriptInterface
             fun play() {
-                ensurePlaybackServiceStarted()
-                MediaPlaybackService.play()
+                mainHandler.post {
+                    ensurePlaybackServiceStarted()
+                    MediaPlaybackService.play()
+                }
             }
 
             @android.webkit.JavascriptInterface
             fun pause() {
-                MediaPlaybackService.pause()
+                mainHandler.post {
+                    MediaPlaybackService.pause()
+                }
             }
 
             @android.webkit.JavascriptInterface
             fun seekTo(positionSecs: Double) {
-                MediaPlaybackService.seekTo(positionSecs)
+                mainHandler.post {
+                    MediaPlaybackService.seekTo(positionSecs)
+                }
             }
 
             @android.webkit.JavascriptInterface
             fun setVolume(volume: Float) {
-                MediaPlaybackService.setVolume(volume)
+                mainHandler.post {
+                    MediaPlaybackService.setVolume(volume)
+                }
             }
 
             @android.webkit.JavascriptInterface
             fun stop() {
-                try {
-                    MediaPlaybackService.stopPlayback()
-                } catch (e: Exception) {
-                    android.util.Log.w("MainActivity", "Failed to stop playback service", e)
+                mainHandler.post {
+                    try {
+                        MediaPlaybackService.stopPlayback()
+                    } catch (e: Exception) {
+                        android.util.Log.w("MainActivity", "Failed to stop playback service", e)
+                    }
                 }
             }
         }, "AndroidPlayback")
@@ -245,6 +356,11 @@ class MainActivity : TauriActivity() {
     override fun onResume() {
         super.onResume()
         isActivityInForeground = true
+        if (rendererTerminated) {
+            rendererTerminated = false
+            recreate()
+            return
+        }
         hideSystemNavigation()
         webViewInstance?.onResume()
         webViewInstance?.resumeTimers()

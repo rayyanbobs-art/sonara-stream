@@ -79,12 +79,25 @@ const createPlaybackSlice: StateCreator<
   },
 
   setCurrentSong: (song) => set({ currentSong: song }),
-  stopPlayback: () =>
+  stopPlayback: () => {
+    if (typeof window !== "undefined") {
+      try {
+        if ((window as any).AndroidPlayback?.stop) {
+          (window as any).AndroidPlayback.stop();
+        }
+        if ((window as any).AndroidMedia?.stopPlayback) {
+          (window as any).AndroidMedia.stopPlayback();
+        }
+      } catch (e) {
+        console.warn("Failed to stop native playback:", e);
+      }
+    }
     set({
       currentSong: null,
       currentQueueItem: null,
       isPlaying: false,
-    }),
+    });
+  },
 
   playSong: (song, songs) => {
     set((state) => {

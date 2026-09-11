@@ -158,6 +158,18 @@ class MediaPlaybackService : Service() {
 
         var instance: MediaPlaybackService? = null
 
+        data class PendingTrack(
+            val source: String,
+            val isLocal: Boolean,
+            val songId: Long,
+            val title: String,
+            val artist: String,
+            val albumArtUri: String?,
+            val durationSecs: Long
+        )
+
+        var pendingTrack: PendingTrack? = null
+
         fun loadTrack(
             source: String,
             isLocal: Boolean,
@@ -167,7 +179,13 @@ class MediaPlaybackService : Service() {
             albumArtUri: String?,
             durationSecs: Long
         ) {
-            instance?.loadTrackInternal(source, isLocal, songId, title, artist, albumArtUri, durationSecs)
+            val service = instance
+            if (service != null) {
+                pendingTrack = null
+                service.loadTrackInternal(source, isLocal, songId, title, artist, albumArtUri, durationSecs)
+            } else {
+                pendingTrack = PendingTrack(source, isLocal, songId, title, artist, albumArtUri, durationSecs)
+            }
         }
 
         fun play() {
@@ -249,6 +267,21 @@ class MediaPlaybackService : Service() {
             registerReceiver(actionReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
             registerReceiver(actionReceiver, filter)
+        }
+
+        // Process any track queued during cold start before service was created
+        val pending = pendingTrack
+        if (pending != null) {
+            pendingTrack = null
+            loadTrackInternal(
+                pending.source,
+                pending.isLocal,
+                pending.songId,
+                pending.title,
+                pending.artist,
+                pending.albumArtUri,
+                pending.durationSecs
+            )
         }
     }
 
@@ -333,9 +366,13 @@ class MediaPlaybackService : Service() {
                 currentSongId = songId
 
                 val mediaItem = if (isLocal) {
-                    val cleanPath = source.removePrefix("file://")
-                    val file = File(cleanPath)
-                    MediaItem.fromUri(android.net.Uri.fromFile(file))
+                    if (source.startsWith("content://")) {
+                        MediaItem.fromUri(android.net.Uri.parse(source))
+                    } else {
+                        val cleanPath = normalizeLocalPath(source)
+                        val file = File(cleanPath)
+                        MediaItem.fromUri(android.net.Uri.fromFile(file))
+                    }
                 } else {
                     MediaItem.fromUri(android.net.Uri.parse(source))
                 }
@@ -389,6 +426,19 @@ class MediaPlaybackService : Service() {
         mainHandler.post {
             exoPlayer?.volume = volume.coerceIn(0f, 1f)
         }
+    }
+
+    private fun normalizeLocalPath(source: String): String {
+        var path = source.trim()
+        if (path.startsWith("file://")) {
+            path = path.substring(7)
+        }
+        if (path.contains("%")) {
+            try {
+                path = URLDecoder.decode(path, "UTF-8")
+            } catch (_: Exception) {}
+        }
+        return path
     }
 
     private fun loadArtworkBitmap(coverUrl: String?): Bitmap? {

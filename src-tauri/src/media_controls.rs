@@ -2,8 +2,11 @@
 use souvlaki::{
     MediaControlEvent, MediaControls, MediaMetadata, MediaPlayback, MediaPosition, PlatformConfig,
 };
+#[cfg(target_os = "windows")]
 use std::sync::Mutex;
+#[cfg(target_os = "windows")]
 use std::time::Duration;
+#[cfg(target_os = "windows")]
 use tauri::{Emitter, Manager};
 
 #[cfg(target_os = "windows")]

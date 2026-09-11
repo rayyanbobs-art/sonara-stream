@@ -265,6 +265,10 @@ class MediaPlaybackService : Service() {
         }
     }
 
+    fun stopPlayback() {
+        stopPlaybackInternal()
+    }
+
     fun stopPlaybackInternal() {
         mainHandler.post {
             try {

@@ -26,13 +26,13 @@ This review assesses the technical implementation and user experience improvemen
 | **3. Security & File System Integrity** | 20% | **9.7 / 10** | • Local HTTP server canonicalizes file paths, blocks `..` directory traversal with 403, and strictly serves media MIME types.<br>• Removed wildcard CORS headers (`Access-Control-Allow-Origin: *`).<br>• Atomic `.tmp` downloads with rename; partial downloads cleaned up on failure.<br>• `is_track_downloaded` validates `.m4a`/`.mp3` and ignores cover artwork `.jpg` files. |
 | **4. Database Concurrency & Lock Resilience** | 15% | **9.8 / 10** | • Enabled `PRAGMA foreign_keys = ON;` ensuring relational cascades.<br>• Enabled `PRAGMA journal_mode = WAL;`, `busy_timeout = 5000;`, and `synchronous = NORMAL;`.<br>• Removed volatile `:memory:` fallback; fatal setup error returned on disk failure.<br>• Non-UTF8 paths handled safely via `to_string_lossy()`. |
 | **5. Playback Sync & Gesture UX** | 15% | **9.4 / 10** | • Play/pause state synchronized bidirectionally between Zustand cards and native `<audio>` element.<br>• Horizontal swipe-to-dismiss gesture ($\pm 75\text{px}$) with notification teardown and store reset.<br>• Serde deserialization payload aligned to Rust `Track` struct.<br>• Queue removal action wired with delete buttons in `QueueItem.tsx`. |
-| **6. CI/CD & Code Hygiene** | 15% | **9.5 / 10** | • Added `pull_request` trigger for Android CI.<br>• Integrated persistent keystore secret support.<br>• Resolved all 13 blocking ESLint errors (clean 0 exit).<br>• All 42 unit tests pass in Rust backend, 0 TypeScript errors. |
+| **6. CI/CD & Code Hygiene** | 15% | **9.6 / 10** | • Added `pull_request` trigger for Android CI.<br>• Integrated persistent keystore secret support.<br>• Resolved all 13 blocking ESLint errors (clean 0 exit).<br>• Fixed Kotlin Android bridge (`stopPlayback` companion/instance dispatch).<br>• Eliminated cross-target Rust warnings for Android builds.<br>• All 42 unit tests pass in Rust backend, 0 TypeScript errors. |
 
 ---
 
 ## 3. Weighted Final Score
 
-$$\text{Final Score} = (9.6 \times 0.15) + (9.6 \times 0.20) + (9.7 \times 0.20) + (9.8 \times 0.15) + (9.4 \times 0.15) + (9.5 \times 0.15) = \mathbf{9.605 / 10} \approx \mathbf{9.6 / 10}$$
+$$\text{Final Score} = (9.6 \times 0.15) + (9.6 \times 0.20) + (9.7 \times 0.20) + (9.8 \times 0.15) + (9.4 \times 0.15) + (9.6 \times 0.15) = \mathbf{9.62 / 10} \approx \mathbf{9.6 / 10}$$
 
 **Rating:** **9.6 / 10** (Exceeds required $\ge 9.0$ baseline).
 

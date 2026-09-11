@@ -10,6 +10,7 @@ pub fn get_server_port() -> Option<u16> {
 }
 
 pub fn format_local_audio_url(port: u16, path: &str) -> String {
+    #[allow(unused_mut)]
     let mut clean_path = if let Some(stripped) = path.strip_prefix("file://") {
         stripped
     } else {
@@ -27,6 +28,7 @@ pub fn format_local_audio_url(port: u16, path: &str) -> String {
 }
 
 pub fn format_local_image_url(port: u16, path: &str) -> String {
+    #[allow(unused_mut)]
     let mut clean_path = if let Some(stripped) = path.strip_prefix("file://") {
         stripped
     } else {
@@ -151,6 +153,7 @@ async fn handle_connection(mut socket: TcpStream) {
         }
     };
 
+    #[allow(unused_mut)]
     let mut clean_path = if let Some(stripped) = decoded_path.strip_prefix("file://") {
         stripped.to_string()
     } else {

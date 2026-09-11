@@ -107,7 +107,7 @@ class MainActivity : TauriActivity() {
             @android.webkit.JavascriptInterface
             fun stopPlayback() {
                 try {
-                    MediaPlaybackService.instance?.stopPlayback()
+                    MediaPlaybackService.stopPlayback()
                 } catch (e: Exception) {
                     android.util.Log.w("MainActivity", "Failed to stop playback service", e)
                 }

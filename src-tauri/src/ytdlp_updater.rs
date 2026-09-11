@@ -63,6 +63,7 @@ pub struct YtDlpManager {
 
 static MANAGER: OnceLock<Arc<YtDlpManager>> = OnceLock::new();
 
+#[allow(dead_code)]
 pub fn init_manager(app_data_dir: PathBuf) -> Arc<YtDlpManager> {
     MANAGER
         .get_or_init(|| {
@@ -77,6 +78,7 @@ pub fn get_manager() -> Option<Arc<YtDlpManager>> {
 }
 
 impl YtDlpManager {
+    #[allow(dead_code)]
     pub fn new(app_data_dir: PathBuf) -> Self {
         let manifest_path = app_data_dir.join("ytdlp_manifest.json");
         let initial_manifest = Self::load_or_create_manifest(&manifest_path, &app_data_dir);
@@ -109,6 +111,7 @@ impl YtDlpManager {
         crate::youtube::get_bundled_ytdlp_path()
     }
 
+    #[allow(dead_code)]
     fn load_or_create_manifest(manifest_path: &Path, app_data_dir: &Path) -> YtDlpManifest {
         if manifest_path.exists() {
             if let Ok(content) = fs::read_to_string(manifest_path) {

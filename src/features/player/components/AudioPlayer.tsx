@@ -50,6 +50,7 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
 
   const hasCountedPlayRef = useRef(false);
   const lastSongIdRef = useRef<number | null>(null);
+  const localRetryCountRef = useRef(0);
 
   const next = useAppStore((state) => state.next);
   const previous = useAppStore((state) => state.previous);
@@ -169,35 +170,74 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
   };
 
   const handleAudioError = () => {
+    const player = playerRef.current;
+    if (!player) return;
+
+    const resumePosition = player.currentTime || currentTime || 0;
+
     if (isOnlineSong(currentSong)) {
       const videoId = getOnlineVideoId(currentSong);
       if (!videoId) return;
-      console.warn("Audio element error on online track, retrying with bypassCache...");
+      console.warn("Audio element error on online track, retrying with bypassCache at position:", resumePosition);
       invoke<string>("get_stream_url", { id: videoId, bypassCache: true })
         .then((streamUrl) => {
           if (playerRef.current && activeRequestIdRef.current === videoId) {
             playerRef.current.src = streamUrl;
+            if (resumePosition > 0) {
+              playerRef.current.currentTime = resumePosition;
+            }
             playerRef.current.play().catch(() => {});
           }
         })
         .catch((err) => console.error("Stream retry failed:", err));
-    } else if (playerRef.current && currentSong?.path) {
-      // Local audio playback error: seamlessly switch between local HTTP 206 server and Tauri asset protocol
-      const currentSrc = playerRef.current.src;
+    } else if (currentSong?.path) {
+      if (localRetryCountRef.current >= 2) {
+        console.error("Local playback error persisted after max retries:", currentSong.path);
+        toast.error("Playback stopped: unable to decode audio track");
+        setIsPlaying(false);
+        return;
+      }
+      localRetryCountRef.current += 1;
+
+      const currentSrc = player.src;
       const assetSrc = convertFileSrc(currentSong.path);
-      if (!currentSrc.includes("asset.localhost") && !currentSrc.startsWith("asset:")) {
-        console.warn("Local server HTTP error in offline mode, switching to convertFileSrc asset protocol");
-        playerRef.current.src = assetSrc;
-        playerRef.current.play().catch((err) => console.error("Asset fallback play failed:", err));
-      } else {
-        invoke<string>("get_local_audio_url", { path: currentSong.path })
-          .then((url) => {
-            if (playerRef.current && url && playerRef.current.src !== url) {
-              playerRef.current.src = url;
+
+      const resumePlaybackWithUrl = (targetUrl: string) => {
+        if (!playerRef.current) return;
+        playerRef.current.src = targetUrl;
+        if (resumePosition > 0) {
+          playerRef.current.currentTime = resumePosition;
+        }
+        playerRef.current.play().catch((playErr) => {
+          if (playErr.name !== "AbortError") {
+            console.error("Playback resume failed, trying alternate protocol:", playErr);
+            if (targetUrl !== assetSrc && playerRef.current) {
+              playerRef.current.src = assetSrc;
+              if (resumePosition > 0) {
+                playerRef.current.currentTime = resumePosition;
+              }
               playerRef.current.play().catch(() => {});
             }
+          }
+        });
+      };
+
+      if (!currentSrc.includes("asset.localhost") && !currentSrc.startsWith("asset:")) {
+        console.warn("Local server HTTP error, falling back to convertFileSrc at position:", resumePosition);
+        resumePlaybackWithUrl(assetSrc);
+      } else {
+        console.warn("Asset protocol error, re-resolving get_local_audio_url at position:", resumePosition);
+        invoke<string>("get_local_audio_url", { path: currentSong.path })
+          .then((url) => {
+            if (url && (url.startsWith("http://") || url.startsWith("https://"))) {
+              resumePlaybackWithUrl(url);
+            } else {
+              resumePlaybackWithUrl(assetSrc);
+            }
           })
-          .catch(() => {});
+          .catch(() => {
+            resumePlaybackWithUrl(assetSrc);
+          });
       }
     }
   };
@@ -315,6 +355,7 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
 
   useEffect(() => {
     hasCountedPlayRef.current = false;
+    localRetryCountRef.current = 0;
   }, [currentSong.id]);
 
   // Clean up any existing blob url on unmount

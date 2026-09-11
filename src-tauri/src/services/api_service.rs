@@ -1,14 +1,29 @@
 use reqwest::blocking::Client;
 use serde_json::Value;
+use std::sync::OnceLock;
+use std::time::Duration;
 
 use crate::models::song::SongResponse;
+
+static SHARED_BLOCKING_CLIENT: OnceLock<Client> = OnceLock::new();
+
+fn get_client() -> &'static Client {
+    SHARED_BLOCKING_CLIENT.get_or_init(|| {
+        Client::builder()
+            .timeout(Duration::from_secs(10))
+            .connect_timeout(Duration::from_secs(5))
+            .pool_idle_timeout(Duration::from_secs(90))
+            .build()
+            .unwrap_or_else(|_| Client::new())
+    })
+}
 
 // get cover art from music brain api
 pub fn get_cover_art_from_music_brainz(
     artist: &str,
     album: &str,
 ) -> Result<Option<String>, String> {
-    let client = Client::new();
+    let client = get_client();
 
     let query = format!("artist:\"{}\" AND release:\"{}\"", artist, album);
 
@@ -45,7 +60,7 @@ pub fn get_cover_art_from_music_brainz(
 
 // get artist image from audio db api
 pub fn get_artist_image_from_audio_db(artist: &str) -> Result<Option<String>, String> {
-    let client = Client::new();
+    let client = get_client();
 
     let url = format!(
         "https://theaudiodb.com/api/v1/json/2/search.php?s={}",
@@ -79,7 +94,7 @@ pub fn get_artist_image_from_audio_db(artist: &str) -> Result<Option<String>, St
 
 pub fn get_song_lyrics_from_lrclib(song: &SongResponse) -> Result<Option<String>, String> {
     // Implementation for fetching lyrics from LRCLib
-    let client = Client::new();
+    let client = get_client();
 
     let url = format!(
         "https://lrclib.net/api/get?artist_name={}&track_name={}&album_name={}&duration={}",

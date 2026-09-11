@@ -161,7 +161,24 @@ async fn handle_connection(mut socket: TcpStream) {
         clean_path = clean_path[1..].to_string();
     }
 
-    let file_path = PathBuf::from(clean_path);
+    let raw_file_path = PathBuf::from(clean_path);
+    if raw_file_path.components().any(|c| c == std::path::Component::ParentDir) {
+        let _ = socket
+            .write_all(b"HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n")
+            .await;
+        return;
+    }
+
+    let file_path = match tokio::fs::canonicalize(&raw_file_path).await {
+        Ok(p) => p,
+        Err(_) => {
+            let _ = socket
+                .write_all(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
+                .await;
+            return;
+        }
+    };
+
     let metadata = match tokio::fs::metadata(&file_path).await {
         Ok(m) if m.is_file() => m,
         _ => {
@@ -172,8 +189,15 @@ async fn handle_connection(mut socket: TcpStream) {
         }
     };
 
-    let file_size = metadata.len();
     let mime_type = get_mime_type(&file_path);
+    if mime_type == "application/octet-stream" {
+        let _ = socket
+            .write_all(b"HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n")
+            .await;
+        return;
+    }
+
+    let file_size = metadata.len();
 
     // Look for Range header: "Range: bytes=start-end" or "Range: bytes=start-"
     let mut range_header = None;
@@ -221,7 +245,6 @@ async fn handle_connection(mut socket: TcpStream) {
                 Content-Range: bytes {}-{}/{}\r\n\
                 Content-Length: {}\r\n\
                 Accept-Ranges: bytes\r\n\
-                Access-Control-Allow-Origin: *\r\n\
                 Connection: close\r\n\r\n",
                 mime_type, start, end, file_size, content_length
             );
@@ -266,7 +289,6 @@ async fn handle_connection(mut socket: TcpStream) {
         Content-Type: {}\r\n\
         Content-Length: {}\r\n\
         Accept-Ranges: bytes\r\n\
-        Access-Control-Allow-Origin: *\r\n\
         Connection: close\r\n\r\n",
         mime_type, file_size
     );

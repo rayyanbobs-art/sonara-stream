@@ -34,6 +34,14 @@ type AudioPlayerProps = {
   currentSong: Song;
 };
 
+interface WindowWithAndroidMedia extends Window {
+  AndroidMedia?: {
+    stopPlayback?: () => void;
+    updateTrackMetadata?: (metadataJson: string) => void;
+    updatePlaybackState?: (isPlaying: boolean, position: number, duration: number) => void;
+  };
+}
+
 const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -92,11 +100,14 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
       invoke("cancel_stream_request", { videoId: activeRequestIdRef.current }).catch(() => {});
       activeRequestIdRef.current = null;
     }
-    if (typeof window !== "undefined" && typeof (window as any).AndroidMedia?.stopPlayback === "function") {
-      try {
-        (window as any).AndroidMedia.stopPlayback();
-      } catch (err) {
-        console.warn("AndroidMedia.stopPlayback error:", err);
+    if (typeof window !== "undefined") {
+      const androidWindow = window as unknown as WindowWithAndroidMedia;
+      if (typeof androidWindow.AndroidMedia?.stopPlayback === "function") {
+        try {
+          androidWindow.AndroidMedia.stopPlayback();
+        } catch (err) {
+          console.warn("AndroidMedia.stopPlayback error:", err);
+        }
       }
     }
     setIsPlaying(false);
@@ -131,6 +142,22 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
   };
 
   const handleEnded = () => {
+    if (currentSong.id <= 0) {
+      invoke("record_play_event", {
+        track: {
+          id: currentSong.online_id || String(currentSong.id),
+          title: currentSong.title,
+          artist: currentSong.artist_name,
+          duration: Math.round(duration || 0),
+          thumbnail: currentSong.album_cover_path || "",
+          source: currentSong.online_id ? "youtube" : "local",
+          signature: "",
+        },
+        completed: true,
+        skipped_before_seconds: null,
+      }).catch(() => {});
+    }
+
     if (repeatMode === "one") {
       if (playerRef.current) {
         playerRef.current.currentTime = 0;
@@ -198,11 +225,18 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
             .catch((err) => console.error(err));
         } else {
           invoke("record_play_event", {
-            title: currentSong.title,
-            artist: currentSong.artist_name,
-            durationSecs: Math.round(duration),
-            trackId: currentSong.online_id || String(currentSong.id),
-          }).catch(() => {});
+            track: {
+              id: currentSong.online_id || String(currentSong.id),
+              title: currentSong.title,
+              artist: currentSong.artist_name,
+              duration: Math.round(duration || 0),
+              thumbnail: currentSong.album_cover_path || "",
+              source: currentSong.online_id ? "youtube" : "local",
+              signature: "",
+            },
+            completed: false,
+            skipped_before_seconds: null,
+          }).catch((err) => console.warn("Failed to log play event:", err));
         }
       }
     }
@@ -234,6 +268,26 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
     player.volume = volume / 100;
     player.muted = muted;
   }, [muted, volume, currentSong.id]);
+
+  // Synchronize store isPlaying state with the HTMLAudioElement
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player || !player.src) return;
+
+    if (isPlaying && player.paused) {
+      const playPromise = player.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          if (err.name !== "AbortError") {
+            console.warn("Player play sync failed:", err);
+            setIsPlaying(false);
+          }
+        });
+      }
+    } else if (!isPlaying && !player.paused) {
+      player.pause();
+    }
+  }, [isPlaying, setIsPlaying]);
 
   useMediaSession({
     song: currentSong!,

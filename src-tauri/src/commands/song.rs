@@ -120,6 +120,23 @@ pub async fn read_audio_file(path: String) -> Result<tauri::ipc::Response, Strin
     } else {
         path
     };
+
+    let path_ref = std::path::Path::new(&clean_path);
+    let valid_ext = path_ref
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| {
+            matches!(
+                ext.to_ascii_lowercase().as_str(),
+                "m4a" | "mp3" | "flac" | "wav" | "ogg" | "opus" | "aac" | "webm"
+            )
+        })
+        .unwrap_or(false);
+
+    if !valid_ext {
+        return Err(format!("Invalid or disallowed audio file extension for '{}'", clean_path));
+    }
+
     let bytes = tokio::fs::read(&clean_path)
         .await
         .map_err(|e| format!("Failed to read audio file at '{}': {}", clean_path, e))?;

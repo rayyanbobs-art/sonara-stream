@@ -6,6 +6,9 @@ on:
       - main
     tags:
       - 'v*'
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -64,6 +67,8 @@ jobs:
         run: bun run tauri android build --apk
 
       - name: Sign and Align APK for Release
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
         run: |
           RAW_APK=$(find src-tauri/gen/android/app/build/outputs/apk -name "*.apk" | head -n 1)
           echo "Found unsigned APK: $RAW_APK"
@@ -74,11 +79,17 @@ jobs:
           # 4-byte boundary alignment
           $BUILD_TOOLS/zipalign -v -p 4 "$RAW_APK" SonaraStream-aligned.apk
 
-          # Generate standard release keystore
-          keytool -genkey -v -keystore release.jks -alias sonara \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass sonarastream -keypass sonarastream \
-            -dname "CN=SonaraStream, OU=Audio, O=Sonara, L=Unknown, S=Unknown, C=US"
+          # Obtain or generate release keystore
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "Using persistent release keystore from GitHub Secrets"
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > release.jks
+          else
+            echo "Generating fallback release keystore"
+            keytool -genkey -v -keystore release.jks -alias sonara \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass sonarastream -keypass sonarastream \
+              -dname "CN=SonaraStream, OU=Audio, O=Sonara, L=Unknown, S=Unknown, C=US"
+          fi
 
           # Sign APK with v1 (JAR), v2 (APK Signature v2), and v3 schemes
           $BUILD_TOOLS/apksigner sign --ks release.jks \

@@ -227,13 +227,14 @@ fn process_metadata(
         crate::services::metadata_job_service::insert_album_cover_job(&tx, album_id);
     }
 
+    let path_str = metadata.path.to_string_lossy();
     if let Some(id) = song_id {
         crate::repositories::song_repository::update(
             &tx,
             id,
             &metadata.title,
             metadata.duration,
-            metadata.path.to_str().unwrap(),
+            &path_str,
             metadata.track_number,
             folder_id,
             album_id,
@@ -248,7 +249,7 @@ fn process_metadata(
             &tx,
             &metadata.title,
             metadata.duration,
-            metadata.path.to_str().unwrap(),
+            &path_str,
             metadata.track_number,
             folder_id,
             album_id,

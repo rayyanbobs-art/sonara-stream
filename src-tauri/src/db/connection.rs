@@ -41,6 +41,7 @@ pub fn get_connection(app_handle: &AppHandle) -> Result<Connection, rusqlite::Er
     conn.busy_timeout(Duration::from_secs(5))?;
     let _ = conn.pragma_update(None, "journal_mode", "WAL");
     let _ = conn.pragma_update(None, "synchronous", "NORMAL");
+    let _ = conn.pragma_update(None, "foreign_keys", "ON");
     Ok(conn)
 }
 
@@ -63,6 +64,7 @@ mod tests {
         conn.busy_timeout(Duration::from_secs(5)).unwrap();
         conn.pragma_update(None, "journal_mode", "WAL").unwrap();
         conn.pragma_update(None, "synchronous", "NORMAL").unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
 
         let mode: String = conn
             .query_row("PRAGMA journal_mode", [], |row| row.get(0))
@@ -73,6 +75,11 @@ mod tests {
             .query_row("PRAGMA busy_timeout", [], |row| row.get(0))
             .unwrap();
         assert_eq!(timeout, 5000);
+
+        let fk: i64 = conn
+            .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(fk, 1);
 
         let _ = std::fs::remove_file(&db_file);
         let _ = std::fs::remove_file(format!("{}-wal", db_file.display()));

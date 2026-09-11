@@ -99,19 +99,36 @@ pub async fn download_online_track(
         return Err(format!("Download stream returned HTTP status {}", resp.status()));
     }
 
-    let mut file = fs::File::create(&dest_audio_path)
-        .map_err(|e| format!("Failed to create audio file at {:?}: {}", dest_audio_path, e))?;
+    let temp_audio_path = downloads_dir.join(format!("{}.tmp", file_base));
+    let mut file = fs::File::create(&temp_audio_path)
+        .map_err(|e| format!("Failed to create temporary audio file at {:?}: {}", temp_audio_path, e))?;
 
     let mut file_size: i64 = 0;
-    while let Some(chunk) = resp.chunk().await.map_err(|e| format!("Failed downloading stream chunk: {}", e))? {
+    while let Some(chunk) = resp.chunk().await.map_err(|e| {
+        let _ = fs::remove_file(&temp_audio_path);
+        format!("Failed downloading stream chunk: {}", e)
+    })? {
         file_size += chunk.len() as i64;
-        std::io::Write::write_all(&mut file, &chunk)
-            .map_err(|e| format!("Failed writing stream chunk to disk: {}", e))?;
+        if let Err(e) = std::io::Write::write_all(&mut file, &chunk) {
+            let _ = fs::remove_file(&temp_audio_path);
+            return Err(format!("Failed writing stream chunk to disk: {}", e));
+        }
     }
 
-    if file_size < 1000 {
-        let _ = fs::remove_file(&dest_audio_path);
-        return Err("Downloaded file is too small or incomplete".into());
+    if let Err(e) = std::io::Write::flush(&mut file) {
+        let _ = fs::remove_file(&temp_audio_path);
+        return Err(format!("Failed flushing audio stream to disk: {}", e));
+    }
+    drop(file);
+
+    if file_size < 10000 {
+        let _ = fs::remove_file(&temp_audio_path);
+        return Err("Downloaded file is too small or incomplete (< 10 KB)".into());
+    }
+
+    if let Err(e) = fs::rename(&temp_audio_path, &dest_audio_path) {
+        let _ = fs::remove_file(&temp_audio_path);
+        return Err(format!("Failed to atomically finalize audio file at {:?}: {}", dest_audio_path, e));
     }
 
     // 5. Download artwork if available
@@ -196,9 +213,10 @@ pub fn is_track_downloaded(
     if let Ok(entries) = fs::read_dir(downloads_dir) {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if name.contains(&pattern) {
+            let name_lower = name.to_ascii_lowercase();
+            if name.contains(&pattern) && (name_lower.ends_with(".m4a") || name_lower.ends_with(".mp3")) {
                 if let Ok(meta) = entry.metadata() {
-                    if meta.len() > 1000 {
+                    if meta.is_file() && meta.len() > 10000 {
                         return Ok(true);
                     }
                 }
@@ -224,8 +242,10 @@ mod tests {
     #[test]
     fn test_is_track_downloaded_pattern() {
         let pattern = format!("[{}]", "fJ9rUzIMcZQ");
-        let sample = "Queen - Bohemian Rhapsody [fJ9rUzIMcZQ].m4a";
-        assert!(sample.contains(&pattern));
+        let audio_sample = "Queen - Bohemian Rhapsody [fJ9rUzIMcZQ].m4a";
+        let image_sample = "Queen - Bohemian Rhapsody [fJ9rUzIMcZQ].jpg";
+        assert!(audio_sample.contains(&pattern) && (audio_sample.ends_with(".m4a") || audio_sample.ends_with(".mp3")));
+        assert!(!(image_sample.ends_with(".m4a") || image_sample.ends_with(".mp3")), "Image artwork must not be recognized as downloaded audio");
         let diff = "Queen - Bohemian Rhapsody [otherId].m4a";
         assert!(!diff.contains(&pattern));
     }

@@ -91,7 +91,7 @@ export const OnlineSearchSection = () => {
           setResults([resolvedTrack]);
           playOnlineTrack(resolvedTrack, [resolvedTrack]);
         }
-      } catch (err) {
+      } catch {
         setError("Failed to resolve Spotify track. Please verify the URL.");
       } finally {
         setLoading(false);

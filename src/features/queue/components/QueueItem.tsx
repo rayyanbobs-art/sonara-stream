@@ -1,4 +1,4 @@
-import { Music, Play } from "lucide-react";
+import { Music, Play, Trash2 } from "lucide-react";
 import { getFormattedDuration } from "@/lib/helpers";
 import useSongById from "@/features/queue/hooks/useSongById";
 import useAppStore from "@/store/app-store";
@@ -11,6 +11,7 @@ type QueueItemProps = {
 const QueueItem = ({ queueItem, isCurrentPlaying }: QueueItemProps) => {
   const song = useSongById(queueItem.songId);
   const setCurrentQueueItem = useAppStore((state) => state.setCurrentQueueItem);
+  const removeFromQueue = useAppStore((state) => state.removeFromQueue);
 
   const handleSelectQueueItem = () => {
     setCurrentQueueItem(queueItem);
@@ -47,8 +48,21 @@ const QueueItem = ({ queueItem, isCurrentPlaying }: QueueItemProps) => {
           {song?.artist_name} - {song?.album_name}
         </p>
       </div>
-      <div className="text-xs text-muted-foreground shrink-0">
-        {song && getFormattedDuration(song.duration)}
+      <div className="flex items-center gap-2 shrink-0">
+        <span className="text-xs text-muted-foreground">
+          {song && getFormattedDuration(song.duration)}
+        </span>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            removeFromQueue(queueItem.id);
+          }}
+          aria-label="Remove from queue"
+          className="size-7 rounded-full flex items-center justify-center text-muted-foreground opacity-60 sm:opacity-0 group-hover:opacity-100 hover:text-red-400 hover:bg-white/10 transition-all focus:opacity-100"
+        >
+          <Trash2 className="size-3.5" />
+        </button>
       </div>
     </div>
   );

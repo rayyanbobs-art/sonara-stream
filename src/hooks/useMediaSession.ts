@@ -15,6 +15,23 @@ type useMediaSessionProps = {
   onSeek: (position: number) => void;
 };
 
+interface WindowWithAndroidMedia extends Window {
+  __TAURI_INTERNALS__?: unknown;
+  AndroidMedia?: {
+    updateMetadata?: (
+      title: string,
+      artist: string,
+      album: string,
+      artwork: string,
+      duration: number,
+      isPlaying: boolean,
+      position: number
+    ) => void;
+    updatePlaybackState?: (isPlaying: boolean, position: number) => void;
+    stopPlayback?: () => void;
+  };
+}
+
 const useMediaSession = ({
   song,
   position,
@@ -26,7 +43,7 @@ const useMediaSession = ({
   onPrevious,
   onSeek,
 }: useMediaSessionProps) => {
-  const isTauri = typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__);
+  const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
   const rawArtwork = song?.album_cover_path
     ? song.album_cover_path.startsWith("http://") || song.album_cover_path.startsWith("https://")
@@ -225,19 +242,22 @@ const useMediaSession = ({
     }
 
     // Android Native MediaSession bridge
-    if (typeof window !== "undefined" && typeof (window as any).AndroidMedia?.updateMetadata === "function") {
-      try {
-        (window as any).AndroidMedia.updateMetadata(
-          title,
-          artist,
-          album,
-          song?.album_cover_path || artworkPath,
-          durSecs,
-          isPlaying,
-          position
-        );
-      } catch (err) {
-        console.debug("AndroidMedia updateMetadata error:", err);
+    if (typeof window !== "undefined") {
+      const androidWindow = window as unknown as WindowWithAndroidMedia;
+      if (typeof androidWindow.AndroidMedia?.updateMetadata === "function") {
+        try {
+          androidWindow.AndroidMedia.updateMetadata(
+            title,
+            artist,
+            album,
+            song?.album_cover_path || artworkPath,
+            durSecs,
+            isPlaying,
+            position
+          );
+        } catch (err) {
+          console.debug("AndroidMedia updateMetadata error:", err);
+        }
       }
     }
   }, [isTauri, song?.id, song?.title, song?.artist_name, artworkPath]);
@@ -253,11 +273,14 @@ const useMediaSession = ({
       }).catch(() => {});
     }
 
-    if (typeof window !== "undefined" && typeof (window as any).AndroidMedia?.updatePlaybackState === "function") {
-      try {
-        (window as any).AndroidMedia.updatePlaybackState(isPlaying, position);
-      } catch (err) {
-        console.debug("AndroidMedia updatePlaybackState error:", err);
+    if (typeof window !== "undefined") {
+      const androidWindow = window as unknown as WindowWithAndroidMedia;
+      if (typeof androidWindow.AndroidMedia?.updatePlaybackState === "function") {
+        try {
+          androidWindow.AndroidMedia.updatePlaybackState(isPlaying, position);
+        } catch (err) {
+          console.debug("AndroidMedia updatePlaybackState error:", err);
+        }
       }
     }
   }, [isTauri, isPlaying]);
@@ -274,10 +297,15 @@ const useMediaSession = ({
         }).catch(() => {});
       }
 
-      if (typeof window !== "undefined" && typeof (window as any).AndroidMedia?.updatePlaybackState === "function") {
-        try {
-          (window as any).AndroidMedia.updatePlaybackState(true, position);
-        } catch (_) {}
+      if (typeof window !== "undefined") {
+        const androidWindow = window as unknown as WindowWithAndroidMedia;
+        if (typeof androidWindow.AndroidMedia?.updatePlaybackState === "function") {
+          try {
+            androidWindow.AndroidMedia.updatePlaybackState(true, position);
+          } catch {
+            // ignore periodic sync error
+          }
+        }
       }
     }, 5000);
 

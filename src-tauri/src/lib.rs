@@ -51,15 +51,13 @@ pub fn run() {
 
     builder
         .setup(|app: &mut tauri::App| {
-            let conn = match get_connection(app.handle()) {
-                Ok(c) => c,
-                Err(err) => {
-                    eprintln!("Failed to connect to primary database: {err}");
-                    rusqlite::Connection::open_in_memory().expect("In-memory sqlite fallback failed")
-                }
-            };
+            let conn = get_connection(app.handle()).map_err(|err| {
+                eprintln!("Failed to connect to primary database: {err}");
+                format!("Failed to connect to primary database: {err}")
+            })?;
             if let Err(err) = run_migrations(&conn) {
                 eprintln!("Failed to run database migrations: {err}");
+                return Err(format!("Failed to run database migrations: {err}").into());
             }
 
             app.manage(DbState(Mutex::new(conn)));

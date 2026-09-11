@@ -52,7 +52,21 @@ class MainActivity : TauriActivity() {
         }
     }
 
+    private var isActivityInForeground: Boolean = false
+
+    override fun onStart() {
+        super.onStart()
+        isActivityInForeground = true
+    }
+
     private fun ensurePlaybackServiceStarted() {
+        if (MediaPlaybackService.instance != null) {
+            return
+        }
+        if (!isActivityInForeground) {
+            android.util.Log.d("MainActivity", "Skipping service start: Activity is not in foreground")
+            return
+        }
         try {
             val serviceIntent = Intent(this, MediaPlaybackService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -149,6 +163,7 @@ class MainActivity : TauriActivity() {
 
     override fun onResume() {
         super.onResume()
+        isActivityInForeground = true
         hideSystemNavigation()
         webViewInstance?.onResume()
         webViewInstance?.resumeTimers()
@@ -188,8 +203,8 @@ class MainActivity : TauriActivity() {
 
     override fun onPause() {
         super.onPause()
-        // If media is playing, keep WebView and JS timers alive in background
-        if (MediaPlaybackService.isPlaybackActive()) {
+        // If media is playing or service is active, keep WebView and JS timers alive in background
+        if (MediaPlaybackService.isPlaybackActive() || MediaPlaybackService.instance != null) {
             webViewInstance?.onResume()
             webViewInstance?.resumeTimers()
         }
@@ -197,8 +212,9 @@ class MainActivity : TauriActivity() {
 
     override fun onStop() {
         super.onStop()
+        isActivityInForeground = false
         // Ensure WebView audio and timers remain active when activity is stopped in background
-        if (MediaPlaybackService.isPlaybackActive()) {
+        if (MediaPlaybackService.isPlaybackActive() || MediaPlaybackService.instance != null) {
             webViewInstance?.onResume()
             webViewInstance?.resumeTimers()
         }

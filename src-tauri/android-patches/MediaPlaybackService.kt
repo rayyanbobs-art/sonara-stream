@@ -35,6 +35,8 @@ class MediaPlaybackService : Service() {
     private var wifiLock: WifiManager.WifiLock? = null
     private var mediaSession: MediaSessionCompat? = null
 
+    private var isForegroundService: Boolean = false
+
     private var currentTitle: String = "Sonara Stream"
     private var currentArtist: String = "Streaming Audio"
     private var currentAlbum: String = "Sonara"
@@ -54,7 +56,7 @@ class MediaPlaybackService : Service() {
                 ACTION_PREV -> MainActivity.dispatchMediaEvent("sonara-media-prev")
                 ACTION_STOP_SERVICE -> {
                     MainActivity.dispatchMediaEvent("sonara-media-stop")
-                    stopSelf()
+                    stopPlaybackInternal()
                 }
             }
         }
@@ -124,12 +126,12 @@ class MediaPlaybackService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP_SERVICE) {
-            stopSelf()
+            stopPlaybackInternal()
             return START_NOT_STICKY
         }
 
         startForegroundWithNotification()
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     private fun initMediaSession() {
@@ -282,7 +284,10 @@ class MediaPlaybackService : Service() {
                 releaseLocks()
                 val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
                 notificationManager?.cancel(NOTIFICATION_ID)
-                ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                if (isForegroundService) {
+                    ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                    isForegroundService = false
+                }
                 stopSelf()
             } catch (e: Exception) {
                 Log.e("MediaPlaybackService", "Error stopping playback service", e)
@@ -318,17 +323,13 @@ class MediaPlaybackService : Service() {
             }
             mediaSession?.setMetadata(metaBuilder.build())
 
-            if (isCurrentlyPlaying) {
+            val notification = buildNotification()
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+
+            if (!isForegroundService) {
                 startForegroundWithNotification()
             } else {
-                try {
-                    val notification = buildNotification()
-                    val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-                    notificationManager?.notify(NOTIFICATION_ID, notification)
-                    ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_DETACH)
-                } catch (e: Exception) {
-                    Log.w("MediaPlaybackService", "Error updating paused notification state", e)
-                }
+                notificationManager?.notify(NOTIFICATION_ID, notification)
             }
         } catch (e: Exception) {
             Log.e("MediaPlaybackService", "Error syncing media state", e)
@@ -338,18 +339,28 @@ class MediaPlaybackService : Service() {
     private fun startForegroundWithNotification() {
         try {
             val notification = buildNotification()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                ServiceCompat.startForeground(
-                    this,
-                    NOTIFICATION_ID,
-                    notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
-                )
+            if (!isForegroundService) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    ServiceCompat.startForeground(
+                        this,
+                        NOTIFICATION_ID,
+                        notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                    )
+                } else {
+                    startForeground(NOTIFICATION_ID, notification)
+                }
+                isForegroundService = true
             } else {
-                startForeground(NOTIFICATION_ID, notification)
+                val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                notificationManager?.notify(NOTIFICATION_ID, notification)
             }
         } catch (e: Exception) {
             Log.e("MediaPlaybackService", "Failed to startForegroundWithNotification", e)
+            try {
+                val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                notificationManager?.notify(NOTIFICATION_ID, buildNotification())
+            } catch (_: Exception) {}
         }
     }
 
@@ -377,6 +388,7 @@ class MediaPlaybackService : Service() {
         val prevIntent = createActionPendingIntent(ACTION_PREV, 1)
         val toggleIntent = createActionPendingIntent(if (isCurrentlyPlaying) ACTION_PAUSE else ACTION_PLAY, 2)
         val nextIntent = createActionPendingIntent(ACTION_NEXT, 3)
+        val stopIntent = createActionPendingIntent(ACTION_STOP_SERVICE, 4)
 
         val playPauseIcon = if (isCurrentlyPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
         val playPauseTitle = if (isCurrentlyPlaying) "Pause" else "Play"
@@ -392,6 +404,7 @@ class MediaPlaybackService : Service() {
             .setContentText(currentArtist)
             .setSubText(currentAlbum)
             .setContentIntent(contentIntent)
+            .setDeleteIntent(stopIntent)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setOngoing(isCurrentlyPlaying)
@@ -486,6 +499,7 @@ class MediaPlaybackService : Service() {
         mediaSession?.release()
         mediaSession = null
         releaseLocks()
+        isForegroundService = false
         instance = null
         super.onDestroy()
     }

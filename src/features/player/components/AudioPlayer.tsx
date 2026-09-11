@@ -30,6 +30,30 @@ import { isOnlineSong, getOnlineVideoId } from "@/lib/onlineTrack";
 import { getOptimizedThumbnail } from "@/utils/thumbnail";
 import { toast } from "sonner";
 
+const getAudioMimeType = (path: string): string => {
+  const ext = path.split(".").pop()?.toLowerCase();
+  switch (ext) {
+    case "m4a":
+      return "audio/mp4";
+    case "mp3":
+      return "audio/mpeg";
+    case "flac":
+      return "audio/flac";
+    case "wav":
+      return "audio/wav";
+    case "ogg":
+      return "audio/ogg";
+    case "opus":
+      return "audio/opus";
+    case "aac":
+      return "audio/aac";
+    case "webm":
+      return "audio/webm";
+    default:
+      return "audio/mp4";
+  }
+};
+
 type AudioPlayerProps = {
   currentSong: Song;
 };
@@ -199,46 +223,38 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
       }
       localRetryCountRef.current += 1;
 
-      const currentSrc = player.src;
-      const assetSrc = convertFileSrc(currentSong.path);
-
-      const resumePlaybackWithUrl = (targetUrl: string) => {
-        if (!playerRef.current) return;
-        playerRef.current.src = targetUrl;
-        if (resumePosition > 0) {
-          playerRef.current.currentTime = resumePosition;
-        }
-        playerRef.current.play().catch((playErr) => {
-          if (playErr.name !== "AbortError") {
-            console.error("Playback resume failed, trying alternate protocol:", playErr);
-            if (targetUrl !== assetSrc && playerRef.current) {
-              playerRef.current.src = assetSrc;
-              if (resumePosition > 0) {
-                playerRef.current.currentTime = resumePosition;
-              }
-              playerRef.current.play().catch(() => {});
+      console.warn("Attempting local audio recovery via read_audio_file binary IPC at position:", resumePosition);
+      invoke<ArrayBuffer>("read_audio_file", { path: currentSong.path })
+        .then((fileBuffer) => {
+          if (!playerRef.current || !fileBuffer || fileBuffer.byteLength === 0) return;
+          if (activeBlobUrlRef.current) {
+            URL.revokeObjectURL(activeBlobUrlRef.current);
+            activeBlobUrlRef.current = null;
+          }
+          const mimeType = getAudioMimeType(currentSong.path);
+          const blob = new Blob([fileBuffer], { type: mimeType });
+          const blobUrl = URL.createObjectURL(blob);
+          activeBlobUrlRef.current = blobUrl;
+          playerRef.current.src = blobUrl;
+          if (resumePosition > 0) {
+            playerRef.current.currentTime = resumePosition;
+          }
+          playerRef.current.play().catch(() => {});
+        })
+        .catch((readErr) => {
+          console.error("read_audio_file recovery failed, attempting alternate protocol:", readErr);
+          const assetSrc = convertFileSrc(currentSong.path);
+          if (playerRef.current) {
+            playerRef.current.src = assetSrc;
+            if (resumePosition > 0) {
+              playerRef.current.currentTime = resumePosition;
             }
+            playerRef.current.play().catch(() => {
+              toast.error("Playback stopped: unable to decode audio track");
+              setIsPlaying(false);
+            });
           }
         });
-      };
-
-      if (!currentSrc.includes("asset.localhost") && !currentSrc.startsWith("asset:")) {
-        console.warn("Local server HTTP error, falling back to convertFileSrc at position:", resumePosition);
-        resumePlaybackWithUrl(assetSrc);
-      } else {
-        console.warn("Asset protocol error, re-resolving get_local_audio_url at position:", resumePosition);
-        invoke<string>("get_local_audio_url", { path: currentSong.path })
-          .then((url) => {
-            if (url && (url.startsWith("http://") || url.startsWith("https://"))) {
-              resumePlaybackWithUrl(url);
-            } else {
-              resumePlaybackWithUrl(assetSrc);
-            }
-          })
-          .catch(() => {
-            resumePlaybackWithUrl(assetSrc);
-          });
-      }
     }
   };
 
@@ -422,54 +438,56 @@ const AudioPlayer = ({ currentSong }: AudioPlayerProps) => {
             activeBlobUrlRef.current = null;
           }
 
-          // Stream audio via local HTTP 206 server with offline asset protocol fallback
-          let targetUrl: string;
+          let loadedUrl: string | null = null;
+
+          // 1. Direct Binary IPC (In-Memory Blob): 100% offline-resilient, zero network required, immune to Android NuPlayer crashes
           try {
-            const localUrl = await invoke<string>("get_local_audio_url", {
+            const fileBuffer = await invoke<ArrayBuffer>("read_audio_file", {
               path: currentSong.path,
             });
-            if (localUrl && (localUrl.startsWith("http://") || localUrl.startsWith("https://"))) {
-              targetUrl = localUrl;
-            } else {
-              targetUrl = convertFileSrc(currentSong.path);
+            if (!isCancelled && playerRef.current && fileBuffer && fileBuffer.byteLength > 0) {
+              const mimeType = getAudioMimeType(currentSong.path);
+              const blob = new Blob([fileBuffer], { type: mimeType });
+              const blobUrl = URL.createObjectURL(blob);
+              activeBlobUrlRef.current = blobUrl;
+              loadedUrl = blobUrl;
             }
-          } catch (serverErr) {
-            console.warn("get_local_audio_url error, using convertFileSrc:", serverErr);
-            targetUrl = convertFileSrc(currentSong.path);
+          } catch (readErr) {
+            console.warn("read_audio_file failed, falling back to local server:", readErr);
+          }
+
+          // 2. Local HTTP 206 streaming server fallback (for large files or if binary IPC fails)
+          if (!loadedUrl && !isCancelled && playerRef.current) {
+            try {
+              const localUrl = await invoke<string>("get_local_audio_url", {
+                path: currentSong.path,
+              });
+              if (localUrl && (localUrl.startsWith("http://") || localUrl.startsWith("https://"))) {
+                loadedUrl = localUrl;
+              }
+            } catch (serverErr) {
+              console.warn("get_local_audio_url error:", serverErr);
+            }
+          }
+
+          // 3. Final asset protocol fallback
+          if (!loadedUrl) {
+            loadedUrl = convertFileSrc(currentSong.path);
           }
 
           if (isCancelled || !playerRef.current) return;
 
-          player.src = targetUrl;
+          player.src = loadedUrl;
           const playPromise = player.play();
           if (playPromise !== undefined) {
             playPromise.catch((err) => {
               if (err.name !== "AbortError") {
-                console.error("Audio play failed, retrying via asset protocol:", err);
-                const assetUrl = convertFileSrc(currentSong.path);
-                if (playerRef.current && targetUrl !== assetUrl) {
-                  playerRef.current.src = assetUrl;
-                  playerRef.current.play().catch(() => {});
-                }
+                console.error("Audio play failed:", err);
               }
             });
           }
         } catch (err) {
-          console.warn("loadAndPlayLocal fallback:", err);
-          if (isCancelled || !playerRef.current) return;
-          if (activeBlobUrlRef.current) {
-            URL.revokeObjectURL(activeBlobUrlRef.current);
-            activeBlobUrlRef.current = null;
-          }
-          player.src = convertFileSrc(currentSong.path);
-          const playPromise = player.play();
-          if (playPromise !== undefined) {
-            playPromise.catch((e) => {
-              if (e.name !== "AbortError") {
-                console.error("Asset fallback play failed:", e);
-              }
-            });
-          }
+          console.warn("loadAndPlayLocal error:", err);
         }
       };
 

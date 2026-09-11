@@ -5,6 +5,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.webkit.WebView
+import androidx.activity.OnBackPressedCallback
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -30,6 +31,18 @@ class MainActivity : TauriActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         hideSystemNavigation()
+
+        // Keep app and playback active in background when Back is pressed during playback
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (MediaPlaybackService.isPlaybackActive()) {
+                    moveTaskToBack(true)
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                }
+            }
+        })
 
         // Prompt for notification permission on Android 13+ (Tiramisu)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -164,11 +177,30 @@ class MainActivity : TauriActivity() {
         )
     }
 
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        if (MediaPlaybackService.isPlaybackActive()) {
+            moveTaskToBack(true)
+        } else {
+            super.onBackPressed()
+        }
+    }
+
     override fun onPause() {
         super.onPause()
+        // If media is playing, keep WebView and JS timers alive in background
+        if (MediaPlaybackService.isPlaybackActive()) {
+            webViewInstance?.onResume()
+            webViewInstance?.resumeTimers()
+        }
     }
 
     override fun onStop() {
         super.onStop()
+        // Ensure WebView audio and timers remain active when activity is stopped in background
+        if (MediaPlaybackService.isPlaybackActive()) {
+            webViewInstance?.onResume()
+            webViewInstance?.resumeTimers()
+        }
     }
 }

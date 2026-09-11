@@ -92,6 +92,10 @@ class MediaPlaybackService : Service() {
         fun stopPlayback() {
             instance?.stopPlaybackInternal()
         }
+
+        fun isPlaybackActive(): Boolean {
+            return instance?.isCurrentlyPlaying == true
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -464,6 +468,13 @@ class MediaPlaybackService : Service() {
             }
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        if (!isCurrentlyPlaying) {
+            stopPlaybackInternal()
         }
     }
 

@@ -121,7 +121,22 @@ pub async fn read_audio_file(path: String) -> Result<tauri::ipc::Response, Strin
         path
     };
 
-    let path_ref = std::path::Path::new(&clean_path);
+    let decoded_path = if clean_path.contains('%') {
+        urlencoding::decode(&clean_path)
+            .map(|d| d.to_string())
+            .unwrap_or(clean_path.clone())
+    } else {
+        clean_path.clone()
+    };
+
+    #[allow(unused_mut)]
+    let mut final_path = decoded_path;
+    #[cfg(windows)]
+    if final_path.len() >= 3 && final_path.starts_with('/') && final_path.chars().nth(2) == Some(':') {
+        final_path = final_path[1..].to_string();
+    }
+
+    let path_ref = std::path::Path::new(&final_path);
     let valid_ext = path_ref
         .extension()
         .and_then(|ext| ext.to_str())
@@ -134,12 +149,12 @@ pub async fn read_audio_file(path: String) -> Result<tauri::ipc::Response, Strin
         .unwrap_or(false);
 
     if !valid_ext {
-        return Err(format!("Invalid or disallowed audio file extension for '{}'", clean_path));
+        return Err(format!("Invalid or disallowed audio file extension for '{}'", final_path));
     }
 
-    let bytes = tokio::fs::read(&clean_path)
+    let bytes = tokio::fs::read(&final_path)
         .await
-        .map_err(|e| format!("Failed to read audio file at '{}': {}", clean_path, e))?;
+        .map_err(|e| format!("Failed to read audio file at '{}': {}", final_path, e))?;
     Ok(tauri::ipc::Response::new(bytes))
 }
 

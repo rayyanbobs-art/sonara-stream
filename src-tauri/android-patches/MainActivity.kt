@@ -21,6 +21,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 class MainActivity : TauriActivity() {
 
     companion object {
+        var instance: MainActivity? = null
         var webViewInstance: WebView? = null
         var lastTitle: String = "Sonara Stream"
         var lastArtist: String = "Streaming Audio"
@@ -65,6 +66,7 @@ class MainActivity : TauriActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        instance = this
         hideSystemNavigation()
 
         // Always move task to back when Back is pressed on root screen, keeping background playback and preventing activity teardown crashes
@@ -79,6 +81,85 @@ class MainActivity : TauriActivity() {
             if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101)
             }
+        }
+    }
+
+    fun handleRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?) {
+        val didCrash = detail?.didCrash() ?: false
+        android.util.Log.e("MainActivity", "WebView render process gone! (didCrash=$didCrash)")
+        try {
+            view?.let {
+                (it.parent as? android.view.ViewGroup)?.removeView(it)
+                it.destroy()
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "Error destroying terminated webView", e)
+        }
+        webViewInstance = null
+        rendererTerminated = true
+        if (isActivityInForeground) {
+            rendererTerminated = false
+            mainHandler.post { recreate() }
+        }
+    }
+
+    private inner class DecoratedWebViewClient(val existingClient: WebViewClient) : WebViewClient() {
+        override fun shouldInterceptRequest(
+            view: WebView?,
+            request: WebResourceRequest?
+        ): WebResourceResponse? {
+            return existingClient.shouldInterceptRequest(view, request)
+        }
+
+        @Suppress("DEPRECATION")
+        override fun shouldInterceptRequest(
+            view: WebView?,
+            url: String?
+        ): WebResourceResponse? {
+            return existingClient.shouldInterceptRequest(view, url)
+        }
+
+        override fun shouldOverrideUrlLoading(
+            view: WebView?,
+            request: WebResourceRequest?
+        ): Boolean {
+            return existingClient.shouldOverrideUrlLoading(view, request)
+        }
+
+        @Suppress("DEPRECATION")
+        override fun shouldOverrideUrlLoading(
+            view: WebView?,
+            url: String?
+        ): Boolean {
+            return existingClient.shouldOverrideUrlLoading(view, url)
+        }
+
+        override fun onPageStarted(
+            view: WebView?,
+            url: String?,
+            favicon: android.graphics.Bitmap?
+        ) {
+            existingClient.onPageStarted(view, url, favicon)
+        }
+
+        override fun onPageFinished(view: WebView?, url: String?) {
+            existingClient.onPageFinished(view, url)
+        }
+
+        override fun onReceivedError(
+            view: WebView?,
+            request: WebResourceRequest?,
+            error: WebResourceError?
+        ) {
+            existingClient.onReceivedError(view, request, error)
+        }
+
+        override fun onRenderProcessGone(
+            view: WebView?,
+            detail: RenderProcessGoneDetail?
+        ): Boolean {
+            handleRenderProcessGone(view, detail)
+            return true
         }
     }
 
@@ -124,86 +205,15 @@ class MainActivity : TauriActivity() {
 
         // Decorate WebViewClient to survive render process death under memory pressure
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val existingClient = webView.webViewClient
-            webView.webViewClient = object : WebViewClient() {
-                override fun shouldInterceptRequest(
-                    view: WebView?,
-                    request: WebResourceRequest?
-                ): WebResourceResponse? {
-                    return existingClient?.shouldInterceptRequest(view, request)
-                        ?: super.shouldInterceptRequest(view, request)
-                }
-
-                @Suppress("DEPRECATION")
-                override fun shouldInterceptRequest(
-                    view: WebView?,
-                    url: String?
-                ): WebResourceResponse? {
-                    return existingClient?.shouldInterceptRequest(view, url)
-                        ?: super.shouldInterceptRequest(view, url)
-                }
-
-                override fun shouldOverrideUrlLoading(
-                    view: WebView?,
-                    request: WebResourceRequest?
-                ): Boolean {
-                    return existingClient?.shouldOverrideUrlLoading(view, request)
-                        ?: super.shouldOverrideUrlLoading(view, request)
-                }
-
-                @Suppress("DEPRECATION")
-                override fun shouldOverrideUrlLoading(
-                    view: WebView?,
-                    url: String?
-                ): Boolean {
-                    return existingClient?.shouldOverrideUrlLoading(view, url)
-                        ?: super.shouldOverrideUrlLoading(view, url)
-                }
-
-                override fun onPageStarted(
-                    view: WebView?,
-                    url: String?,
-                    favicon: android.graphics.Bitmap?
-                ) {
-                    existingClient?.onPageStarted(view, url, favicon) ?: super.onPageStarted(view, url, favicon)
-                }
-
-                override fun onPageFinished(view: WebView?, url: String?) {
-                    existingClient?.onPageFinished(view, url) ?: super.onPageFinished(view, url)
-                }
-
-                override fun onReceivedError(
-                    view: WebView?,
-                    request: WebResourceRequest?,
-                    error: WebResourceError?
-                ) {
-                    existingClient?.onReceivedError(view, request, error)
-                        ?: super.onReceivedError(view, request, error)
-                }
-
-                override fun onRenderProcessGone(
-                    view: WebView?,
-                    detail: RenderProcessGoneDetail?
-                ): Boolean {
-                    val didCrash = detail?.didCrash() ?: false
-                    android.util.Log.e("MainActivity", "WebView render process gone! (didCrash=$didCrash)")
-                    try {
-                        view?.let {
-                            (it.parent as? android.view.ViewGroup)?.removeView(it)
-                            it.destroy()
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.w("MainActivity", "Error destroying terminated webView", e)
-                    }
-                    webViewInstance = null
-                    rendererTerminated = true
-                    if (isActivityInForeground) {
-                        rendererTerminated = false
-                        mainHandler.post { recreate() }
-                    }
-                    return true
+            val wrapClient = {
+                val existingClient = webView.webViewClient
+                if (existingClient != null && existingClient !is DecoratedWebViewClient) {
+                    webView.webViewClient = DecoratedWebViewClient(existingClient)
+                    android.util.Log.d("MainActivity", "Decorated webViewClient to catch onRenderProcessGone")
                 }
             }
+            wrapClient()
+            mainHandler.post { wrapClient() }
         }
 
         // Bridge to allow frontend to open external URLs / download APKs directly
@@ -411,5 +421,12 @@ class MainActivity : TauriActivity() {
             webViewInstance?.onResume()
             webViewInstance?.resumeTimers()
         }
+    }
+
+    override fun onDestroy() {
+        if (instance === this) {
+            instance = null
+        }
+        super.onDestroy()
     }
 }

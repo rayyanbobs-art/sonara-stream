@@ -156,6 +156,32 @@ def configure_android():
                 except Exception as e:
                     print(f"Error patching {xml_path}: {e}")
 
+    # 5. Patch RustWebViewClient.kt to handle onRenderProcessGone
+    rust_client_path = os.path.join(
+        gen_android_dir, "app", "src", "main", "java", "com", "sonara", "stream", "generated", "RustWebViewClient.kt"
+    )
+    if os.path.exists(rust_client_path):
+        with open(rust_client_path, "r", encoding="utf-8") as f:
+            client_code = f.read()
+        if "onRenderProcessGone" not in client_code:
+            render_gone_code = '''
+    override fun onRenderProcessGone(
+        view: WebView?,
+        detail: RenderProcessGoneDetail?
+    ): Boolean {
+        android.util.Log.e("RustWebViewClient", "WebView render process gone! didCrash=${detail?.didCrash()}")
+        MainActivity.instance?.handleRenderProcessGone(view, detail)
+        return true
+    }
+}
+'''
+            idx = client_code.rfind("}")
+            if idx != -1:
+                client_code = client_code[:idx] + render_gone_code
+                with open(rust_client_path, "w", encoding="utf-8") as f:
+                    f.write(client_code)
+                print("Patched onRenderProcessGone into RustWebViewClient.kt")
+
     print("Android configuration complete!")
     return True
 

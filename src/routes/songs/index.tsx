@@ -1,35 +1,49 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { useState, useMemo, useRef } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useRef } from "react";
 import useGetAllSongsQuery from "@/features/songs/api/useGetAllSongsQuery";
 import useAppStore from "@/store/app-store";
 import SongsTable from "@/features/songs/components/SongsTable";
 import EmptySongAlert from "@/components/custom/EmptySongAlert";
 import Loading from "@/components/custom/Loading";
+import { Search, ChevronRight, Disc3, Heart, User } from "lucide-react";
+import { Input } from "@/components/ui/input";
 
 export const Route = createFileRoute("/songs/")({
   component: RouteComponent,
 });
 
-// get all songs from db
-
 function RouteComponent() {
   const { data, isLoading } = useGetAllSongsQuery();
   const playSong = useAppStore((state) => state.playSong);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredSongs = useMemo(() => {
+    if (!data) return [];
+    if (!searchQuery.trim()) return data;
+    const q = searchQuery.toLowerCase();
+    return data.filter(
+      (s) =>
+        s.title.toLowerCase().includes(q) ||
+        s.artist_name?.toLowerCase().includes(q) ||
+        s.album_name?.toLowerCase().includes(q)
+    );
+  }, [data, searchQuery]);
 
   const parentRef = useRef<HTMLDivElement>(null);
 
   const rowVirtualizer = useVirtualizer({
-    count: data?.length ?? 0,
+    count: filteredSongs.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 48,
     overscan: 8,
-    getItemKey: (index) => data?.[index].id ?? index,
+    getItemKey: (index) => filteredSongs[index]?.id ?? index,
   });
 
   const handleSongSelect = (song: Song) => {
-    if (!data) return;
-    playSong(song, data);
+    if (filteredSongs.length > 0) {
+      playSong(song, filteredSongs);
+    }
   };
 
   if (!data || isLoading) {
@@ -41,28 +55,96 @@ function RouteComponent() {
   }
 
   const virtualRows = rowVirtualizer.getVirtualItems();
-
-  const visibleSongs = virtualRows.map((row) => data?.[row.index]);
+  const visibleSongs = virtualRows.map((row) => filteredSongs[row.index]);
 
   return (
     <main
-      className="p-2 sm:p-4 pt-18 pb-36 md:pb-25 w-full h-screen overflow-y-auto custom-scrollbar"
+      className="p-3 sm:p-6 pt-16 sm:pt-20 pb-36 md:pb-28 w-full h-screen overflow-y-auto custom-scrollbar"
       ref={parentRef}
     >
-      <div
-        style={{
-          height: rowVirtualizer.getTotalSize(),
-          position: "relative",
-        }}
-      >
+      <div className="max-w-7xl mx-auto space-y-4">
+        {/* Header & Search Filter */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-white/5">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold font-heading text-white tracking-tight">
+              Your Library
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              {filteredSongs.length} {filteredSongs.length === 1 ? "track" : "tracks"}
+            </p>
+          </div>
+
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <Input
+              placeholder="Search library..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-3 h-10 rounded-full bg-white/5 border-white/10 text-xs focus:bg-white/10"
+            />
+          </div>
+        </div>
+
+        {/* Mobile Fast Category Shortcuts (Figma mobile_library.png) */}
+        {!searchQuery && (
+          <div className="grid sm:hidden grid-cols-3 gap-2 pb-2">
+            <Link
+              to="/favorites"
+              className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Heart size={15} className="text-primary fill-primary" />
+                <span className="text-xs font-semibold text-white">Favorites</span>
+              </div>
+              <ChevronRight size={13} className="text-muted-foreground" />
+            </Link>
+
+            <Link
+              to="/albums"
+              className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Disc3 size={15} className="text-primary" />
+                <span className="text-xs font-semibold text-white">Albums</span>
+              </div>
+              <ChevronRight size={13} className="text-muted-foreground" />
+            </Link>
+
+            <Link
+              to="/artists"
+              className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <User size={15} className="text-primary" />
+                <span className="text-xs font-semibold text-white">Artists</span>
+              </div>
+              <ChevronRight size={13} className="text-muted-foreground" />
+            </Link>
+          </div>
+        )}
+
+        {/* Songs List */}
         <div
           style={{
-            position: "absolute",
-            width: "100%",
-            transform: `translateY(${virtualRows[0]?.start ?? 0}px)`,
+            height: `${rowVirtualizer.getTotalSize()}px`,
+            position: "relative",
           }}
         >
-          <SongsTable songs={visibleSongs} handleSongClick={handleSongSelect} />
+          {filteredSongs.length === 0 ? (
+            <div className="py-12 text-center text-sm text-muted-foreground">
+              No songs matching "{searchQuery}"
+            </div>
+          ) : (
+            <div
+              style={{
+                position: "absolute",
+                width: "100%",
+                transform: `translateY(${virtualRows[0]?.start ?? 0}px)`,
+              }}
+            >
+              <SongsTable songs={visibleSongs} handleSongClick={handleSongSelect} />
+            </div>
+          )}
         </div>
       </div>
     </main>

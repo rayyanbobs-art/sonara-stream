@@ -4,6 +4,20 @@ All notable changes to **Sonara Stream** are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.7] - 2026-09-12
+
+### 🎵 Native AndroidX Media3 ExoPlayer Architecture & Playback Resilience
+- **Native Media3 ExoPlayer Migration**: Migrated Android audio playback from brittle WebView HTML5 `<audio>` to native AndroidX Media3 ExoPlayer running inside a dedicated foreground service (`MediaPlaybackService.kt`).
+- **Resilience Under Memory Pressure**: Configured both `RustWebViewClient` and `DecoratedWebViewClient` to override `onRenderProcessGone` returning `true`. When Android evicts or kills the sandboxed Chromium renderer under memory pressure, background audio playback continues uninterrupted and the UI cleanly recreates upon resume.
+- **Looper-Thread-Safe Android Bridges**: Enforced strict `mainHandler.post { ... }` looper dispatching on all `@JavascriptInterface` calls from WebView binder threads to ExoPlayer and foreground services, eliminating single-thread runtime assertion crashes.
+- **Android 14 Media Style Notifications**: Upgraded notification system to native Android 14 Media Style with high-res artwork, dynamic blur background, live interactive timeline scrubber, and system media key event bindings (`KEYCODE_MEDIA_PLAY_PAUSE`, skip, previous).
+- **Interactive Full-Screen & Mini Player Controls**: Added gesture-based swipe-to-dismiss (releasing the native player and clearing notifications) and seamless synchronization between native ExoPlayer and React UI states.
+- **Defensive Local Path Normalization**: Hardened local playback to decode percent-encoded URLs (e.g. `%20` spaces), strip `file://` protocols, and support `content://` URIs natively.
+- **Database & Architecture Hardening**: Enabled SQLite WAL mode with a 5-second busy timeout to prevent database lock contention.
+- **Desktop Isolation**: Kept desktop audio pipelines (`local_server.rs`, `media_controls.rs`, HTML5 audio) 100% byte-for-byte untouched.
+
+---
+
 ## [0.6.5] - 2026-09-08
 
 ### 🛡️ Android Downloaded Track Playback Crash Elimination & Media Hardening

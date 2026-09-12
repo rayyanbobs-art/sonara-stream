@@ -112,6 +112,7 @@ jobs:
           path: SonaraStream-Android.apk
 
       - name: Attach APK to GitHub Release
+        if: github.event_name != 'pull_request'
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             TARGET_TAG="$GITHUB_REF_NAME"

@@ -35,6 +35,7 @@ class DesktopAudioPlayer(
     }
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val proxy = DesktopAudioProxy()
     private var mediaPlayer: MediaPlayer? = null
     private var tickerJob: Job? = null
 
@@ -46,6 +47,7 @@ class DesktopAudioPlayer(
 
     init {
         initJavaFx()
+        proxy.start()
     }
 
     fun play(track: Track, newQueue: List<Track> = emptyList()) {
@@ -98,13 +100,21 @@ class DesktopAudioPlayer(
                     try {
                         stopCurrentPlayer()
 
-                        val mediaSource = if (finalUrl.startsWith("http://") || finalUrl.startsWith("https://")) {
-                            finalUrl
+                        val playbackUrl = proxy.getPlaybackUrl(finalUrl)
+                        val mediaSource = if (playbackUrl.startsWith("http://") || playbackUrl.startsWith("https://")) {
+                            playbackUrl
                         } else {
-                            File(finalUrl).toURI().toString()
+                            File(playbackUrl).toURI().toString()
                         }
 
                         val media = Media(mediaSource)
+                        media.onError = Runnable {
+                            val err = media.error?.message ?: "Media load error"
+                            _state.value = _state.value.copy(
+                                status = PlaybackStatus.ERROR,
+                                errorMessage = err
+                            )
+                        }
                         val player = MediaPlayer(media)
                         mediaPlayer = player
 
@@ -288,6 +298,7 @@ class DesktopAudioPlayer(
     }
 
     fun release() {
+        proxy.stop()
         stopCurrentPlayer()
         scope.cancel()
     }

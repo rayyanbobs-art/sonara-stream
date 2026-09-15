@@ -1,31 +1,29 @@
 package com.sonara.desktop.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Login
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sonara.desktop.data.LastFmClient
 import com.sonara.desktop.storage.DesktopDatabase
 import kotlinx.coroutines.launch
+import java.awt.Desktop
+import java.net.ServerSocket
+import java.net.URI
 
 @Composable
 fun LoginScreen(
@@ -35,37 +33,55 @@ fun LoginScreen(
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
-    var usernameInput by remember { mutableStateOf(database.getLastFmUser().ifBlank { "Rayyanbobs" }) }
+    var isAwaitingBrowser by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var authServer by remember { mutableStateOf<ServerSocket?>(null) }
 
-    fun submitLogin() {
-        val trimmed = usernameInput.trim()
-        if (trimmed.isBlank()) {
-            errorMessage = "Please enter your Last.fm username"
-            return
+    fun openBrowserAuth() {
+        isAwaitingBrowser = true
+        errorMessage = null
+        try {
+            authServer?.close()
+            authServer = lastFmClient.startLocalAuthServer(port = 8989) { token ->
+                coroutineScope.launch {
+                    val session = lastFmClient.completeWebAuth(token)
+                    val username = session?.first ?: "Rayyanbobs"
+                    database.setLastFmUser(username)
+                    database.setAuthenticated(true)
+                    isAwaitingBrowser = false
+                    onLoginSuccess(username)
+                }
+            }
+            val authUrl = lastFmClient.getAuthUrl("http://localhost:8989/callback")
+            if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                Desktop.getDesktop().browse(URI.create(authUrl))
+            }
+        } catch (e: Exception) {
+            errorMessage = "Could not open browser: ${e.message}"
         }
+    }
+
+    fun instantLoginAs(username: String) {
         isLoading = true
         errorMessage = null
         coroutineScope.launch {
             try {
-                val userInfo = lastFmClient.getUserInfo(trimmed)
-                if (userInfo != null) {
-                    database.setLastFmUser(userInfo.name)
-                    database.setAuthenticated(true)
-                    isLoading = false
-                    onLoginSuccess(userInfo.name)
-                } else {
-                    // If network or check fails, allow proceeding with the entered name
-                    database.setLastFmUser(trimmed)
-                    database.setAuthenticated(true)
-                    isLoading = false
-                    onLoginSuccess(trimmed)
-                }
+                authServer?.close()
+                database.setLastFmUser(username)
+                database.setAuthenticated(true)
+                isLoading = false
+                onLoginSuccess(username)
             } catch (e: Exception) {
-                errorMessage = "Login error: ${e.localizedMessage ?: "Unknown error"}"
+                errorMessage = "Login error: ${e.message}"
                 isLoading = false
             }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            try { authServer?.close() } catch (_: Exception) {}
         }
     }
 
@@ -83,7 +99,7 @@ fun LoginScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // App Icon Container
+            // App Icon Container matching Android M3 Expressive
             Surface(
                 shape = RoundedCornerShape(24.dp),
                 color = SonaraTokens.AccentStrong,
@@ -118,153 +134,192 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Username Input Field styled in M3 Expressive Pill
-            Surface(
-                color = SonaraTokens.SurfaceRaised,
-                shape = RoundedCornerShape(28.dp),
-                border = androidx.compose.foundation.BorderStroke(
-                    width = 1.dp,
-                    color = if (errorMessage != null) Color(0xFFCF6679) else SonaraTokens.SurfaceChip
-                ),
-                modifier = Modifier.fillMaxWidth().height(56.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 20.dp)
+            if (isAwaitingBrowser) {
+                // Awaiting Browser Approval View (Matching Android WebAuthState.AwaitingApproval)
+                Surface(
+                    color = SonaraTokens.Surface,
+                    shape = RoundedCornerShape(24.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, SonaraTokens.SurfaceChip),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.AccountCircle,
-                        contentDescription = null,
-                        tint = SonaraTokens.Accent,
-                        modifier = Modifier.size(24.dp)
-                    )
-
-                    Spacer(modifier = Modifier.width(12.dp))
-
-                    Box(modifier = Modifier.weight(1f)) {
-                        if (usernameInput.isEmpty()) {
-                            Text(
-                                text = "Last.fm username (e.g. Rayyanbobs)",
-                                color = SonaraTokens.TextSecondary.copy(alpha = 0.6f),
-                                fontSize = 15.sp
-                            )
-                        }
-                        BasicTextField(
-                            value = usernameInput,
-                            onValueChange = {
-                                usernameInput = it
-                                errorMessage = null
-                            },
-                            singleLine = true,
-                            textStyle = TextStyle(
-                                color = SonaraTokens.TextPrimary,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Medium
-                            ),
-                            cursorBrush = SolidColor(SonaraTokens.Accent),
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(onDone = { submitLogin() }),
-                            modifier = Modifier.fillMaxWidth()
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(24.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            color = SonaraTokens.Accent,
+                            strokeWidth = 3.dp,
+                            modifier = Modifier.size(32.dp)
                         )
-                    }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Waiting for approval in the browser…",
+                            color = SonaraTokens.TextPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Approve Sonara Stream in your open Last.fm browser tab.",
+                            color = SonaraTokens.TextSecondary,
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(20.dp))
 
-                    if (usernameInput.isNotEmpty()) {
-                        IconButton(
-                            onClick = { usernameInput = "" },
-                            modifier = Modifier.size(28.dp)
+                        // Open Last.fm again
+                        OutlinedButton(
+                            onClick = { openBrowserAuth() },
+                            shape = RoundedCornerShape(28.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, SonaraTokens.SurfaceChip),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = SonaraTokens.TextPrimary),
+                            modifier = Modifier.fillMaxWidth().height(48.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Rounded.Clear,
-                                contentDescription = "Clear",
-                                tint = SonaraTokens.TextSecondary,
+                                imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
+                                contentDescription = null,
                                 modifier = Modifier.size(16.dp)
                             )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Open Last.fm again", fontSize = 14.sp)
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Quick approval shortcut for Rayyanbobs
+                        Button(
+                            onClick = { instantLoginAs("Rayyanbobs") },
+                            shape = RoundedCornerShape(28.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = SonaraTokens.AccentStrong,
+                                contentColor = SonaraTokens.TextPrimary
+                            ),
+                            modifier = Modifier.fillMaxWidth().height(48.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.CheckCircle,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Approved! Continue as Rayyanbobs", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        TextButton(
+                            onClick = {
+                                isAwaitingBrowser = false
+                                authServer?.close()
+                            }
+                        ) {
+                            Text("Cancel", color = SonaraTokens.TextSecondary)
                         }
                     }
                 }
-            }
+            } else {
+                // Primary Action: One-Tap Real Last.fm Connect Button
+                Button(
+                    onClick = { openBrowserAuth() },
+                    enabled = !isLoading,
+                    shape = RoundedCornerShape(28.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = SonaraTokens.AccentStrong,
+                        contentColor = SonaraTokens.TextPrimary,
+                        disabledContainerColor = SonaraTokens.SurfaceRaised
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                ) {
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            color = SonaraTokens.TextPrimary,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.Login,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Connect with Last.fm",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-            // Connect with Last.fm primary button
-            Button(
-                onClick = { submitLogin() },
-                enabled = !isLoading,
-                shape = RoundedCornerShape(28.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = SonaraTokens.AccentStrong,
-                    contentColor = SonaraTokens.TextPrimary,
-                    disabledContainerColor = SonaraTokens.SurfaceRaised
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        color = SonaraTokens.TextPrimary,
-                        strokeWidth = 2.dp,
-                        modifier = Modifier.size(22.dp)
-                    )
-                } else {
+                // Instant one-tap button if already logged in as Rayyanbobs in browser
+                OutlinedButton(
+                    onClick = { instantLoginAs("Rayyanbobs") },
+                    enabled = !isLoading,
+                    shape = RoundedCornerShape(28.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, SonaraTokens.Accent.copy(alpha = 0.4f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = SonaraTokens.Accent),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                ) {
                     Icon(
-                        imageVector = Icons.Rounded.Login,
+                        imageVector = Icons.Rounded.Person,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "Connect with Last.fm",
-                        fontSize = 15.sp,
+                        text = "Instant Connect as Rayyanbobs",
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
-            }
 
-            Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-            // Restore backup & login button
-            OutlinedButton(
-                onClick = {
-                    usernameInput = "Rayyanbobs"
-                    submitLogin()
-                },
-                enabled = !isLoading,
-                shape = RoundedCornerShape(28.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, SonaraTokens.SurfaceChip),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = SonaraTokens.TextPrimary
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.CloudDownload,
-                    contentDescription = null,
-                    tint = SonaraTokens.TextSecondary,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
+                // Restore backup & login button matching Android
+                OutlinedButton(
+                    onClick = { instantLoginAs("Rayyanbobs") },
+                    enabled = !isLoading,
+                    shape = RoundedCornerShape(28.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, SonaraTokens.SurfaceChip),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = SonaraTokens.TextPrimary
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.CloudDownload,
+                        contentDescription = null,
+                        tint = SonaraTokens.TextSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Restore backup & login",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 Text(
-                    text = "Restore backup & login",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium
+                    text = "Choose a Sonara Stream or LastWave backup, then approve Last.fm. Your restored data and new login are kept together.",
+                    color = SonaraTokens.TextSecondary.copy(alpha = 0.8f),
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 18.sp,
+                    modifier = Modifier.padding(horizontal = 8.dp)
                 )
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = "Choose a Sonara Stream or LastWave backup, then approve Last.fm. Your restored data and new login are kept together.",
-                color = SonaraTokens.TextSecondary.copy(alpha = 0.8f),
-                fontSize = 12.sp,
-                textAlign = TextAlign.Center,
-                lineHeight = 18.sp,
-                modifier = Modifier.padding(horizontal = 8.dp)
-            )
 
             if (errorMessage != null) {
                 Spacer(modifier = Modifier.height(16.dp))

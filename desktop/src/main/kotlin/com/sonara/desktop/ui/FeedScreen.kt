@@ -1,4 +1,4 @@
-﻿package com.sonara.desktop.ui
+package com.sonara.desktop.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,8 +18,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.sonara.desktop.data.LastFmClient
 import com.sonara.desktop.data.MusicSearchService
 import com.sonara.desktop.model.Track
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -33,9 +35,22 @@ fun FeedScreen(
     onNavigateToSearch: () -> Unit,
     onNavigateToSettings: () -> Unit,
     searchService: MusicSearchService,
+    lastFmClient: LastFmClient,
+    lastFmUser: String,
     modifier: Modifier = Modifier
 ) {
-    val quickPicks = remember { searchService.getCuratedDiscoverTracks() }
+    var quickPicks by remember { mutableStateOf<List<Track>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(lastFmUser) {
+        isLoading = true
+        scope.launch {
+            val personalTracks = lastFmClient.getUserPersonalizedFeed(lastFmUser)
+            quickPicks = if (personalTracks.isNotEmpty()) personalTracks else lastFmClient.getDefaultDiscoverTracks()
+            isLoading = false
+        }
+    }
 
     val greeting = remember {
         val hour = LocalTime.now().hour
@@ -71,7 +86,7 @@ fun FeedScreen(
         item {
             Column(modifier = Modifier.padding(horizontal = 4.dp)) {
                 Text(
-                    text = greeting,
+                    text = if (lastFmUser.isNotBlank()) "$greeting, $lastFmUser" else greeting,
                     color = SonaraTokens.TextPrimary,
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
@@ -86,7 +101,7 @@ fun FeedScreen(
             }
         }
 
-        // Infinite Radio Hero Card
+        // Infinite Radio / Last.fm Mix Hero Card
         item {
             Surface(
                 color = SonaraTokens.SurfaceRaised,
@@ -114,7 +129,7 @@ fun FeedScreen(
                                 modifier = Modifier.size(14.dp)
                             )
                             Text(
-                                text = "MADE FOR YOU",
+                                text = "MADE FOR YOU • LAST.FM",
                                 color = SonaraTokens.Accent,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
@@ -132,7 +147,7 @@ fun FeedScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "An endless station shaped by your listening",
+                        text = "An endless station shaped by your Last.fm listening history",
                         color = SonaraTokens.TextSecondary,
                         fontSize = 14.sp
                     )
@@ -168,20 +183,22 @@ fun FeedScreen(
             }
         }
 
-        // Quick Access Tiles (Liked Songs, Mix, New releases)
+        // Quick Access Tiles (Play your library, Play your mix, Recommendations)
         item {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                // Tile 1: Liked Songs
+                // Tile 1: Play your library
                 Surface(
                     color = SonaraTokens.AccentTint,
                     shape = RoundedCornerShape(SonaraTokens.RadiusMd),
                     modifier = Modifier
                         .weight(1f)
                         .height(84.dp)
-                        .clickable { quickPicks.firstOrNull()?.let { onPlayTrack(it, quickPicks) } }
+                        .clickable {
+                            quickPicks.firstOrNull()?.let { onPlayTrack(it, quickPicks) }
+                        }
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -204,7 +221,7 @@ fun FeedScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "Liked Songs",
+                                text = "Liked & Top",
                                 color = SonaraTokens.TextPrimary,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold
@@ -218,14 +235,17 @@ fun FeedScreen(
                     }
                 }
 
-                // Tile 2: Mix
+                // Tile 2: Play your mix
                 Surface(
                     color = SonaraTokens.Surface,
                     shape = RoundedCornerShape(SonaraTokens.RadiusMd),
                     modifier = Modifier
                         .weight(1f)
                         .height(84.dp)
-                        .clickable { quickPicks.shuffled().firstOrNull()?.let { onPlayTrack(it, quickPicks.shuffled()) } }
+                        .clickable {
+                            val shuffled = quickPicks.shuffled()
+                            shuffled.firstOrNull()?.let { onPlayTrack(it, shuffled) }
+                        }
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -262,7 +282,7 @@ fun FeedScreen(
                     }
                 }
 
-                // Tile 3: New releases
+                // Tile 3: Recommendations / Discover
                 Surface(
                     color = SonaraTokens.Surface,
                     shape = RoundedCornerShape(SonaraTokens.RadiusMd),
@@ -283,7 +303,7 @@ fun FeedScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Rounded.NewReleases,
+                                imageVector = Icons.Rounded.Explore,
                                 contentDescription = null,
                                 tint = SonaraTokens.Accent,
                                 modifier = Modifier.size(22.dp)
@@ -292,13 +312,13 @@ fun FeedScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "New releases",
+                                text = "Discover",
                                 color = SonaraTokens.TextPrimary,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Fresh drops",
+                                text = "Recommended",
                                 color = SonaraTokens.TextSecondary,
                                 fontSize = 12.sp
                             )
@@ -325,7 +345,7 @@ fun FeedScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Matched to your taste profile",
+                        text = "Live from your Last.fm account ($lastFmUser)",
                         color = SonaraTokens.TextSecondary,
                         fontSize = 13.sp
                     )
@@ -358,11 +378,11 @@ fun FeedScreen(
                             quickPicks.firstOrNull()?.let { onPlayTrack(it, quickPicks) }
                         },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = SonaraTokens.AccentStrong,
+                            containerColor = SonaraTokens.SurfaceChip,
                             contentColor = SonaraTokens.TextPrimary
                         ),
                         shape = RoundedCornerShape(SonaraTokens.RadiusPill),
-                        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp)
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.PlayArrow,
@@ -373,27 +393,38 @@ fun FeedScreen(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "Play all",
-                            color = SonaraTokens.TextPrimary,
                             fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
             }
         }
 
-        // Quick picks track list
-        items(quickPicks) { track ->
-            DensityTrackRow(
-                track = track,
-                isPlaying = isPlaying,
-                isCurrent = currentTrack?.id == track.id,
-                onPlay = { onPlayTrack(track, quickPicks) }
-            )
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(90.dp))
+        if (isLoading) {
+            item {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        color = SonaraTokens.Accent,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(30.dp)
+                    )
+                }
+            }
+        } else {
+            // Density Track Rows
+            items(quickPicks) { track ->
+                val isCurrent = currentTrack?.id == track.id
+                DensityTrackRow(
+                    track = track,
+                    isPlaying = isPlaying && isCurrent,
+                    isCurrent = isCurrent,
+                    onPlay = { onPlayTrack(track, quickPicks) }
+                )
+            }
         }
     }
 }

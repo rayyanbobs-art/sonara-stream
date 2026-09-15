@@ -194,7 +194,9 @@ fun main() = application {
                                         onNavigateToDiscover = { currentNav = NavItem.DISCOVER },
                                         onNavigateToSearch = { searchActive = true },
                                         onNavigateToSettings = { currentNav = NavItem.SETTINGS },
-                                        searchService = searchService
+                                        searchService = searchService,
+                                        lastFmClient = lastFmClient,
+                                        lastFmUser = lastFmUser
                                     )
                                     NavItem.STATS -> StatsScreen(
                                         lastFmUser = lastFmUser,

@@ -5,16 +5,29 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.SystemUpdate
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import androidx.compose.ui.zIndex
 import com.sonara.desktop.audio.DesktopAudioPlayer
 import com.sonara.desktop.data.LastFmClient
 import com.sonara.desktop.data.LosslessClient
@@ -26,6 +39,7 @@ import com.sonara.desktop.model.SyncedLine
 import com.sonara.desktop.model.Track
 import com.sonara.desktop.storage.DesktopDatabase
 import com.sonara.desktop.ui.*
+import com.sonara.desktop.update.DesktopUpdateManager
 
 fun main() = application {
     val windowState = rememberWindowState(width = 1120.dp, height = 860.dp)
@@ -36,8 +50,10 @@ fun main() = application {
     val searchService = remember { MusicSearchService(losslessClient) }
     val lrclibClient = remember { LrclibClient() }
     val audioPlayer = remember { DesktopAudioPlayer(searchService, database) }
+    val updateManager = remember { DesktopUpdateManager() }
 
     val playerState by audioPlayer.state.collectAsState()
+    val updateState by updateManager.state.collectAsState()
     var isAuthenticated by remember { mutableStateOf(database.isAuthenticated()) }
     var currentNav by remember { mutableStateOf(NavItem.FEED) }
     var searchActive by remember { mutableStateOf(false) }
@@ -225,6 +241,7 @@ fun main() = application {
                                         losslessClient = losslessClient,
                                         database = database,
                                         lastFmClient = lastFmClient,
+                                        updateManager = updateManager,
                                         onSignOut = {
                                             isAuthenticated = false
                                             currentNav = NavItem.FEED
@@ -232,6 +249,136 @@ fun main() = application {
                                     )
                                 }
                             }
+                        }
+
+                        // Top Floating Update Banner
+                        AnimatedVisibility(
+                            visible = updateState.isUpdateAvailable && !updateState.isDismissed && !updateState.isDownloading,
+                            enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
+                            exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = 16.dp)
+                                .zIndex(10f)
+                        ) {
+                            Surface(
+                                color = Color(0xFF1B2E1B),
+                                border = BorderStroke(1.dp, SonaraTokens.Accent.copy(alpha = 0.6f)),
+                                shape = RoundedCornerShape(16.dp),
+                                shadowElevation = 8.dp,
+                                modifier = Modifier
+                                    .widthIn(max = 680.dp)
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 24.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.SystemUpdate,
+                                        contentDescription = null,
+                                        tint = SonaraTokens.Accent,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Update Available · Sonara Stream v${updateState.latestVersion}",
+                                            color = Color.White,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "A new version with performance improvements and bugfixes is available.",
+                                            color = Color.White.copy(alpha = 0.75f),
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Button(
+                                        onClick = { updateManager.downloadAndInstall() },
+                                        colors = ButtonDefaults.buttonColors(containerColor = SonaraTokens.Accent),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                    ) {
+                                        Text("Install", color = SonaraTokens.TextOnAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    IconButton(
+                                        onClick = { updateManager.dismissUpdate() },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Close,
+                                            contentDescription = "Dismiss",
+                                            tint = Color.White.copy(alpha = 0.7f),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Auto-Update Download Progress Modal
+                        if (updateState.isDownloading) {
+                            AlertDialog(
+                                onDismissRequest = {},
+                                containerColor = SonaraTokens.SurfaceRaised,
+                                shape = RoundedCornerShape(16.dp),
+                                title = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.SystemUpdate,
+                                            contentDescription = null,
+                                            tint = SonaraTokens.Accent,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text(
+                                            text = "Updating Sonara Stream...",
+                                            color = SonaraTokens.TextPrimary,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 18.sp
+                                        )
+                                    }
+                                },
+                                text = {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Text(
+                                            text = updateState.downloadStatus ?: "Downloading installer...",
+                                            color = SonaraTokens.TextSecondary,
+                                            fontSize = 13.sp
+                                        )
+                                        LinearProgressIndicator(
+                                            progress = { updateState.downloadProgress },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(8.dp)
+                                                .clip(RoundedCornerShape(4.dp)),
+                                            color = SonaraTokens.Accent,
+                                            trackColor = SonaraTokens.SurfaceChip
+                                        )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.End
+                                        ) {
+                                            Text(
+                                                text = "${(updateState.downloadProgress * 100).toInt()}%",
+                                                color = SonaraTokens.Accent,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                },
+                                confirmButton = {}
+                            )
                         }
 
                         // Bottom Floating Dock and Now Playing Bar

@@ -18,9 +18,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.BorderStroke
 import com.sonara.desktop.data.LastFmClient
 import com.sonara.desktop.data.LosslessClient
 import com.sonara.desktop.storage.DesktopDatabase
+import com.sonara.desktop.update.DesktopUpdateManager
+import com.sonara.desktop.update.DesktopUpdateState
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
 @Composable
@@ -29,6 +33,7 @@ fun SettingsScreen(
     losslessClient: LosslessClient,
     database: DesktopDatabase,
     lastFmClient: LastFmClient,
+    updateManager: DesktopUpdateManager? = null,
     onSignOut: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -46,6 +51,7 @@ fun SettingsScreen(
     var crossfade by remember { mutableStateOf(false) }
     var selectedQuality by remember { mutableStateOf(LosslessClient.QUALITY_MAX_HI_RES) }
     var showQualityDialog by remember { mutableStateOf(false) }
+    val updateState by (updateManager?.state ?: remember { MutableStateFlow(DesktopUpdateState()) }).collectAsState()
 
     if (showUserDialog) {
         AlertDialog(
@@ -485,7 +491,140 @@ fun SettingsScreen(
             }
         }
 
-        // Section 7: About
+        // Section 7: Updates
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Updates",
+                    color = SonaraTokens.TextPrimary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+
+                Surface(
+                    color = SonaraTokens.Surface,
+                    shape = RoundedCornerShape(SonaraTokens.RadiusMd),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(SonaraTokens.SurfaceChip),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.SystemUpdate,
+                                    contentDescription = null,
+                                    tint = SonaraTokens.Accent,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(14.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (updateState.isUpdateAvailable) "Update Available" else "App Version",
+                                    color = SonaraTokens.TextPrimary,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = when {
+                                        updateState.isUpdateAvailable -> "Sonara Stream v${updateState.latestVersion} is ready to install"
+                                        updateState.isChecking -> "Checking for updates..."
+                                        !updateState.message.isNullOrBlank() -> updateState.message!!
+                                        else -> "You're on the latest version (v${DesktopUpdateManager.CURRENT_VERSION})"
+                                    },
+                                    color = if (updateState.isUpdateAvailable) SonaraTokens.Accent else SonaraTokens.TextSecondary,
+                                    fontSize = 13.sp
+                                )
+                            }
+
+                            if (updateState.isChecking) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    color = SonaraTokens.Accent,
+                                    strokeWidth = 2.dp
+                                )
+                            } else if (updateState.isUpdateAvailable) {
+                                Button(
+                                    onClick = { updateManager?.downloadAndInstall() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = SonaraTokens.Accent),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        "Update Now",
+                                        color = SonaraTokens.TextOnAccent,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            } else {
+                                OutlinedButton(
+                                    onClick = { updateManager?.checkForUpdates(isSilent = false) },
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = SonaraTokens.TextPrimary),
+                                    border = BorderStroke(1.dp, SonaraTokens.SurfaceChip),
+                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                                ) {
+                                    Text("Check Now", fontSize = 13.sp)
+                                }
+                            }
+                        }
+
+                        if (updateState.isDownloading) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = updateState.downloadStatus ?: "Downloading installer...",
+                                        color = SonaraTokens.TextSecondary,
+                                        fontSize = 12.sp
+                                    )
+                                    Text(
+                                        text = "${(updateState.downloadProgress * 100).toInt()}%",
+                                        color = SonaraTokens.Accent,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                LinearProgressIndicator(
+                                    progress = { updateState.downloadProgress },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(6.dp)
+                                        .clip(RoundedCornerShape(3.dp)),
+                                    color = SonaraTokens.Accent,
+                                    trackColor = SonaraTokens.SurfaceChip
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Section 8: About
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(

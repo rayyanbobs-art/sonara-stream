@@ -60,12 +60,40 @@ data class Playlist(
     val coverUrl: String? = null,
     val isPinned: Boolean = false,
     val tracks: List<Track> = emptyList(),
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+@Serializable
+data class LastFmUser(
+    val name: String,
+    val playcount: Long = 0L,
+    val avatarUrl: String? = null,
+    val isConnected: Boolean = true
+)
+
+@Serializable
+data class LastFmStats(
+    val scrobbles: Long = 13L,
+    val tracks: Long = 13L,
+    val artists: Long = 10L,
+    val albums: Long = 12L,
+    val listeningTime: String = "49m 0s"
+)
+
+@Serializable
+data class ScrobbleItem(
+    val title: String,
+    val artist: String,
+    val album: String = "",
+    val artworkUrl: String? = null,
+    val timestamp: Long = 0L,
+    val isNowPlaying: Boolean = false
 )
 
 enum class NavItem(val label: String) {
-    DISCOVER("Discover"),
-    SEARCH("Search"),
-    FAVORITES("Favorites"),
+    FEED("Feed"),
+    STATS("Stats"),
     PLAYLISTS("Playlists"),
+    DISCOVER("Discover"),
     SETTINGS("Settings")
 }

@@ -1,12 +1,9 @@
 ﻿package com.sonara.desktop.ui
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -20,8 +17,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -48,8 +43,8 @@ fun AsyncArtwork(
         value = withContext(Dispatchers.IO) {
             try {
                 val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-                conn.connectTimeout = 5000
-                conn.readTimeout = 5000
+                conn.connectTimeout = 4000
+                conn.readTimeout = 4000
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0")
                 conn.inputStream.use { input ->
                     loadImageBitmap(input)
@@ -70,41 +65,136 @@ fun AsyncArtwork(
         )
     } else {
         Box(
-            modifier = modifier.background(SonaraTheme.CardSurface),
+            modifier = modifier.background(SonaraTokens.SurfaceChip),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Rounded.MusicNote,
                 contentDescription = null,
-                tint = SonaraTheme.Primary,
-                modifier = Modifier.size(24.dp)
+                tint = SonaraTokens.Accent,
+                modifier = Modifier.size(20.dp)
             )
         }
     }
 }
 
 @Composable
-fun HiResBadge(
-    label: String,
-    isLossless: Boolean = true,
+fun TopAppHeader(
+    title: String,
+    subtitle: String? = null,
+    onDiscoverClick: (() -> Unit)? = null,
+    onSearchClick: (() -> Unit)? = null,
+    onSettingsClick: (() -> Unit)? = null,
+    customAction: (@Composable () -> Unit)? = null,
+    onBackClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    Surface(
-        color = if (isLossless) SonaraTheme.Primary.copy(alpha = 0.2f) else SonaraTheme.CardSurface,
-        shape = RoundedCornerShape(4.dp),
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            if (isLossless) SonaraTheme.Primary else SonaraTheme.CardBorder
-        ),
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
         modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 14.dp)
     ) {
-        Text(
-            text = label,
-            color = if (isLossless) SonaraTheme.Secondary else SonaraTheme.TextSecondary,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (onBackClick != null) {
+                IconButton(
+                    onClick = onBackClick,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(SonaraTokens.SurfaceRaised)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.ArrowBack,
+                        contentDescription = "Back",
+                        tint = SonaraTokens.TextPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            Column {
+                Text(
+                    text = title,
+                    color = SonaraTokens.TextPrimary,
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = (-0.5).sp
+                )
+                if (!subtitle.isNullOrBlank()) {
+                    Text(
+                        text = subtitle,
+                        color = SonaraTokens.TextSecondary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Normal
+                    )
+                }
+            }
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (customAction != null) {
+                customAction()
+            }
+
+            if (onDiscoverClick != null) {
+                IconButton(
+                    onClick = onDiscoverClick,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(SonaraTokens.SurfaceRaised)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Explore,
+                        contentDescription = "Discover",
+                        tint = SonaraTokens.TextPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            if (onSearchClick != null) {
+                IconButton(
+                    onClick = onSearchClick,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(SonaraTokens.SurfaceRaised)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Search,
+                        contentDescription = "Search",
+                        tint = SonaraTokens.TextPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            if (onSettingsClick != null) {
+                IconButton(
+                    onClick = onSettingsClick,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(SonaraTokens.SurfaceRaised)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Settings,
+                        contentDescription = "Settings",
+                        tint = SonaraTokens.TextPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -112,61 +202,62 @@ fun HiResBadge(
 fun Sidebar(
     currentNav: NavItem,
     onNavSelect: (NavItem) -> Unit,
+    lastFmUser: String,
     modifier: Modifier = Modifier
 ) {
     Column(
         modifier = modifier
             .fillMaxHeight()
             .width(220.dp)
-            .background(SonaraTheme.Surface)
-            .border(width = 1.dp, color = SonaraTheme.CardBorder, shape = RoundedCornerShape(0.dp))
+            .background(SonaraTokens.Bg)
+            .border(width = 1.dp, color = SonaraTokens.SurfaceChip.copy(alpha = 0.5f), shape = RoundedCornerShape(0.dp))
             .padding(16.dp)
     ) {
         // App branding
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.padding(vertical = 12.dp, horizontal = 8.dp)
+            modifier = Modifier.padding(vertical = 12.dp, horizontal = 6.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Brush.linearGradient(listOf(SonaraTheme.Primary, SonaraTheme.Secondary))),
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(SonaraTokens.RadiusSm))
+                    .background(SonaraTokens.AccentStrong),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Rounded.GraphicEq,
                     contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(22.dp)
+                    tint = SonaraTokens.TextPrimary,
+                    modifier = Modifier.size(20.dp)
                 )
             }
             Column {
                 Text(
                     text = "Sonara",
-                    color = SonaraTheme.TextPrimary,
-                    fontSize = 18.sp,
+                    color = SonaraTokens.TextPrimary,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "STREAM • HI-RES",
-                    color = SonaraTheme.Secondary,
+                    text = "STREAM",
+                    color = SonaraTokens.Accent,
                     fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 1.sp
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.5.sp
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
-        // Navigation Menu
+        // Navigation Items
         val navItems = listOf(
-            Triple(NavItem.DISCOVER, "Discover", Icons.Rounded.Explore),
-            Triple(NavItem.SEARCH, "Search", Icons.Rounded.Search),
-            Triple(NavItem.FAVORITES, "Favorites", Icons.Rounded.Favorite),
+            Triple(NavItem.FEED, "Feed", Icons.Rounded.Home),
+            Triple(NavItem.STATS, "Stats", Icons.Rounded.BarChart),
             Triple(NavItem.PLAYLISTS, "Playlists", Icons.Rounded.QueueMusic),
+            Triple(NavItem.DISCOVER, "Discover", Icons.Rounded.Explore),
             Triple(NavItem.SETTINGS, "Settings", Icons.Rounded.Settings),
         )
 
@@ -174,28 +265,28 @@ fun Sidebar(
             val isSelected = currentNav == item
             Surface(
                 onClick = { onNavSelect(item) },
-                color = if (isSelected) SonaraTheme.Primary.copy(alpha = 0.15f) else Color.Transparent,
-                shape = RoundedCornerShape(10.dp),
+                color = if (isSelected) SonaraTokens.Accent else Color.Transparent,
+                shape = RoundedCornerShape(SonaraTokens.RadiusPill),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 4.dp)
+                    .padding(vertical = 3.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
                 ) {
                     Icon(
                         imageVector = icon,
                         contentDescription = label,
-                        tint = if (isSelected) SonaraTheme.Secondary else SonaraTheme.TextSecondary,
+                        tint = if (isSelected) SonaraTokens.TextOnAccent else SonaraTokens.TextSecondary,
                         modifier = Modifier.size(20.dp)
                     )
                     Text(
                         text = label,
-                        color = if (isSelected) SonaraTheme.TextPrimary else SonaraTheme.TextSecondary,
+                        color = if (isSelected) SonaraTokens.TextOnAccent else SonaraTokens.TextSecondary,
                         fontSize = 14.sp,
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                     )
                 }
             }
@@ -203,154 +294,112 @@ fun Sidebar(
 
         Spacer(modifier = Modifier.weight(1f))
 
-        // Bottom badge
+        // Last.fm account chip at bottom of sidebar
         Surface(
-            color = SonaraTheme.CardSurface,
-            shape = RoundedCornerShape(8.dp),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
+            onClick = { onNavSelect(NavItem.SETTINGS) },
+            color = SonaraTokens.Surface,
+            shape = RoundedCornerShape(SonaraTokens.RadiusMd),
+            modifier = Modifier.fillMaxWidth()
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.padding(10.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.HighQuality,
-                    contentDescription = null,
-                    tint = SonaraTheme.Secondary,
-                    modifier = Modifier.size(18.dp)
-                )
-                Text(
-                    text = "Lossless FLAC Audio Engine",
-                    color = SonaraTheme.TextSecondary,
-                    fontSize = 11.sp,
-                    maxLines = 1
-                )
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(SonaraTokens.AccentStrong),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = lastFmUser.take(1).uppercase(),
+                        color = SonaraTokens.TextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = lastFmUser,
+                        color = SonaraTokens.TextPrimary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "Last.fm Active",
+                        color = SonaraTokens.Accent,
+                        fontSize = 11.sp
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-fun TrackRow(
-    index: Int,
+fun DensityTrackRow(
     track: Track,
     isPlaying: Boolean,
     isCurrent: Boolean,
     onPlay: () -> Unit,
-    onLike: () -> Unit,
-    isLiked: Boolean,
+    onOverflowClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Surface(
         onClick = onPlay,
-        color = if (isCurrent) SonaraTheme.Primary.copy(alpha = 0.12f) else Color.Transparent,
-        shape = RoundedCornerShape(8.dp),
+        color = if (isCurrent) SonaraTokens.SurfaceRaised else Color.Transparent,
+        shape = RoundedCornerShape(SonaraTokens.RadiusSm),
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 2.dp)
+            .padding(vertical = 2.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
-            // Index or Playing indicator
-            Box(
-                modifier = Modifier.width(32.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                if (isCurrent && isPlaying) {
-                    Icon(
-                        imageVector = Icons.Rounded.GraphicEq,
-                        contentDescription = "Playing",
-                        tint = SonaraTheme.Secondary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                } else {
-                    Text(
-                        text = "$index",
-                        color = SonaraTheme.TextMuted,
-                        fontSize = 13.sp
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // Artwork
             AsyncArtwork(
                 url = track.artworkUrl,
                 modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(6.dp))
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(SonaraTokens.RadiusSm))
             )
 
             Spacer(modifier = Modifier.width(14.dp))
 
-            // Title & Artist
             Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = track.title,
-                        color = if (isCurrent) SonaraTheme.Secondary else SonaraTheme.TextPrimary,
-                        fontSize = 14.sp,
-                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (track.isLossless) {
-                        HiResBadge(label = "FLAC", isLossless = true)
-                    }
-                }
+                Text(
+                    text = track.title,
+                    color = if (isCurrent) SonaraTokens.Accent else SonaraTokens.TextPrimary,
+                    fontSize = 15.sp,
+                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = track.artist,
-                    color = SonaraTheme.TextSecondary,
-                    fontSize = 12.sp,
+                    color = SonaraTokens.TextSecondary,
+                    fontSize = 13.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
 
-            // Album
-            if (track.album.isNotBlank()) {
-                Text(
-                    text = track.album,
-                    color = SonaraTheme.TextMuted,
-                    fontSize = 13.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(0.7f).padding(horizontal = 12.dp)
-                )
-            }
-
-            // Quality
-            Text(
-                text = track.audioQuality,
-                color = SonaraTheme.TextMuted,
-                fontSize = 11.sp,
-                modifier = Modifier.padding(horizontal = 8.dp)
-            )
-
-            // Duration
-            Text(
-                text = formatDuration(track.durationMs),
-                color = SonaraTheme.TextMuted,
-                fontSize = 12.sp,
-                modifier = Modifier.width(45.dp)
-            )
-
-            // Favorite button
             IconButton(
-                onClick = onLike,
-                modifier = Modifier.size(32.dp)
+                onClick = { onOverflowClick?.invoke() },
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(SonaraTokens.SurfaceChip.copy(alpha = 0.5f))
             ) {
                 Icon(
-                    imageVector = if (isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                    contentDescription = "Like",
-                    tint = if (isLiked) SonaraTheme.Tertiary else SonaraTheme.TextMuted,
+                    imageVector = Icons.Rounded.MoreVert,
+                    contentDescription = "Options",
+                    tint = SonaraTokens.TextSecondary,
                     modifier = Modifier.size(18.dp)
                 )
             }
@@ -359,87 +408,7 @@ fun TrackRow(
 }
 
 @Composable
-fun TrackCard(
-    track: Track,
-    isPlaying: Boolean,
-    isCurrent: Boolean,
-    onPlay: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        onClick = onPlay,
-        color = SonaraTheme.CardSurface,
-        shape = RoundedCornerShape(12.dp),
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            if (isCurrent) SonaraTheme.Primary else SonaraTheme.CardBorder
-        ),
-        modifier = modifier
-            .width(180.dp)
-            .padding(6.dp)
-    ) {
-        Column(modifier = Modifier.padding(10.dp)) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f)
-                    .clip(RoundedCornerShape(8.dp))
-            ) {
-                AsyncArtwork(
-                    url = track.artworkUrl,
-                    modifier = Modifier.fillMaxSize()
-                )
-
-                if (isCurrent && isPlaying) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.4f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.GraphicEq,
-                            contentDescription = null,
-                            tint = SonaraTheme.Secondary,
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
-                }
-
-                // Audio Quality Badge
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(6.dp)
-                ) {
-                    HiResBadge(label = "Hi-Res", isLossless = true)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Text(
-                text = track.title,
-                color = if (isCurrent) SonaraTheme.Secondary else SonaraTheme.TextPrimary,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            Text(
-                text = track.artist,
-                color = SonaraTheme.TextSecondary,
-                fontSize = 12.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
-fun PlayerBottomBar(
+fun NowPlayingBottomBar(
     playerState: PlayerState,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
@@ -451,13 +420,14 @@ fun PlayerBottomBar(
     onCycleRepeat: () -> Unit,
     onToggleLyrics: () -> Unit,
     isLyricsOpen: Boolean,
+    isLiked: Boolean,
+    onLikeTrack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
-        color = SonaraTheme.Surface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, SonaraTheme.CardBorder),
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-        shadowElevation = 8.dp,
+        color = SonaraTokens.Surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, SonaraTokens.SurfaceChip),
+        shape = RoundedCornerShape(topStart = SonaraTokens.RadiusMd, topEnd = SonaraTokens.RadiusMd),
         modifier = modifier
             .fillMaxWidth()
             .height(84.dp)
@@ -468,7 +438,7 @@ fun PlayerBottomBar(
                 .fillMaxSize()
                 .padding(horizontal = 20.dp)
         ) {
-            // Left: Current Track Info
+            // Left: Track details
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -478,48 +448,50 @@ fun PlayerBottomBar(
                     url = playerState.track?.artworkUrl,
                     modifier = Modifier
                         .size(52.dp)
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(SonaraTokens.RadiusSm))
                 )
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = playerState.track?.title ?: "No track playing",
-                        color = SonaraTheme.TextPrimary,
+                        text = playerState.track?.title ?: "Nothing playing",
+                        color = SonaraTokens.TextPrimary,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    Text(
+                        text = playerState.track?.artist ?: "Select a song to start",
+                        color = SonaraTokens.TextSecondary,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                if (playerState.track != null) {
+                    IconButton(
+                        onClick = onLikeTrack,
+                        modifier = Modifier.size(32.dp)
                     ) {
-                        Text(
-                            text = playerState.track?.artist ?: "Select a song to start",
-                            color = SonaraTheme.TextSecondary,
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                        Icon(
+                            imageVector = if (isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                            contentDescription = "Like",
+                            tint = if (isLiked) SonaraTokens.Accent else SonaraTokens.TextSecondary,
+                            modifier = Modifier.size(20.dp)
                         )
-                        if (playerState.track != null) {
-                            HiResBadge(
-                                label = if (playerState.track.isLossless) "FLAC" else "HQ",
-                                isLossless = playerState.track.isLossless
-                            )
-                        }
                     }
                 }
             }
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            // Center: Playback Controls & Seekbar
+            // Center: Playback controls and seekbar
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
                 modifier = Modifier.weight(1f)
             ) {
-                // Media Buttons
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -531,7 +503,7 @@ fun PlayerBottomBar(
                         Icon(
                             imageVector = Icons.Rounded.Shuffle,
                             contentDescription = "Shuffle",
-                            tint = if (playerState.isShuffled) SonaraTheme.Secondary else SonaraTheme.TextMuted,
+                            tint = if (playerState.isShuffled) SonaraTokens.Accent else SonaraTokens.TextSecondary,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -543,22 +515,22 @@ fun PlayerBottomBar(
                         Icon(
                             imageVector = Icons.Rounded.SkipPrevious,
                             contentDescription = "Previous",
-                            tint = SonaraTheme.TextPrimary,
-                            modifier = Modifier.size(24.dp)
+                            tint = SonaraTokens.TextPrimary,
+                            modifier = Modifier.size(22.dp)
                         )
                     }
 
-                    // Play/Pause Button with pulse circle
+                    // Play/Pause button in light sage accent
                     Surface(
                         onClick = onPlayPause,
                         shape = CircleShape,
-                        color = SonaraTheme.Primary,
+                        color = SonaraTokens.Accent,
                         modifier = Modifier.size(40.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             if (playerState.status == PlaybackStatus.BUFFERING) {
                                 CircularProgressIndicator(
-                                    color = Color.White,
+                                    color = SonaraTokens.TextOnAccent,
                                     strokeWidth = 2.dp,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -570,7 +542,7 @@ fun PlayerBottomBar(
                                         Icons.Rounded.PlayArrow
                                     },
                                     contentDescription = "Play/Pause",
-                                    tint = Color.White,
+                                    tint = SonaraTokens.TextOnAccent,
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
@@ -584,8 +556,8 @@ fun PlayerBottomBar(
                         Icon(
                             imageVector = Icons.Rounded.SkipNext,
                             contentDescription = "Next",
-                            tint = SonaraTheme.TextPrimary,
-                            modifier = Modifier.size(24.dp)
+                            tint = SonaraTokens.TextPrimary,
+                            modifier = Modifier.size(22.dp)
                         )
                     }
 
@@ -599,13 +571,12 @@ fun PlayerBottomBar(
                                 else -> Icons.Rounded.Repeat
                             },
                             contentDescription = "Repeat",
-                            tint = if (playerState.repeatMode != RepeatMode.OFF) SonaraTheme.Secondary else SonaraTheme.TextMuted,
+                            tint = if (playerState.repeatMode != RepeatMode.OFF) SonaraTokens.Accent else SonaraTokens.TextSecondary,
                             modifier = Modifier.size(18.dp)
                         )
                     }
                 }
 
-                // Seekbar Row
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -613,7 +584,7 @@ fun PlayerBottomBar(
                 ) {
                     Text(
                         text = formatDuration(playerState.positionMs),
-                        color = SonaraTheme.TextMuted,
+                        color = SonaraTokens.TextSecondary,
                         fontSize = 11.sp
                     )
 
@@ -628,16 +599,16 @@ fun PlayerBottomBar(
                             onSeek(targetMs)
                         },
                         colors = SliderDefaults.colors(
-                            thumbColor = SonaraTheme.Secondary,
-                            activeTrackColor = SonaraTheme.Primary,
-                            inactiveTrackColor = SonaraTheme.CardBorder
+                            thumbColor = SonaraTokens.Accent,
+                            activeTrackColor = SonaraTokens.Accent,
+                            inactiveTrackColor = SonaraTokens.SurfaceChip
                         ),
                         modifier = Modifier.weight(1f).height(18.dp)
                     )
 
                     Text(
                         text = formatDuration(playerState.durationMs),
-                        color = SonaraTheme.TextMuted,
+                        color = SonaraTokens.TextSecondary,
                         fontSize = 11.sp
                     )
                 }
@@ -645,26 +616,24 @@ fun PlayerBottomBar(
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            // Right: Lyrics & Volume Controls
+            // Right: Lyrics & Volume
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.width(220.dp)
+                modifier = Modifier.width(200.dp)
             ) {
-                // Lyrics button
                 IconButton(
                     onClick = onToggleLyrics,
                     modifier = Modifier.size(36.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Lyrics,
-                        contentDescription = "Synced Lyrics",
-                        tint = if (isLyricsOpen) SonaraTheme.Secondary else SonaraTheme.TextSecondary,
+                        contentDescription = "Lyrics",
+                        tint = if (isLyricsOpen) SonaraTokens.Accent else SonaraTokens.TextSecondary,
                         modifier = Modifier.size(20.dp)
                     )
                 }
 
-                // Volume icon (clickable for mute)
                 IconButton(
                     onClick = onToggleMute,
                     modifier = Modifier.size(32.dp)
@@ -678,19 +647,18 @@ fun PlayerBottomBar(
                             Icons.Rounded.VolumeUp
                         },
                         contentDescription = "Volume",
-                        tint = SonaraTheme.TextSecondary,
+                        tint = SonaraTokens.TextSecondary,
                         modifier = Modifier.size(20.dp)
                     )
                 }
 
-                // Volume slider
                 Slider(
                     value = if (playerState.isMuted) 0f else playerState.volume,
                     onValueChange = onVolumeChange,
                     colors = SliderDefaults.colors(
-                        thumbColor = SonaraTheme.Secondary,
-                        activeTrackColor = SonaraTheme.Primary,
-                        inactiveTrackColor = SonaraTheme.CardBorder
+                        thumbColor = SonaraTokens.Accent,
+                        activeTrackColor = SonaraTokens.Accent,
+                        inactiveTrackColor = SonaraTokens.SurfaceChip
                     ),
                     modifier = Modifier.weight(1f).height(18.dp)
                 )
@@ -709,7 +677,6 @@ fun LyricsSheet(
 ) {
     val listState = rememberLazyListState()
 
-    // Find active synced lyric index
     val activeIndex = remember(lyrics, positionMs) {
         var found = -1
         for (i in lyrics.indices) {
@@ -722,7 +689,6 @@ fun LyricsSheet(
         found
     }
 
-    // Auto-scroll to active lyric
     LaunchedEffect(activeIndex) {
         if (activeIndex >= 0 && lyrics.isNotEmpty()) {
             val target = (activeIndex - 2).coerceAtLeast(0)
@@ -731,17 +697,15 @@ fun LyricsSheet(
     }
 
     Surface(
-        color = SonaraTheme.ElevatedSurface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, SonaraTheme.CardBorder),
-        shape = RoundedCornerShape(16.dp),
-        shadowElevation = 12.dp,
+        color = SonaraTokens.Surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, SonaraTokens.SurfaceChip),
+        shape = RoundedCornerShape(SonaraTokens.RadiusMd),
         modifier = modifier
             .fillMaxHeight()
             .width(360.dp)
             .padding(12.dp)
     ) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            // Header
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -754,12 +718,12 @@ fun LyricsSheet(
                     Icon(
                         imageVector = Icons.Rounded.Lyrics,
                         contentDescription = null,
-                        tint = SonaraTheme.Secondary,
+                        tint = SonaraTokens.Accent,
                         modifier = Modifier.size(20.dp)
                     )
                     Text(
                         text = "Synchronized Lyrics",
-                        color = SonaraTheme.TextPrimary,
+                        color = SonaraTokens.TextPrimary,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -772,7 +736,7 @@ fun LyricsSheet(
                     Icon(
                         imageVector = Icons.Rounded.Close,
                         contentDescription = "Close",
-                        tint = SonaraTheme.TextSecondary,
+                        tint = SonaraTokens.TextSecondary,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -785,20 +749,11 @@ fun LyricsSheet(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Rounded.MusicOff,
-                            contentDescription = null,
-                            tint = SonaraTheme.TextMuted,
-                            modifier = Modifier.size(40.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "No synchronized lyrics found",
-                            color = SonaraTheme.TextMuted,
-                            fontSize = 14.sp
-                        )
-                    }
+                    Text(
+                        text = "No synchronized lyrics found",
+                        color = SonaraTokens.TextSecondary,
+                        fontSize = 14.sp
+                    )
                 }
             } else {
                 LazyColumn(
@@ -810,7 +765,7 @@ fun LyricsSheet(
                         val isActive = idx == activeIndex
                         Text(
                             text = line.text,
-                            color = if (isActive) SonaraTheme.Secondary else SonaraTheme.TextMuted,
+                            color = if (isActive) SonaraTokens.Accent else SonaraTokens.TextSecondary.copy(alpha = 0.5f),
                             fontSize = if (isActive) 18.sp else 15.sp,
                             fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
                             lineHeight = 24.sp,

@@ -4,40 +4,56 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 
-object SonaraTheme {
-    val Background = Color(0xFF0D0D12)
-    val Surface = Color(0xFF14141D)
-    val CardSurface = Color(0xFF1B1B26)
-    val CardBorder = Color(0xFF2A2A3A)
-    val ElevatedSurface = Color(0xFF232330)
+object SonaraTokens {
+    // Surfaces — warm near-black, olive cast. Not pure #000/#111.
+    val Bg = Color(0xFF14170F)
+    val Surface = Color(0xFF1E2318)
+    val SurfaceRaised = Color(0xFF262B1F)
+    val SurfaceChip = Color(0xFF333829)
 
-    val Primary = Color(0xFF7C5CFF)       // Sonara Neon Violet
-    val Secondary = Color(0xFF00E5FF)     // Electric Cyan
-    val Tertiary = Color(0xFFFF3366)      // Vibrant Coral
-    val Success = Color(0xFF00E676)       // Vibrant Green
+    // Accent — moss/sage green. This IS the brand, not a placeholder.
+    val Accent = Color(0xFF9FBE8E)         // light sage: play button fill, active nav pill, liked heart
+    val AccentStrong = Color(0xFF7FA06E)   // deeper moss: stats hero card, solid downloads callout
+    val AccentTint = Color(0xFF202A1B)     // faint green-tinted tile background
 
-    val TextPrimary = Color(0xFFF6F6F9)
-    val TextSecondary = Color(0xFFA0A0B2)
-    val TextMuted = Color(0xFF6E6E82)
+    // Status
+    val Danger = Color(0xFFC0524A)
+    val Warning = Color(0xFFD9814A)
+
+    // Text
+    val TextPrimary = Color(0xFFF4F3EE)    // off-white
+    val TextSecondary = Color(0xFFA9AE9F)  // muted sage-gray
+    val TextOnAccent = Color(0xFF14170F)   // dark text on light sage buttons
+
+    // Shapes
+    val RadiusSm = 12.dp
+    val RadiusMd = 20.dp
+    val RadiusLg = 28.dp
+    val RadiusPill = 999.dp
 
     val DarkColorScheme = darkColorScheme(
-        primary = Primary,
-        secondary = Secondary,
-        tertiary = Tertiary,
-        background = Background,
+        primary = Accent,
+        onPrimary = TextOnAccent,
+        primaryContainer = AccentStrong,
+        onPrimaryContainer = TextPrimary,
+        secondary = Accent,
+        onSecondary = TextOnAccent,
+        background = Bg,
         surface = Surface,
-        surfaceVariant = CardSurface,
+        surfaceVariant = SurfaceRaised,
         onBackground = TextPrimary,
         onSurface = TextPrimary,
         onSurfaceVariant = TextSecondary,
+        outline = SurfaceChip,
     )
 }
 
 @Composable
 fun SonaraStreamTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = SonaraTheme.DarkColorScheme,
+        colorScheme = SonaraTokens.DarkColorScheme,
         content = content
     )
 }

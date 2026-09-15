@@ -9,138 +9,222 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.sonara.desktop.audio.DesktopAudioPlayer
+import com.sonara.desktop.data.LastFmClient
 import com.sonara.desktop.data.LosslessClient
 import com.sonara.desktop.data.LrclibClient
 import com.sonara.desktop.data.MusicSearchService
 import com.sonara.desktop.model.NavItem
+import com.sonara.desktop.model.PlaybackStatus
 import com.sonara.desktop.model.SyncedLine
 import com.sonara.desktop.model.Track
 import com.sonara.desktop.storage.DesktopDatabase
 import com.sonara.desktop.ui.*
-import kotlinx.coroutines.launch
 
 fun main() = application {
-    val windowState = rememberWindowState(width = 1200.dp, height = 760.dp)
+    val windowState = rememberWindowState(width = 1240.dp, height = 820.dp)
+
+    val database = remember { DesktopDatabase() }
+    val lastFmClient = remember { LastFmClient() }
+    val losslessClient = remember { LosslessClient() }
+    val searchService = remember { MusicSearchService(losslessClient) }
+    val lrclibClient = remember { LrclibClient() }
+    val audioPlayer = remember { DesktopAudioPlayer(searchService, database) }
+
+    val playerState by audioPlayer.state.collectAsState()
+    var currentNav by remember { mutableStateOf(NavItem.FEED) }
+    var searchActive by remember { mutableStateOf(false) }
+    var isLyricsOpen by remember { mutableStateOf(false) }
+    var lyrics by remember { mutableStateOf<List<SyncedLine>>(emptyList()) }
+    var favoriteIds by remember { mutableStateOf(database.getFavorites().map { it.id }.toSet()) }
+    var lastFmUser by remember { mutableStateOf(database.getLastFmUser()) }
+
+    // Fetch real-time synced lyrics when track changes
+    LaunchedEffect(playerState.track?.id) {
+        val track = playerState.track
+        if (track != null) {
+            lyrics = emptyList()
+            lyrics = lrclibClient.fetchLyrics(
+                trackName = track.title,
+                artistName = track.artist,
+                albumName = track.album,
+                durationSeconds = if (track.durationMs > 0) (track.durationMs / 1000).toInt() else null
+            )
+        }
+    }
+
+    fun handlePlayTrack(track: Track, queue: List<Track>) {
+        audioPlayer.play(track, queue)
+    }
+
+    fun handleLikeTrack(track: Track) {
+        if (favoriteIds.contains(track.id)) {
+            database.removeFavorite(track.id)
+            favoriteIds = favoriteIds - track.id
+        } else {
+            database.addFavorite(track)
+            favoriteIds = favoriteIds + track.id
+        }
+    }
+
+    fun handleLikeCurrentTrack() {
+        playerState.track?.let { handleLikeTrack(it) }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            audioPlayer.release()
+        }
+    }
 
     Window(
         onCloseRequest = ::exitApplication,
         state = windowState,
-        title = "Sonara Stream - Lossless Music Player"
-    ) {
-        val database = remember { DesktopDatabase() }
-        val losslessClient = remember { LosslessClient() }
-        val searchService = remember { MusicSearchService(losslessClient) }
-        val lrclibClient = remember { LrclibClient() }
-        val audioPlayer = remember { DesktopAudioPlayer(searchService, database) }
-        val scope = rememberCoroutineScope()
-
-        val playerState by audioPlayer.state.collectAsState()
-        var currentNav by remember { mutableStateOf(NavItem.DISCOVER) }
-        var isLyricsOpen by remember { mutableStateOf(false) }
-        var lyrics by remember { mutableStateOf<List<SyncedLine>>(emptyList()) }
-        var favoriteIds by remember { mutableStateOf(database.getFavorites().map { it.id }.toSet()) }
-
-        // Fetch real-time synced lyrics when track changes
-        LaunchedEffect(playerState.track?.id) {
-            val track = playerState.track
-            if (track != null) {
-                lyrics = emptyList()
-                lyrics = lrclibClient.fetchLyrics(
-                    trackName = track.title,
-                    artistName = track.artist,
-                    albumName = track.album,
-                    durationSeconds = if (track.durationMs > 0) (track.durationMs / 1000).toInt() else null
-                )
-            }
-        }
-
-        fun handlePlayTrack(track: Track, queue: List<Track>) {
-            audioPlayer.play(track, queue)
-        }
-
-        fun handleLikeTrack(track: Track) {
-            if (favoriteIds.contains(track.id)) {
-                database.removeFavorite(track.id)
-                favoriteIds = favoriteIds - track.id
+        title = "Sonara Stream - Studio Master Audio",
+        onKeyEvent = { keyEvent ->
+            if (keyEvent.type == KeyEventType.KeyDown) {
+                when {
+                    keyEvent.key == Key.Spacebar && !keyEvent.isCtrlPressed -> {
+                        audioPlayer.togglePlayPause()
+                        true
+                    }
+                    keyEvent.isCtrlPressed && keyEvent.key == Key.DirectionLeft -> {
+                        audioPlayer.previous()
+                        true
+                    }
+                    keyEvent.isCtrlPressed && keyEvent.key == Key.DirectionRight -> {
+                        audioPlayer.next()
+                        true
+                    }
+                    keyEvent.key == Key.DirectionLeft -> {
+                        audioPlayer.seekTo((playerState.positionMs - 5000L).coerceAtLeast(0L))
+                        true
+                    }
+                    keyEvent.key == Key.DirectionRight -> {
+                        val maxDur = playerState.track?.durationMs ?: 0L
+                        audioPlayer.seekTo((playerState.positionMs + 5000L).coerceAtMost(maxDur))
+                        true
+                    }
+                    keyEvent.isCtrlPressed && keyEvent.key == Key.L -> {
+                        handleLikeCurrentTrack()
+                        true
+                    }
+                    keyEvent.isCtrlPressed && keyEvent.key == Key.Comma -> {
+                        currentNav = NavItem.SETTINGS
+                        searchActive = false
+                        true
+                    }
+                    keyEvent.isCtrlPressed && keyEvent.key == Key.F -> {
+                        searchActive = true
+                        true
+                    }
+                    keyEvent.key == Key.Escape -> {
+                        when {
+                            isLyricsOpen -> {
+                                isLyricsOpen = false
+                                true
+                            }
+                            searchActive -> {
+                                searchActive = false
+                                true
+                            }
+                            currentNav != NavItem.FEED -> {
+                                currentNav = NavItem.FEED
+                                true
+                            }
+                            else -> false
+                        }
+                    }
+                    else -> false
+                }
             } else {
-                database.addFavorite(track)
-                favoriteIds = favoriteIds + track.id
+                false
             }
         }
-
-        DisposableEffect(Unit) {
-            onDispose {
-                audioPlayer.release()
-            }
-        }
-
+    ) {
         SonaraStreamTheme {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(SonaraTheme.Background)
+                    .background(SonaraTokens.Bg)
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    // Main Content Row (Sidebar + Screen + Lyrics Panel)
+                    // Main layout: Sidebar + Content (+ optional Lyrics panel)
                     Row(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
                     ) {
-                        // Left Navigation Sidebar
+                        // Left Sidebar
                         Sidebar(
                             currentNav = currentNav,
-                            onNavSelect = { currentNav = it }
+                            onNavSelect = { nav ->
+                                currentNav = nav
+                                searchActive = false
+                            },
+                            lastFmUser = lastFmUser
                         )
 
-                        // Central View
+                        // Central View Area
                         Box(
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
+                                .background(SonaraTokens.Bg)
                         ) {
-                            when (currentNav) {
-                                NavItem.DISCOVER -> DiscoverScreen(
+                            if (searchActive) {
+                                SearchScreen(
                                     onPlayTrack = ::handlePlayTrack,
                                     currentTrack = playerState.track,
-                                    isPlaying = playerState.status == com.sonara.desktop.model.PlaybackStatus.PLAYING,
-                                    onLikeTrack = ::handleLikeTrack,
-                                    isLiked = { favoriteIds.contains(it) },
+                                    isPlaying = playerState.status == PlaybackStatus.PLAYING,
+                                    onBack = { searchActive = false },
                                     searchService = searchService
                                 )
-                                NavItem.SEARCH -> SearchScreen(
-                                    onPlayTrack = ::handlePlayTrack,
-                                    currentTrack = playerState.track,
-                                    isPlaying = playerState.status == com.sonara.desktop.model.PlaybackStatus.PLAYING,
-                                    onLikeTrack = ::handleLikeTrack,
-                                    isLiked = { favoriteIds.contains(it) },
-                                    searchService = searchService
-                                )
-                                NavItem.FAVORITES -> FavoritesScreen(
-                                    onPlayTrack = ::handlePlayTrack,
-                                    currentTrack = playerState.track,
-                                    isPlaying = playerState.status == com.sonara.desktop.model.PlaybackStatus.PLAYING,
-                                    onLikeTrack = ::handleLikeTrack,
-                                    isLiked = { favoriteIds.contains(it) },
-                                    database = database
-                                )
-                                NavItem.PLAYLISTS -> PlaylistsScreen(
-                                    onPlayTrack = ::handlePlayTrack,
-                                    currentTrack = playerState.track,
-                                    isPlaying = playerState.status == com.sonara.desktop.model.PlaybackStatus.PLAYING,
-                                    onLikeTrack = ::handleLikeTrack,
-                                    isLiked = { favoriteIds.contains(it) },
-                                    database = database
-                                )
-                                NavItem.SETTINGS -> SettingsScreen(
-                                    losslessClient = losslessClient,
-                                    database = database
-                                )
+                            } else {
+                                when (currentNav) {
+                                    NavItem.FEED -> FeedScreen(
+                                        onPlayTrack = ::handlePlayTrack,
+                                        currentTrack = playerState.track,
+                                        isPlaying = playerState.status == PlaybackStatus.PLAYING,
+                                        onNavigateToDiscover = { currentNav = NavItem.DISCOVER },
+                                        onNavigateToSearch = { searchActive = true },
+                                        onNavigateToSettings = { currentNav = NavItem.SETTINGS },
+                                        searchService = searchService
+                                    )
+                                    NavItem.STATS -> StatsScreen(
+                                        lastFmUser = lastFmUser,
+                                        lastFmClient = lastFmClient,
+                                        onPlayTrack = { trk -> handlePlayTrack(trk, listOf(trk)) },
+                                        onNavigateToDiscover = { currentNav = NavItem.DISCOVER },
+                                        onNavigateToSearch = { searchActive = true },
+                                        onNavigateToSettings = { currentNav = NavItem.SETTINGS }
+                                    )
+                                    NavItem.PLAYLISTS -> PlaylistsScreen(
+                                        onPlayTrack = ::handlePlayTrack,
+                                        currentTrack = playerState.track,
+                                        isPlaying = playerState.status == PlaybackStatus.PLAYING,
+                                        database = database
+                                    )
+                                    NavItem.DISCOVER -> DiscoverScreen(
+                                        onPlayTrack = ::handlePlayTrack,
+                                        currentTrack = playerState.track,
+                                        isPlaying = playerState.status == PlaybackStatus.PLAYING,
+                                        onBack = { currentNav = NavItem.FEED },
+                                        lastFmClient = lastFmClient,
+                                        searchService = searchService
+                                    )
+                                    NavItem.SETTINGS -> SettingsScreen(
+                                        onBack = { currentNav = NavItem.FEED },
+                                        losslessClient = losslessClient,
+                                        database = database,
+                                        lastFmClient = lastFmClient
+                                    )
+                                }
                             }
                         }
 
@@ -159,8 +243,8 @@ fun main() = application {
                         }
                     }
 
-                    // Floating Dock Bottom Player Bar
-                    PlayerBottomBar(
+                    // Bottom Docked Now Playing Bar
+                    NowPlayingBottomBar(
                         playerState = playerState,
                         onPlayPause = { audioPlayer.togglePlayPause() },
                         onNext = { audioPlayer.next() },
@@ -171,7 +255,9 @@ fun main() = application {
                         onToggleShuffle = { audioPlayer.toggleShuffle() },
                         onCycleRepeat = { audioPlayer.cycleRepeatMode() },
                         onToggleLyrics = { isLyricsOpen = !isLyricsOpen },
-                        isLyricsOpen = isLyricsOpen
+                        isLyricsOpen = isLyricsOpen,
+                        isLiked = playerState.track != null && favoriteIds.contains(playerState.track!!.id),
+                        onLikeTrack = ::handleLikeCurrentTrack
                     )
                 }
             }

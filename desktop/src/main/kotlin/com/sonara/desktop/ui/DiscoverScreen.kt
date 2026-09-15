@@ -1,158 +1,216 @@
 ﻿package com.sonara.desktop.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.sonara.desktop.data.LastFmClient
 import com.sonara.desktop.data.MusicSearchService
 import com.sonara.desktop.model.Track
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun DiscoverScreen(
     onPlayTrack: (Track, List<Track>) -> Unit,
     currentTrack: Track?,
     isPlaying: Boolean,
-    onLikeTrack: (Track) -> Unit,
-    isLiked: (String) -> Boolean,
+    onBack: () -> Unit,
+    lastFmClient: LastFmClient,
     searchService: MusicSearchService,
     modifier: Modifier = Modifier
 ) {
-    val curatedTracks = remember { searchService.getCuratedDiscoverTracks() }
+    var tracks by remember { mutableStateOf<List<Track>>(lastFmClient.getDefaultDiscoverTracks()) }
+    var isLoading by remember { mutableStateOf(false) }
 
-    LazyColumn(
+    LaunchedEffect(Unit) {
+        isLoading = true
+        val fetched = withContext(Dispatchers.IO) {
+            try {
+                lastFmClient.getDiscoverTracks(50)
+            } catch (_: Exception) {
+                lastFmClient.getDefaultDiscoverTracks()
+            }
+        }
+        if (fetched.isNotEmpty()) {
+            tracks = fetched
+        }
+        isLoading = false
+    }
+
+    Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+            .padding(horizontal = 24.dp, vertical = 12.dp)
     ) {
-        // Hero Banner
-        item {
-            Surface(
-                color = Color.Transparent,
-                shape = RoundedCornerShape(16.dp),
+        // Top Header matching Screenshot 4
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = onBack,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(
-                        Brush.linearGradient(
-                            listOf(
-                                Color(0xFF3B1E78),
-                                Color(0xFF1E103E),
-                                Color(0xFF0F0B1E)
-                            )
-                        )
-                    )
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(SonaraTokens.SurfaceChip)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxSize().padding(24.dp)
+                Icon(
+                    imageVector = Icons.Rounded.ArrowBack,
+                    contentDescription = "Back",
+                    tint = SonaraTokens.TextPrimary,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Discover",
+                    color = SonaraTokens.TextPrimary,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = (-0.5).sp
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Fresh tracks, powered by Last.fm",
+                    color = SonaraTokens.TextSecondary,
+                    fontSize = 13.sp
+                )
+            }
+
+            // Bookmark button
+            IconButton(
+                onClick = { /* Saved bookmark action */ },
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(SonaraTokens.SurfaceChip)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.BookmarkAdd,
+                    contentDescription = "Bookmark",
+                    tint = SonaraTokens.TextPrimary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            // Shuffle button
+            IconButton(
+                onClick = {
+                    if (tracks.isNotEmpty()) {
+                        val shuffled = tracks.shuffled()
+                        onPlayTrack(shuffled.first(), shuffled)
+                    }
+                },
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(SonaraTokens.SurfaceChip)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Shuffle,
+                    contentDescription = "Shuffle and Play",
+                    tint = SonaraTokens.TextPrimary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+
+        // Dividerless dense list of rounded track cards
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            itemsIndexed(tracks, key = { index, item -> "${item.id}_$index" }) { _, track ->
+                val isCurrent = currentTrack?.id == track.id
+                Surface(
+                    color = if (isCurrent) SonaraTokens.SurfaceRaised else SonaraTokens.Surface,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onPlayTrack(track, tracks) }
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        HiResBadge(label = "MASTER QUALITY AUDIO", isLossless = true)
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = "Pure Lossless Streaming",
-                            color = Color.White,
-                            fontSize = 26.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "Enjoy pristine 24-bit / 96 kHz studio-master FLAC audio and real-time synchronized lyrics.",
-                            color = Color.White.copy(alpha = 0.75f),
-                            fontSize = 13.sp,
-                            maxLines = 2
-                        )
-                    }
-
-                    Button(
-                        onClick = {
-                            curatedTracks.firstOrNull()?.let { onPlayTrack(it, curatedTracks) }
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = SonaraTheme.Secondary,
-                            contentColor = Color.Black
-                        ),
-                        shape = RoundedCornerShape(24.dp),
-                        modifier = Modifier.padding(start = 16.dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.PlayArrow,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp)
+                        // Artwork
+                        AsyncArtwork(
+                            url = track.artworkUrl,
+                            modifier = Modifier
+                                .size(50.dp)
+                                .clip(RoundedCornerShape(10.dp))
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Play Featured", fontWeight = FontWeight.Bold)
+
+                        Spacer(modifier = Modifier.width(14.dp))
+
+                        // Title and Artist
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = track.title,
+                                color = if (isCurrent) SonaraTokens.Accent else SonaraTokens.TextPrimary,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.height(3.dp))
+                            Text(
+                                text = track.artist,
+                                color = SonaraTokens.TextSecondary,
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        // Trailing circular options button
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(if (isCurrent) SonaraTokens.AccentTint else Color.Transparent)
+                                .clickable { /* Track options */ },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.MoreVert,
+                                contentDescription = "More",
+                                tint = if (isCurrent) SonaraTokens.Accent else SonaraTokens.TextSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
                 }
             }
-        }
 
-        // Quick Picks section
-        item {
-            Text(
-                text = "Quick Picks & Hits",
-                color = SonaraTheme.TextPrimary,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                items(curatedTracks.take(5)) { track ->
-                    TrackCard(
-                        track = track,
-                        isPlaying = isPlaying,
-                        isCurrent = currentTrack?.id == track.id,
-                        onPlay = { onPlayTrack(track, curatedTracks) }
-                    )
-                }
+            item {
+                Spacer(modifier = Modifier.height(84.dp))
             }
-        }
-
-        // Popular Tracks
-        item {
-            Text(
-                text = "Popular Tracks",
-                color = SonaraTheme.TextPrimary,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        itemsIndexed(curatedTracks) { index, track ->
-            TrackRow(
-                index = index + 1,
-                track = track,
-                isPlaying = isPlaying,
-                isCurrent = currentTrack?.id == track.id,
-                onPlay = { onPlayTrack(track, curatedTracks) },
-                onLike = { onLikeTrack(track) },
-                isLiked = isLiked(track.id)
-            )
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(80.dp))
         }
     }
 }

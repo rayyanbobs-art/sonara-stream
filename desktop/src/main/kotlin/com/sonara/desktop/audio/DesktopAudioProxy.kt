@@ -61,20 +61,23 @@ class DesktopAudioProxy(
     }
 
     private fun handleRequest(exchange: HttpExchange, defaultMimeType: String) {
+        val method = exchange.requestMethod
+        val uri = exchange.requestURI
+        val rangeHeader = exchange.requestHeaders.getFirst("Range")
+        println("[Proxy] ---> $method $uri Range=$rangeHeader")
+
         try {
-            val query = exchange.requestURI.query.orEmpty()
+            val query = uri.query.orEmpty()
             val params = parseQuery(query)
             val id = params["id"].orEmpty()
             val targetUrl = urlMap[id] ?: params["url"]?.let { URLDecoder.decode(it, "UTF-8") }
 
             if (targetUrl.isNullOrBlank()) {
+                println("[Proxy] Target URL not found for id=$id")
                 exchange.sendResponseHeaders(404, -1)
                 exchange.close()
                 return
             }
-
-            val method = exchange.requestMethod
-            val rangeHeader = exchange.requestHeaders.getFirst("Range")
 
             val okReqBuilder = Request.Builder()
                 .url(targetUrl)
@@ -90,37 +93,50 @@ class DesktopAudioProxy(
             val okResp = client.newCall(okReqBuilder.build()).execute()
             val code = okResp.code
             val body = okResp.body
+            val contentLength = body?.contentLength() ?: -1L
+            val contentRange = okResp.header("Content-Range")
+
+            println("[Proxy] <--- Remote response: code=$code length=$contentLength contentRange=$contentRange")
 
             val responseHeaders = exchange.responseHeaders
             responseHeaders.set("Content-Type", defaultMimeType)
             responseHeaders.set("Accept-Ranges", "bytes")
-            okResp.header("Content-Range")?.let { responseHeaders.set("Content-Range", it) }
-
-            val contentLength = body?.contentLength() ?: -1L
+            if (!contentRange.isNullOrBlank()) {
+                responseHeaders.set("Content-Range", contentRange)
+            }
 
             if (method.equals("HEAD", ignoreCase = true)) {
                 exchange.sendResponseHeaders(code, -1)
                 exchange.close()
+                println("[Proxy] HEAD response sent")
                 return
             }
 
             exchange.sendResponseHeaders(code, if (contentLength > 0) contentLength else 0)
             val os = exchange.responseBody
+            var totalWritten = 0L
             try {
                 body?.byteStream()?.use { input ->
-                    val buf = ByteArray(16384)
+                    val buf = ByteArray(32768)
                     var read: Int
                     while (input.read(buf).also { read = it } != -1) {
                         os.write(buf, 0, read)
+                        os.flush()
+                        totalWritten += read
+                        println("[Proxy] Written $read bytes, total=$totalWritten / $contentLength")
                     }
                 }
-            } catch (_: IOException) {
-                // Client aborted connection (normal during seek or pause)
+                os.flush()
+                println("[Proxy] Finished writing body successfully. Total bytes: $totalWritten")
+            } catch (e: Exception) {
+                println("[Proxy] Stream transfer ended after $totalWritten bytes: ${e.javaClass.simpleName} - ${e.message}")
             } finally {
                 try { os.close() } catch (_: Exception) {}
                 try { exchange.close() } catch (_: Exception) {}
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            println("[Proxy] Error handling request: ${e.message}")
+            e.printStackTrace()
             try { exchange.close() } catch (_: Exception) {}
         }
     }

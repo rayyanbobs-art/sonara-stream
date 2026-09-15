@@ -36,6 +36,7 @@ class DesktopAudioPlayer(
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val proxy = DesktopAudioProxy()
+    private val audioCache = DesktopAudioCache()
     private var mediaPlayer: MediaPlayer? = null
     private var tickerJob: Job? = null
 
@@ -95,17 +96,53 @@ class DesktopAudioPlayer(
 
                 database.addToHistory(resolved)
 
+                // High-speed chunked cache: download in 1MB Range chunks (~500ms) to ensure continuous playback
+                val targetId = resolved.videoId ?: resolved.id
+                val cachedFile = if (targetId.isNotBlank()) audioCache.getCachedFile(targetId) else null
+
+                val mediaSource = if (cachedFile != null && cachedFile.exists() && cachedFile.length() > 0) {
+                    cachedFile.toURI().toString()
+                } else if (!finalUrl.isNullOrBlank()) {
+                    val downloaded = audioCache.ensureTrackCached(targetId, finalUrl)
+                    if (downloaded.exists() && downloaded.length() > 0) {
+                        downloaded.toURI().toString()
+                    } else {
+                        proxy.getPlaybackUrl(finalUrl)
+                    }
+                } else {
+                    null
+                }
+
+                if (mediaSource.isNullOrBlank()) {
+                    _state.value = _state.value.copy(
+                        status = PlaybackStatus.ERROR,
+                        errorMessage = "Could not load audio for ${track.title}"
+                    )
+                    return@launch
+                }
+
+                // Pre-warm next track in queue in background
+                if (playlistQueue.isNotEmpty()) {
+                    val nextIdx = (queueIndex + 1) % playlistQueue.size
+                    val nextTrack = playlistQueue.getOrNull(nextIdx)
+                    if (nextTrack != null && nextTrack.id != track.id) {
+                        scope.launch(Dispatchers.IO) {
+                            try {
+                                val nextResolved = searchService.resolveAudioStream(nextTrack)
+                                val nextId = nextResolved.videoId ?: nextResolved.id
+                                val nextUrl = nextResolved.streamUrl
+                                if (!nextUrl.isNullOrBlank() && nextId.isNotBlank()) {
+                                    audioCache.ensureTrackCached(nextId, nextUrl)
+                                }
+                            } catch (_: Exception) {}
+                        }
+                    }
+                }
+
                 // Start playback on JavaFX thread
                 Platform.runLater {
                     try {
                         stopCurrentPlayer()
-
-                        val playbackUrl = proxy.getPlaybackUrl(finalUrl)
-                        val mediaSource = if (playbackUrl.startsWith("http://") || playbackUrl.startsWith("https://")) {
-                            playbackUrl
-                        } else {
-                            File(playbackUrl).toURI().toString()
-                        }
 
                         val media = Media(mediaSource)
                         media.onError = Runnable {

@@ -1,4 +1,4 @@
-﻿package com.sonara.desktop.audio
+package com.sonara.desktop.audio
 
 import com.sonara.desktop.data.MusicSearchService
 import com.sonara.desktop.model.PlaybackStatus
@@ -110,23 +110,38 @@ class DesktopAudioPlayer(
 
                         player.volume = if (_state.value.isMuted) 0.0 else _state.value.volume.toDouble()
 
+                        player.currentTimeProperty().addListener { _, _, newTime ->
+                            if (newTime != null) {
+                                val ms = newTime.toMillis().toLong()
+                                if (ms >= 0) {
+                                    _state.value = _state.value.copy(positionMs = ms)
+                                }
+                            }
+                        }
+
+                        player.totalDurationProperty().addListener { _, _, dur ->
+                            if (dur != null && !dur.isUnknown) {
+                                val ms = dur.toMillis().toLong()
+                                if (ms > 0) {
+                                    _state.value = _state.value.copy(durationMs = ms)
+                                }
+                            }
+                        }
+
                         player.setOnReady {
                             val durationMs = media.duration?.toMillis()?.toLong() ?: resolved.durationMs
                             _state.value = _state.value.copy(
                                 durationMs = if (durationMs > 0) durationMs else resolved.durationMs,
                                 status = PlaybackStatus.PLAYING
                             )
-                            startProgressTicker()
                         }
 
                         player.setOnPlaying {
                             _state.value = _state.value.copy(status = PlaybackStatus.PLAYING)
-                            startProgressTicker()
                         }
 
                         player.setOnPaused {
                             _state.value = _state.value.copy(status = PlaybackStatus.PAUSED)
-                            stopProgressTicker()
                         }
 
                         player.setOnEndOfMedia {
@@ -139,7 +154,6 @@ class DesktopAudioPlayer(
                                 status = PlaybackStatus.ERROR,
                                 errorMessage = msg
                             )
-                            stopProgressTicker()
                         }
 
                         player.play()
@@ -259,35 +273,13 @@ class DesktopAudioPlayer(
                 if (queueIndex < playlistQueue.lastIndex) {
                     next()
                 } else {
-                    stopProgressTicker()
                     _state.value = _state.value.copy(status = PlaybackStatus.IDLE, positionMs = 0L)
                 }
             }
         }
     }
 
-    private fun startProgressTicker() {
-        tickerJob?.cancel()
-        tickerJob = scope.launch(Dispatchers.Default) {
-            while (isActive) {
-                if (_state.value.status == PlaybackStatus.PLAYING) {
-                    val currentMs = mediaPlayer?.currentTime?.toMillis()?.toLong() ?: 0L
-                    if (currentMs > 0L) {
-                        _state.value = _state.value.copy(positionMs = currentMs)
-                    }
-                }
-                delay(100L)
-            }
-        }
-    }
-
-    private fun stopProgressTicker() {
-        tickerJob?.cancel()
-        tickerJob = null
-    }
-
     private fun stopCurrentPlayer() {
-        stopProgressTicker()
         mediaPlayer?.let { p ->
             p.stop()
             p.dispose()

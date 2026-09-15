@@ -1,4 +1,4 @@
-﻿package com.sonara.desktop.storage
+package com.sonara.desktop.storage
 
 import com.sonara.desktop.model.Playlist
 import com.sonara.desktop.model.Track
@@ -140,10 +140,22 @@ class DesktopDatabase {
     }
 
     @Synchronized
-    fun getLastFmUser(): String = getSetting("lastfm_user", "Rayyanbobs")
+    fun isAuthenticated(): Boolean = getSetting("is_authenticated", "false") == "true" && getLastFmUser().isNotBlank()
+
+    @Synchronized
+    fun setAuthenticated(auth: Boolean) = setSetting("is_authenticated", if (auth) "true" else "false")
+
+    @Synchronized
+    fun getLastFmUser(): String = getSetting("lastfm_user", "")
 
     @Synchronized
     fun setLastFmUser(username: String) = setSetting("lastfm_user", username)
+
+    @Synchronized
+    fun signOut() {
+        setAuthenticated(false)
+        setLastFmUser("")
+    }
 
     @Synchronized
     fun getFavorites(): List<Track> {

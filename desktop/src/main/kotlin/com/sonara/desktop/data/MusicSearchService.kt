@@ -1,4 +1,4 @@
-﻿package com.sonara.desktop.data
+package com.sonara.desktop.data
 
 import com.sonara.desktop.model.Track
 import kotlinx.coroutines.Dispatchers
@@ -85,6 +85,8 @@ class MusicSearchService(
         }
     }
 
+    private val streamExtractor = DesktopStreamExtractor(client)
+
     suspend fun resolveAudioStream(track: Track): Track = withContext(Dispatchers.IO) {
         // Check cache first
         streamCache[track.id]?.let { cachedUrl ->
@@ -112,27 +114,55 @@ class MusicSearchService(
             }
         } catch (_: Exception) { }
 
-        // 2. Resolve via InnerTube Player API
-        val videoId = track.videoId ?: track.id
-        val ytStreamUrl = fetchInnerTubeStreamUrl(videoId)
-        if (ytStreamUrl != null) {
-            streamCache[track.id] = ytStreamUrl
-            return@withContext track.copy(
-                streamUrl = ytStreamUrl,
-                isLossless = false,
-                audioQuality = "High Quality 256 kbps"
-            )
+        // 2. Find real YouTube videoId if not already an 11-char ID
+        val targetVideoId = if (track.videoId != null && track.videoId.length == 11 && !track.videoId.contains(" ")) {
+            track.videoId
+        } else if (track.id.length == 11 && !track.id.contains(" ") && !track.id.startsWith("lfm_")) {
+            track.id
+        } else {
+            // Search YouTube Music for "$title $artist"
+            val searchResults = searchSongs("${track.title} ${track.artist}", limit = 5)
+            val matched = searchResults.firstOrNull { it.videoId != null && it.videoId.isNotBlank() }
+            matched?.videoId ?: searchResults.firstOrNull()?.id
         }
 
-        // 3. Fallback to Piped instance audio stream
-        val pipedUrl = fetchPipedStreamUrl(videoId)
-        if (pipedUrl != null) {
-            streamCache[track.id] = pipedUrl
-            return@withContext track.copy(
-                streamUrl = pipedUrl,
-                isLossless = false,
-                audioQuality = "HQ Web Audio"
-            )
+        if (!targetVideoId.isNullOrBlank()) {
+            // 3. Extract stream via NewPipe Extractor (M4A/AAC for native JavaFX compatibility)
+            try {
+                val streamUrl = streamExtractor.resolveAudioStreamUrl(targetVideoId)
+                if (!streamUrl.isNullOrBlank()) {
+                    streamCache[track.id] = streamUrl
+                    return@withContext track.copy(
+                        streamUrl = streamUrl,
+                        videoId = targetVideoId,
+                        isLossless = false,
+                        audioQuality = "High Quality AAC"
+                    )
+                }
+            } catch (_: Exception) {}
+
+            // 4. Fallback to direct InnerTube or Piped
+            val ytStreamUrl = fetchInnerTubeStreamUrl(targetVideoId)
+            if (ytStreamUrl != null) {
+                streamCache[track.id] = ytStreamUrl
+                return@withContext track.copy(
+                    streamUrl = ytStreamUrl,
+                    videoId = targetVideoId,
+                    isLossless = false,
+                    audioQuality = "High Quality 256 kbps"
+                )
+            }
+
+            val pipedUrl = fetchPipedStreamUrl(targetVideoId)
+            if (pipedUrl != null) {
+                streamCache[track.id] = pipedUrl
+                return@withContext track.copy(
+                    streamUrl = pipedUrl,
+                    videoId = targetVideoId,
+                    isLossless = false,
+                    audioQuality = "HQ Web Audio"
+                )
+            }
         }
 
         track

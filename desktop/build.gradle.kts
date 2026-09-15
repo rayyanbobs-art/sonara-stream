@@ -29,6 +29,7 @@ dependencies {
     implementation("org.openjfx:javafx-media:21.0.2:win")
     implementation("org.openjfx:javafx-base:21.0.2:win")
     implementation("org.openjfx:javafx-graphics:21.0.2:win")
+    implementation(libs.newpipe.extractor)
 }
 
 compose.desktop {

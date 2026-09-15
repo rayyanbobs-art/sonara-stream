@@ -1,4 +1,4 @@
-﻿package com.sonara.desktop
+package com.sonara.desktop
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -8,6 +8,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.unit.dp
@@ -27,7 +28,7 @@ import com.sonara.desktop.storage.DesktopDatabase
 import com.sonara.desktop.ui.*
 
 fun main() = application {
-    val windowState = rememberWindowState(width = 1240.dp, height = 820.dp)
+    val windowState = rememberWindowState(width = 1120.dp, height = 860.dp)
 
     val database = remember { DesktopDatabase() }
     val lastFmClient = remember { LastFmClient() }
@@ -37,6 +38,7 @@ fun main() = application {
     val audioPlayer = remember { DesktopAudioPlayer(searchService, database) }
 
     val playerState by audioPlayer.state.collectAsState()
+    var isAuthenticated by remember { mutableStateOf(database.isAuthenticated()) }
     var currentNav by remember { mutableStateOf(NavItem.FEED) }
     var searchActive by remember { mutableStateOf(false) }
     var isLyricsOpen by remember { mutableStateOf(false) }
@@ -153,29 +155,27 @@ fun main() = application {
                     .fillMaxSize()
                     .background(SonaraTokens.Bg)
             ) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    // Main layout: Sidebar + Content (+ optional Lyrics panel)
-                    Row(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
+                if (!isAuthenticated) {
+                    LoginScreen(
+                        database = database,
+                        lastFmClient = lastFmClient,
+                        onLoginSuccess = { user ->
+                            lastFmUser = user
+                            isAuthenticated = true
+                            currentNav = NavItem.FEED
+                        }
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.TopCenter
                     ) {
-                        // Left Sidebar
-                        Sidebar(
-                            currentNav = currentNav,
-                            onNavSelect = { nav ->
-                                currentNav = nav
-                                searchActive = false
-                            },
-                            lastFmUser = lastFmUser
-                        )
-
-                        // Central View Area
+                        // Centered Adaptive Content Area
                         Box(
                             modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .background(SonaraTokens.Bg)
+                                .fillMaxSize()
+                                .widthIn(max = 760.dp)
+                                .padding(bottom = if (playerState.track != null) 170.dp else 90.dp)
                         ) {
                             if (searchActive) {
                                 SearchScreen(
@@ -222,17 +222,60 @@ fun main() = application {
                                         onBack = { currentNav = NavItem.FEED },
                                         losslessClient = losslessClient,
                                         database = database,
-                                        lastFmClient = lastFmClient
+                                        lastFmClient = lastFmClient,
+                                        onSignOut = {
+                                            isAuthenticated = false
+                                            currentNav = NavItem.FEED
+                                        }
                                     )
                                 }
                             }
+                        }
+
+                        // Bottom Floating Dock and Now Playing Bar
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .widthIn(max = 760.dp)
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 14.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            if (playerState.track != null) {
+                                NowPlayingBottomBar(
+                                    playerState = playerState,
+                                    onPlayPause = { audioPlayer.togglePlayPause() },
+                                    onNext = { audioPlayer.next() },
+                                    onPrevious = { audioPlayer.previous() },
+                                    onSeek = { audioPlayer.seekTo(it) },
+                                    onVolumeChange = { audioPlayer.setVolume(it) },
+                                    onToggleMute = { audioPlayer.toggleMute() },
+                                    onToggleShuffle = { audioPlayer.toggleShuffle() },
+                                    onCycleRepeat = { audioPlayer.cycleRepeatMode() },
+                                    onToggleLyrics = { isLyricsOpen = !isLyricsOpen },
+                                    isLyricsOpen = isLyricsOpen,
+                                    isLiked = favoriteIds.contains(playerState.track!!.id),
+                                    onLikeTrack = ::handleLikeCurrentTrack
+                                )
+                            }
+
+                            // Android Floating Pill Dock
+                            FloatingBottomNavDock(
+                                currentNav = if (currentNav in listOf(NavItem.FEED, NavItem.STATS, NavItem.PLAYLISTS)) currentNav else NavItem.FEED,
+                                onNavSelect = { nav ->
+                                    currentNav = nav
+                                    searchActive = false
+                                }
+                            )
                         }
 
                         // Right Slide-Over Synced Lyrics Panel
                         AnimatedVisibility(
                             visible = isLyricsOpen,
                             enter = slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
-                            exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut()
+                            exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut(),
+                            modifier = Modifier.align(Alignment.CenterEnd)
                         ) {
                             LyricsSheet(
                                 lyrics = lyrics,
@@ -242,23 +285,6 @@ fun main() = application {
                             )
                         }
                     }
-
-                    // Bottom Docked Now Playing Bar
-                    NowPlayingBottomBar(
-                        playerState = playerState,
-                        onPlayPause = { audioPlayer.togglePlayPause() },
-                        onNext = { audioPlayer.next() },
-                        onPrevious = { audioPlayer.previous() },
-                        onSeek = { audioPlayer.seekTo(it) },
-                        onVolumeChange = { audioPlayer.setVolume(it) },
-                        onToggleMute = { audioPlayer.toggleMute() },
-                        onToggleShuffle = { audioPlayer.toggleShuffle() },
-                        onCycleRepeat = { audioPlayer.cycleRepeatMode() },
-                        onToggleLyrics = { isLyricsOpen = !isLyricsOpen },
-                        isLyricsOpen = isLyricsOpen,
-                        isLiked = playerState.track != null && favoriteIds.contains(playerState.track!!.id),
-                        onLikeTrack = ::handleLikeCurrentTrack
-                    )
                 }
             }
         }

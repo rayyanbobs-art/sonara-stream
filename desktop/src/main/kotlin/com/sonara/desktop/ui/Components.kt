@@ -1,4 +1,4 @@
-﻿package com.sonara.desktop.ui
+package com.sonara.desktop.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -187,10 +187,145 @@ fun TopAppHeader(
                         .background(SonaraTokens.SurfaceRaised)
                 ) {
                     Icon(
-                        imageVector = Icons.Rounded.Settings,
-                        contentDescription = "Settings",
+                        imageVector = Icons.Rounded.AccountCircle,
+                        contentDescription = "Profile & Settings",
+                        tint = SonaraTokens.Accent,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FloatingBottomNavDock(
+    currentNav: NavItem,
+    onNavSelect: (NavItem) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(32.dp),
+            color = SonaraTokens.Surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, SonaraTokens.SurfaceChip.copy(alpha = 0.5f)),
+            modifier = Modifier.height(58.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+            ) {
+                // Tab 1: Feed
+                val isFeed = currentNav == NavItem.FEED
+                Surface(
+                    onClick = { onNavSelect(NavItem.FEED) },
+                    shape = RoundedCornerShape(26.dp),
+                    color = if (isFeed) SonaraTokens.AccentStrong else Color.Transparent,
+                    modifier = Modifier.height(46.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = if (isFeed) 18.dp else 14.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Home,
+                            contentDescription = "Feed",
+                            tint = if (isFeed) SonaraTokens.TextPrimary else SonaraTokens.TextSecondary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        if (isFeed) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Feed",
+                                color = SonaraTokens.TextPrimary,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                // Tab 2: Stats
+                val isStats = currentNav == NavItem.STATS
+                Surface(
+                    onClick = { onNavSelect(NavItem.STATS) },
+                    shape = RoundedCornerShape(26.dp),
+                    color = if (isStats) SonaraTokens.AccentStrong else Color.Transparent,
+                    modifier = Modifier.height(46.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = if (isStats) 18.dp else 14.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.BarChart,
+                            contentDescription = "Stats",
+                            tint = if (isStats) SonaraTokens.TextPrimary else SonaraTokens.TextSecondary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        if (isStats) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Stats",
+                                color = SonaraTokens.TextPrimary,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                // Tab 3: Playlists
+                val isPlaylists = currentNav == NavItem.PLAYLISTS
+                Surface(
+                    onClick = { onNavSelect(NavItem.PLAYLISTS) },
+                    shape = RoundedCornerShape(26.dp),
+                    color = if (isPlaylists) SonaraTokens.AccentStrong else Color.Transparent,
+                    modifier = Modifier.height(46.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = if (isPlaylists) 18.dp else 14.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.QueueMusic,
+                            contentDescription = "Playlists",
+                            tint = if (isPlaylists) SonaraTokens.TextPrimary else SonaraTokens.TextSecondary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        if (isPlaylists) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Playlists",
+                                color = SonaraTokens.TextPrimary,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Floating ✨ Mix Button on Playlists tab
+        if (currentNav == NavItem.PLAYLISTS) {
+            Surface(
+                onClick = { /* Smart Mix action */ },
+                shape = CircleShape,
+                color = SonaraTokens.AccentStrong,
+                modifier = Modifier.size(54.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Rounded.AutoAwesome,
+                        contentDescription = "Smart Mix",
                         tint = SonaraTokens.TextPrimary,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }
@@ -426,11 +561,11 @@ fun NowPlayingBottomBar(
 ) {
     Surface(
         color = SonaraTokens.Surface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, SonaraTokens.SurfaceChip),
-        shape = RoundedCornerShape(topStart = SonaraTokens.RadiusMd, topEnd = SonaraTokens.RadiusMd),
+        border = androidx.compose.foundation.BorderStroke(1.dp, SonaraTokens.SurfaceChip.copy(alpha = 0.6f)),
+        shape = RoundedCornerShape(20.dp),
         modifier = modifier
             .fillMaxWidth()
-            .height(84.dp)
+            .height(76.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

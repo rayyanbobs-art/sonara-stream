@@ -1,4 +1,4 @@
-﻿package com.sonara.desktop.ui
+package com.sonara.desktop.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -29,11 +29,13 @@ fun SettingsScreen(
     losslessClient: LosslessClient,
     database: DesktopDatabase,
     lastFmClient: LastFmClient,
+    onSignOut: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
     var lastFmUser by remember { mutableStateOf(database.getLastFmUser()) }
     var showUserDialog by remember { mutableStateOf(false) }
+    var showDisconnectDialog by remember { mutableStateOf(false) }
     var tempUsername by remember { mutableStateOf(lastFmUser) }
 
     var amoledMode by remember { mutableStateOf(false) }
@@ -92,6 +94,40 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showUserDialog = false }) {
+                    Text("Cancel", color = SonaraTokens.TextSecondary)
+                }
+            }
+        )
+    }
+
+    if (showDisconnectDialog) {
+        AlertDialog(
+            onDismissRequest = { showDisconnectDialog = false },
+            containerColor = SonaraTokens.SurfaceRaised,
+            title = {
+                Text("Disconnect Account", color = SonaraTokens.TextPrimary, fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Text(
+                    "Are you sure you want to disconnect $lastFmUser? You will be logged out and returned to the login screen.",
+                    color = SonaraTokens.TextSecondary,
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        database.signOut()
+                        showDisconnectDialog = false
+                        onSignOut()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B2626), contentColor = Color.White)
+                ) {
+                    Text("Disconnect", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDisconnectDialog = false }) {
                     Text("Cancel", color = SonaraTokens.TextSecondary)
                 }
             }
@@ -246,8 +282,7 @@ fun SettingsScreen(
                     // Red exit / disconnect button
                     IconButton(
                         onClick = {
-                            tempUsername = ""
-                            showUserDialog = true
+                            showDisconnectDialog = true
                         },
                         modifier = Modifier
                             .size(40.dp)
@@ -256,7 +291,7 @@ fun SettingsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.ExitToApp,
-                            contentDescription = "Switch Account",
+                            contentDescription = "Disconnect Account",
                             tint = Color(0xFFD97070),
                             modifier = Modifier.size(20.dp)
                         )

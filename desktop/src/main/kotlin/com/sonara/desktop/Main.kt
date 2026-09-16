@@ -37,6 +37,7 @@ import com.sonara.desktop.model.NavItem
 import com.sonara.desktop.model.PlaybackStatus
 import com.sonara.desktop.model.SyncedLine
 import com.sonara.desktop.model.Track
+import com.sonara.desktop.data.DesktopArtworkResolver
 import com.sonara.desktop.storage.DesktopDatabase
 import com.sonara.desktop.ui.*
 import com.sonara.desktop.update.DesktopUpdateManager
@@ -45,7 +46,8 @@ fun main() = application {
     val windowState = rememberWindowState(width = 1120.dp, height = 860.dp)
 
     val database = remember { DesktopDatabase() }
-    val lastFmClient = remember { LastFmClient() }
+    val artworkResolver = remember { DesktopArtworkResolver(database) }
+    val lastFmClient = remember { LastFmClient(artworkResolver = artworkResolver) }
     val losslessClient = remember { LosslessClient() }
     val searchService = remember { MusicSearchService(losslessClient) }
     val lrclibClient = remember { LrclibClient() }
@@ -166,90 +168,106 @@ fun main() = application {
         }
     ) {
         SonaraStreamTheme {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(SonaraTokens.Bg)
-            ) {
-                if (!isAuthenticated) {
-                    LoginScreen(
-                        database = database,
-                        lastFmClient = lastFmClient,
-                        onLoginSuccess = { user ->
-                            lastFmUser = user
-                            isAuthenticated = true
-                            currentNav = NavItem.FEED
-                        }
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.TopCenter
-                    ) {
-                        // Centered Adaptive Content Area
+            CompositionLocalProvider(LocalArtworkResolver provides artworkResolver) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(SonaraTokens.Bg)
+                ) {
+                    if (!isAuthenticated) {
+                        LoginScreen(
+                            database = database,
+                            lastFmClient = lastFmClient,
+                            onLoginSuccess = { user ->
+                                lastFmUser = user
+                                isAuthenticated = true
+                                currentNav = NavItem.FEED
+                            }
+                        )
+                    } else {
                         Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .widthIn(max = 760.dp)
-                                .padding(bottom = if (playerState.track != null) 170.dp else 90.dp)
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.TopCenter
                         ) {
-                            if (searchActive) {
-                                SearchScreen(
-                                    onPlayTrack = ::handlePlayTrack,
-                                    currentTrack = playerState.track,
-                                    isPlaying = playerState.status == PlaybackStatus.PLAYING,
-                                    onBack = { searchActive = false },
-                                    searchService = searchService
-                                )
-                            } else {
-                                when (currentNav) {
-                                    NavItem.FEED -> FeedScreen(
+                            // Centered Adaptive Content Area
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .widthIn(max = 760.dp)
+                                    .padding(bottom = if (playerState.track != null) 170.dp else 90.dp)
+                            ) {
+                                if (searchActive) {
+                                    SearchScreen(
                                         onPlayTrack = ::handlePlayTrack,
                                         currentTrack = playerState.track,
                                         isPlaying = playerState.status == PlaybackStatus.PLAYING,
-                                        onNavigateToDiscover = { currentNav = NavItem.DISCOVER },
-                                        onNavigateToSearch = { searchActive = true },
-                                        onNavigateToSettings = { currentNav = NavItem.SETTINGS },
+                                        onBack = { searchActive = false },
                                         searchService = searchService,
-                                        lastFmClient = lastFmClient,
-                                        lastFmUser = lastFmUser
+                                        onPlayNext = { audioPlayer.playNext(it) },
+                                        onAddToQueue = { audioPlayer.addToQueue(it) },
+                                        onToggleLike = ::handleLikeTrack,
+                                        favoriteIds = favoriteIds
                                     )
-                                    NavItem.STATS -> StatsScreen(
-                                        lastFmUser = lastFmUser,
-                                        lastFmClient = lastFmClient,
-                                        onPlayTrack = { trk -> handlePlayTrack(trk, listOf(trk)) },
-                                        onNavigateToDiscover = { currentNav = NavItem.DISCOVER },
-                                        onNavigateToSearch = { searchActive = true },
-                                        onNavigateToSettings = { currentNav = NavItem.SETTINGS }
-                                    )
-                                    NavItem.PLAYLISTS -> PlaylistsScreen(
-                                        onPlayTrack = ::handlePlayTrack,
-                                        currentTrack = playerState.track,
-                                        isPlaying = playerState.status == PlaybackStatus.PLAYING,
-                                        database = database
-                                    )
-                                    NavItem.DISCOVER -> DiscoverScreen(
-                                        onPlayTrack = ::handlePlayTrack,
-                                        currentTrack = playerState.track,
-                                        isPlaying = playerState.status == PlaybackStatus.PLAYING,
-                                        onBack = { currentNav = NavItem.FEED },
-                                        lastFmClient = lastFmClient,
-                                        searchService = searchService
-                                    )
-                                    NavItem.SETTINGS -> SettingsScreen(
-                                        onBack = { currentNav = NavItem.FEED },
-                                        losslessClient = losslessClient,
-                                        database = database,
-                                        lastFmClient = lastFmClient,
-                                        updateManager = updateManager,
-                                        onSignOut = {
-                                            isAuthenticated = false
-                                            currentNav = NavItem.FEED
-                                        }
-                                    )
+                                } else {
+                                    when (currentNav) {
+                                        NavItem.FEED -> FeedScreen(
+                                            onPlayTrack = ::handlePlayTrack,
+                                            currentTrack = playerState.track,
+                                            isPlaying = playerState.status == PlaybackStatus.PLAYING,
+                                            onNavigateToDiscover = { currentNav = NavItem.DISCOVER },
+                                            onNavigateToSearch = { searchActive = true },
+                                            onNavigateToSettings = { currentNav = NavItem.SETTINGS },
+                                            searchService = searchService,
+                                            lastFmClient = lastFmClient,
+                                            lastFmUser = lastFmUser,
+                                            onPlayNext = { audioPlayer.playNext(it) },
+                                            onAddToQueue = { audioPlayer.addToQueue(it) },
+                                            onToggleLike = ::handleLikeTrack,
+                                            favoriteIds = favoriteIds
+                                        )
+                                        NavItem.STATS -> StatsScreen(
+                                            lastFmUser = lastFmUser,
+                                            lastFmClient = lastFmClient,
+                                            onPlayTrack = { trk -> handlePlayTrack(trk, listOf(trk)) },
+                                            onNavigateToDiscover = { currentNav = NavItem.DISCOVER },
+                                            onNavigateToSearch = { searchActive = true },
+                                            onNavigateToSettings = { currentNav = NavItem.SETTINGS }
+                                        )
+                                        NavItem.PLAYLISTS -> PlaylistsScreen(
+                                            onPlayTrack = ::handlePlayTrack,
+                                            currentTrack = playerState.track,
+                                            isPlaying = playerState.status == PlaybackStatus.PLAYING,
+                                            database = database,
+                                            onPlayNext = { audioPlayer.playNext(it) },
+                                            onAddToQueue = { audioPlayer.addToQueue(it) },
+                                            onToggleLike = ::handleLikeTrack
+                                        )
+                                        NavItem.DISCOVER -> DiscoverScreen(
+                                            onPlayTrack = ::handlePlayTrack,
+                                            currentTrack = playerState.track,
+                                            isPlaying = playerState.status == PlaybackStatus.PLAYING,
+                                            onBack = { currentNav = NavItem.FEED },
+                                            lastFmClient = lastFmClient,
+                                            searchService = searchService,
+                                            onPlayNext = { audioPlayer.playNext(it) },
+                                            onAddToQueue = { audioPlayer.addToQueue(it) },
+                                            onToggleLike = ::handleLikeTrack,
+                                            favoriteIds = favoriteIds
+                                        )
+                                        NavItem.SETTINGS -> SettingsScreen(
+                                            onBack = { currentNav = NavItem.FEED },
+                                            losslessClient = losslessClient,
+                                            database = database,
+                                            lastFmClient = lastFmClient,
+                                            updateManager = updateManager,
+                                            onSignOut = {
+                                                isAuthenticated = false
+                                                currentNav = NavItem.FEED
+                                            }
+                                        )
+                                    }
                                 }
                             }
-                        }
 
                         // Top Floating Update Banner
                         AnimatedVisibility(
@@ -438,4 +456,5 @@ fun main() = application {
             }
         }
     }
+}
 }

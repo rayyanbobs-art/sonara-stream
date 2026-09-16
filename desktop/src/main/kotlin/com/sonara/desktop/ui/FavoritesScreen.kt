@@ -1,4 +1,4 @@
-﻿package com.sonara.desktop.ui
+package com.sonara.desktop.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -27,6 +27,9 @@ fun FavoritesScreen(
     currentTrack: Track?,
     isPlaying: Boolean,
     database: DesktopDatabase,
+    onPlayNext: ((Track) -> Unit)? = null,
+    onAddToQueue: ((Track) -> Unit)? = null,
+    onToggleLike: ((Track) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var favorites by remember { mutableStateOf(database.getFavorites()) }
@@ -142,7 +145,14 @@ fun FavoritesScreen(
                         track = track,
                         isPlaying = isPlaying,
                         isCurrent = currentTrack?.id == track.id,
-                        onPlay = { onPlayTrack(track, favorites) }
+                        onPlay = { onPlayTrack(track, favorites) },
+                        onPlayNext = onPlayNext,
+                        onAddToQueue = onAddToQueue,
+                        onToggleLike = { trk ->
+                            onToggleLike?.invoke(trk)
+                            favorites = database.getFavorites()
+                        },
+                        isLiked = true
                     )
                 }
 

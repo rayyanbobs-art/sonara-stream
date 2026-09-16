@@ -33,6 +33,10 @@ fun SearchScreen(
     isPlaying: Boolean,
     onBack: () -> Unit,
     searchService: MusicSearchService,
+    onPlayNext: ((Track) -> Unit)? = null,
+    onAddToQueue: ((Track) -> Unit)? = null,
+    onToggleLike: ((Track) -> Unit)? = null,
+    favoriteIds: Set<String> = emptySet(),
     modifier: Modifier = Modifier
 ) {
     var query by remember { mutableStateOf("") }
@@ -200,7 +204,11 @@ fun SearchScreen(
                         track = track,
                         isPlaying = isPlaying,
                         isCurrent = currentTrack?.id == track.id,
-                        onPlay = { onPlayTrack(track, results) }
+                        onPlay = { onPlayTrack(track, results) },
+                        onPlayNext = onPlayNext,
+                        onAddToQueue = onAddToQueue,
+                        onToggleLike = onToggleLike,
+                        isLiked = favoriteIds.contains(track.id)
                     )
                 }
 

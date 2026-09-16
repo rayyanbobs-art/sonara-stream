@@ -1,4 +1,4 @@
-﻿package com.sonara.desktop.ui
+package com.sonara.desktop.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -33,6 +33,10 @@ fun DiscoverScreen(
     onBack: () -> Unit,
     lastFmClient: LastFmClient,
     searchService: MusicSearchService,
+    onPlayNext: ((Track) -> Unit)? = null,
+    onAddToQueue: ((Track) -> Unit)? = null,
+    onToggleLike: ((Track) -> Unit)? = null,
+    favoriteIds: Set<String> = emptySet(),
     modifier: Modifier = Modifier
 ) {
     var tracks by remember { mutableStateOf<List<Track>>(lastFmClient.getDefaultDiscoverTracks()) }
@@ -145,67 +149,16 @@ fun DiscoverScreen(
         ) {
             itemsIndexed(tracks, key = { index, item -> "${item.id}_$index" }) { _, track ->
                 val isCurrent = currentTrack?.id == track.id
-                Surface(
-                    color = if (isCurrent) SonaraTokens.SurfaceRaised else SonaraTokens.Surface,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onPlayTrack(track, tracks) }
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Artwork
-                        AsyncArtwork(
-                            url = track.artworkUrl,
-                            modifier = Modifier
-                                .size(50.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                        )
-
-                        Spacer(modifier = Modifier.width(14.dp))
-
-                        // Title and Artist
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = track.title,
-                                color = if (isCurrent) SonaraTokens.Accent else SonaraTokens.TextPrimary,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Spacer(modifier = Modifier.height(3.dp))
-                            Text(
-                                text = track.artist,
-                                color = SonaraTokens.TextSecondary,
-                                fontSize = 13.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-
-                        // Trailing circular options button
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(if (isCurrent) SonaraTokens.AccentTint else Color.Transparent)
-                                .clickable { /* Track options */ },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.MoreVert,
-                                contentDescription = "More",
-                                tint = if (isCurrent) SonaraTokens.Accent else SonaraTokens.TextSecondary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                }
+                DensityTrackRow(
+                    track = track,
+                    isPlaying = isPlaying && isCurrent,
+                    isCurrent = isCurrent,
+                    onPlay = { onPlayTrack(track, tracks) },
+                    onPlayNext = onPlayNext,
+                    onAddToQueue = onAddToQueue,
+                    onToggleLike = onToggleLike,
+                    isLiked = favoriteIds.contains(track.id)
+                )
             }
 
             item {

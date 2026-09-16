@@ -95,6 +95,14 @@ class DesktopDatabase {
                         value TEXT
                     );
                 """.trimIndent())
+
+                stmt.executeUpdate("""
+                    CREATE TABLE IF NOT EXISTS artwork_cache (
+                        cache_key TEXT PRIMARY KEY,
+                        url TEXT NOT NULL,
+                        timestamp INTEGER NOT NULL
+                    );
+                """.trimIndent())
             }
         }
         seedDefaultPlaylistsIfEmpty()
@@ -155,6 +163,65 @@ class DesktopDatabase {
     fun signOut() {
         setAuthenticated(false)
         setLastFmUser("")
+    }
+
+    @Synchronized
+    fun getCachedArtwork(cacheKey: String): String? {
+        getConnection().use { conn ->
+            val sql = "SELECT url FROM artwork_cache WHERE cache_key = ?"
+            conn.prepareStatement(sql).use { ps ->
+                ps.setString(1, cacheKey)
+                ps.executeQuery().use { rs ->
+                    if (rs.next()) return rs.getString("url")
+                }
+            }
+        }
+        return null
+    }
+
+    @Synchronized
+    fun saveCachedArtwork(cacheKey: String, url: String) {
+        if (url.isBlank()) return
+        getConnection().use { conn ->
+            val sql = "INSERT OR REPLACE INTO artwork_cache (cache_key, url, timestamp) VALUES (?, ?, ?)"
+            conn.prepareStatement(sql).use { ps ->
+                ps.setString(1, cacheKey)
+                ps.setString(2, url)
+                ps.setLong(3, System.currentTimeMillis())
+                ps.executeUpdate()
+            }
+        }
+    }
+
+    @Synchronized
+    fun getYtAccountName(): String? = getSetting("yt_account_name", "")?.takeIf { it.isNotBlank() }
+
+    @Synchronized
+    fun getYtCookies(): String? = getSetting("yt_cookies", "")?.takeIf { it.isNotBlank() }
+
+    @Synchronized
+    fun isYtConnected(): Boolean = !getYtCookies().isNullOrBlank()
+
+    @Synchronized
+    fun saveYtConnection(accountName: String, cookies: String) {
+        setSetting("yt_account_name", accountName)
+        setSetting("yt_cookies", cookies)
+        setSetting("yt_connected", "true")
+    }
+
+    @Synchronized
+    fun clearYtConnection() {
+        setSetting("yt_account_name", "")
+        setSetting("yt_cookies", "")
+        setSetting("yt_connected", "false")
+    }
+
+    @Synchronized
+    fun isYtSyncEnabled(): Boolean = getSetting("yt_sync_enabled", "false") == "true"
+
+    @Synchronized
+    fun setYtSyncEnabled(enabled: Boolean) {
+        setSetting("yt_sync_enabled", if (enabled) "true" else "false")
     }
 
     @Synchronized

@@ -122,22 +122,7 @@ class DesktopAudioPlayer(
                 }
 
                 // Pre-warm next track in queue in background
-                if (playlistQueue.isNotEmpty()) {
-                    val nextIdx = (queueIndex + 1) % playlistQueue.size
-                    val nextTrack = playlistQueue.getOrNull(nextIdx)
-                    if (nextTrack != null && nextTrack.id != track.id) {
-                        scope.launch(Dispatchers.IO) {
-                            try {
-                                val nextResolved = searchService.resolveAudioStream(nextTrack)
-                                val nextId = nextResolved.videoId ?: nextResolved.id
-                                val nextUrl = nextResolved.streamUrl
-                                if (!nextUrl.isNullOrBlank() && nextId.isNotBlank()) {
-                                    audioCache.ensureTrackCached(nextId, nextUrl)
-                                }
-                            } catch (_: Exception) {}
-                        }
-                    }
-                }
+                prewarmNextTrack()
 
                 // Start playback on JavaFX thread
                 Platform.runLater {
@@ -216,6 +201,46 @@ class DesktopAudioPlayer(
                     status = PlaybackStatus.ERROR,
                     errorMessage = e.message ?: "Error preparing playback"
                 )
+            }
+        }
+    }
+
+    private fun prewarmNextTrack() {
+        if (playlistQueue.isNotEmpty()) {
+            val nextIdx = (queueIndex + 1) % playlistQueue.size
+            val nextTrack = playlistQueue.getOrNull(nextIdx)
+            if (nextTrack != null && nextTrack.id != _state.value.track?.id) {
+                scope.launch(Dispatchers.IO) {
+                    try {
+                        val nextResolved = searchService.resolveAudioStream(nextTrack)
+                        val nextId = nextResolved.videoId ?: nextResolved.id
+                        val nextUrl = nextResolved.streamUrl
+                        if (!nextUrl.isNullOrBlank() && nextId.isNotBlank()) {
+                            audioCache.ensureTrackCached(nextId, nextUrl)
+                        }
+                    } catch (_: Exception) {}
+                }
+            }
+        }
+    }
+
+    fun playNext(track: Track) {
+        if (playlistQueue.isEmpty() || queueIndex < 0) {
+            play(track, listOf(track))
+        } else {
+            val insertIdx = (queueIndex + 1).coerceAtMost(playlistQueue.size)
+            playlistQueue.add(insertIdx, track)
+            prewarmNextTrack()
+        }
+    }
+
+    fun addToQueue(track: Track) {
+        if (playlistQueue.isEmpty()) {
+            play(track, listOf(track))
+        } else {
+            playlistQueue.add(track)
+            if (playlistQueue.size == queueIndex + 2) {
+                prewarmNextTrack()
             }
         }
     }

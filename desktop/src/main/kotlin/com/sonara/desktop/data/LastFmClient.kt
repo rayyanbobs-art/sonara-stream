@@ -16,6 +16,7 @@ import java.util.concurrent.TimeUnit
 class LastFmClient(
     val apiKey: String = "2e00eb783c677abeab81e99c99be74e1",
     val apiSecret: String = "b7e562de696f17fdfde7c448f02b599f",
+    var artworkResolver: DesktopArtworkResolver? = null,
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
@@ -229,7 +230,10 @@ class LastFmClient(
                     val artist = obj["artist"]?.jsonObject?.get("#text")?.jsonPrimitive?.contentOrNull ?: ""
                     val album = obj["album"]?.jsonObject?.get("#text")?.jsonPrimitive?.contentOrNull ?: ""
                     val images = obj["image"]?.jsonArray.orEmpty()
-                    val artworkUrl = images.lastOrNull()?.jsonObject?.get("#text")?.jsonPrimitive?.contentOrNull
+                    var artworkUrl = images.lastOrNull()?.jsonObject?.get("#text")?.jsonPrimitive?.contentOrNull
+                    if (!DesktopArtworkResolver.isRealArtwork(artworkUrl)) {
+                        artworkUrl = null
+                    }
                     val dateObj = obj["date"]?.jsonObject
                     val timestamp = dateObj?.get("uts")?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0L
                     val isNowPlaying = obj["@attr"]?.jsonObject?.get("nowplaying")?.jsonPrimitive?.contentOrNull == "true"
@@ -240,7 +244,7 @@ class LastFmClient(
                                 title = title,
                                 artist = artist,
                                 album = album,
-                                artworkUrl = artworkUrl?.takeIf { it.isNotBlank() },
+                                artworkUrl = artworkUrl,
                                 timestamp = timestamp,
                                 isNowPlaying = isNowPlaying
                             )
@@ -278,7 +282,10 @@ class LastFmClient(
                     val title = obj["name"]?.jsonPrimitive?.contentOrNull ?: continue
                     val artist = obj["artist"]?.jsonObject?.get("name")?.jsonPrimitive?.contentOrNull ?: "Unknown Artist"
                     val images = obj["image"]?.jsonArray.orEmpty()
-                    val artworkUrl = images.lastOrNull()?.jsonObject?.get("#text")?.jsonPrimitive?.contentOrNull
+                    var artworkUrl = images.lastOrNull()?.jsonObject?.get("#text")?.jsonPrimitive?.contentOrNull
+                    if (!DesktopArtworkResolver.isRealArtwork(artworkUrl)) {
+                        artworkUrl = null
+                    }
                     val durationSeconds = obj["duration"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 210L
                     val playcount = obj["playcount"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 1L
 
@@ -289,12 +296,12 @@ class LastFmClient(
                             artist = artist,
                             album = "Top Track (${playcount} plays)",
                             durationMs = if (durationSeconds > 0) durationSeconds * 1000L else 210000L,
-                            artworkUrl = artworkUrl?.takeIf { it.isNotBlank() },
+                            artworkUrl = artworkUrl,
                             audioQuality = "Lossless FLAC"
                         )
                     )
                 }
-                list
+                artworkResolver?.resolveTracks(list) ?: list
             }
         } catch (_: Exception) {
             emptyList()
@@ -303,7 +310,7 @@ class LastFmClient(
 
     suspend fun getUserRecentTracksAsTracks(username: String, limit: Int = 30): List<Track> = withContext(Dispatchers.IO) {
         val scrobbles = getRecentTracks(username, limit)
-        scrobbles.map { scrobble ->
+        val list = scrobbles.map { scrobble ->
             Track(
                 id = "lfm_recent_${scrobble.title.hashCode()}_${scrobble.artist.hashCode()}",
                 title = scrobble.title,
@@ -314,6 +321,7 @@ class LastFmClient(
                 audioQuality = "Lossless FLAC"
             )
         }
+        artworkResolver?.resolveTracks(list) ?: list
     }
 
     suspend fun getUserPersonalizedFeed(username: String): List<Track> = withContext(Dispatchers.IO) {
@@ -333,7 +341,8 @@ class LastFmClient(
                 if (seen.add(key)) result.add(t)
             }
         }
-        if (result.isEmpty()) getDiscoverTracks() else result
+        val finalTracks = if (result.isEmpty()) getDiscoverTracks() else result
+        artworkResolver?.resolveTracks(finalTracks) ?: finalTracks
     }
 
     suspend fun getDiscoverTracks(limit: Int = 30): List<Track> = withContext(Dispatchers.IO) {
@@ -347,7 +356,10 @@ class LastFmClient(
 
             val req = Request.Builder().url(url).header("User-Agent", "SonaraStream/4.0.0").get().build()
             client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) return@withContext getDefaultDiscoverTracks()
+                if (!resp.isSuccessful) {
+                    val defaultTracks = getDefaultDiscoverTracks()
+                    return@withContext artworkResolver?.resolveTracks(defaultTracks) ?: defaultTracks
+                }
                 val body = resp.body?.string() ?: return@withContext getDefaultDiscoverTracks()
                 val root = json.parseToJsonElement(body).jsonObject
                 val tracksArray = root["tracks"]?.jsonObject?.get("track")?.jsonArray ?: return@withContext getDefaultDiscoverTracks()
@@ -358,7 +370,10 @@ class LastFmClient(
                     val title = obj["name"]?.jsonPrimitive?.contentOrNull ?: continue
                     val artist = obj["artist"]?.jsonObject?.get("name")?.jsonPrimitive?.contentOrNull ?: "Unknown Artist"
                     val images = obj["image"]?.jsonArray.orEmpty()
-                    val artworkUrl = images.lastOrNull()?.jsonObject?.get("#text")?.jsonPrimitive?.contentOrNull
+                    var artworkUrl = images.lastOrNull()?.jsonObject?.get("#text")?.jsonPrimitive?.contentOrNull
+                    if (!DesktopArtworkResolver.isRealArtwork(artworkUrl)) {
+                        artworkUrl = null
+                    }
                     val durationSeconds = obj["duration"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 210L
 
                     result.add(
@@ -368,30 +383,33 @@ class LastFmClient(
                             artist = artist,
                             album = "Last.fm Charts",
                             durationMs = durationSeconds * 1000L,
-                            artworkUrl = artworkUrl?.takeIf { it.isNotBlank() },
+                            artworkUrl = artworkUrl,
                             audioQuality = "Lossless FLAC"
                         )
                     )
                 }
-                if (result.isNotEmpty()) result else getDefaultDiscoverTracks()
+                val tracks = if (result.isNotEmpty()) result else getDefaultDiscoverTracks()
+                artworkResolver?.resolveTracks(tracks) ?: tracks
             }
         } catch (_: Exception) {
-            getDefaultDiscoverTracks()
+            val defaultTracks = getDefaultDiscoverTracks()
+            artworkResolver?.resolveTracks(defaultTracks) ?: defaultTracks
         }
     }
 
     fun getDefaultDiscoverTracks(): List<Track> {
         return listOf(
-            Track("1", "The Final Countdown", "Europe", "The Final Countdown", 240000L, "https://i.ytimg.com/vi/9jK-NcRmVcw/hqdefault.jpg", audioQuality = "Lossless FLAC"),
-            Track("2", "Back In Black", "AC/DC", "Back In Black", 255000L, "https://i.ytimg.com/vi/pAgnJDJN4VA/hqdefault.jpg", audioQuality = "Lossless FLAC"),
-            Track("3", "Highway to Hell", "AC/DC", "Highway to Hell", 208000L, "https://i.ytimg.com/vi/gEPmA3USJdI/hqdefault.jpg", audioQuality = "Lossless FLAC"),
-            Track("4", "Remember the Name (feat. Styles of Beyond)", "Fort Minor", "The Rising Tied", 230000L, "https://i.ytimg.com/vi/VDvr08sCPOc/hqdefault.jpg", audioQuality = "Lossless FLAC"),
-            Track("5", "Thunderstruck", "AC/DC", "The Razors Edge", 292000L, "https://i.ytimg.com/vi/v2AC41dglnM/hqdefault.jpg", audioQuality = "Lossless FLAC"),
-            Track("6", "Paranoid (2009 Remaster)", "Black Sabbath", "Paranoid", 167000L, "https://i.ytimg.com/vi/0qanF-91aJo/hqdefault.jpg", audioQuality = "Lossless FLAC"),
-            Track("7", "Back in the Game", "Airbourne", "Black Dog Barking", 206000L, "https://i.ytimg.com/vi/W_a_Fj68F3I/hqdefault.jpg", audioQuality = "Lossless FLAC"),
-            Track("8", "Fast Lane", "Bad Meets Evil", "Hell: The Sequel", 252000L, "https://i.ytimg.com/vi/rJOsjP33nF4/hqdefault.jpg", audioQuality = "Lossless FLAC"),
-            Track("9", "Smoke On The Water (2024 Remaster)", "Deep Purple", "Machine Head", 340000L, "https://i.ytimg.com/vi/zUwEIt9ez7M/hqdefault.jpg", audioQuality = "Lossless FLAC"),
-            Track("10", "Khasara", "Abdul Hannan", "Khasara", 160000L, "https://i.ytimg.com/vi/q_G_1KjVqfg/hqdefault.jpg", audioQuality = "Lossless FLAC")
+            Track("1", "The Final Countdown", "Europe", "The Final Countdown", 240000L, null, audioQuality = "Lossless FLAC"),
+            Track("2", "Back In Black", "AC/DC", "Back In Black", 255000L, null, audioQuality = "Lossless FLAC"),
+            Track("3", "Highway to Hell", "AC/DC", "Highway to Hell", 208000L, null, audioQuality = "Lossless FLAC"),
+            Track("4", "Remember the Name (feat. Styles of Beyond)", "Fort Minor", "The Rising Tied", 230000L, null, audioQuality = "Lossless FLAC"),
+            Track("5", "Thunderstruck", "AC/DC", "The Razors Edge", 292000L, null, audioQuality = "Lossless FLAC"),
+            Track("6", "Paranoid (2009 Remaster)", "Black Sabbath", "Paranoid", 167000L, null, audioQuality = "Lossless FLAC"),
+            Track("7", "Back in the Game", "Airbourne", "Black Dog Barking", 206000L, null, audioQuality = "Lossless FLAC"),
+            Track("8", "Fast Lane", "Bad Meets Evil", "Hell: The Sequel", 252000L, null, audioQuality = "Lossless FLAC"),
+            Track("9", "Smoke On The Water (2024 Remaster)", "Deep Purple", "Machine Head", 340000L, null, audioQuality = "Lossless FLAC"),
+            Track("10", "Khasara", "Abdul Hannan", "Khasara", 160000L, null, audioQuality = "Lossless FLAC")
         )
     }
 }
+

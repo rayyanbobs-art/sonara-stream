@@ -32,6 +32,9 @@ fun PlaylistsScreen(
     currentTrack: Track?,
     isPlaying: Boolean,
     database: DesktopDatabase,
+    onPlayNext: ((Track) -> Unit)? = null,
+    onAddToQueue: ((Track) -> Unit)? = null,
+    onToggleLike: ((Track) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var playlists by remember { mutableStateOf(database.getPlaylists()) }
@@ -194,7 +197,11 @@ fun PlaylistsScreen(
                         track = track,
                         isPlaying = isPlaying,
                         isCurrent = currentTrack?.id == track.id,
-                        onPlay = { onPlayTrack(track, selectedPlaylist!!.tracks) }
+                        onPlay = { onPlayTrack(track, selectedPlaylist!!.tracks) },
+                        onPlayNext = onPlayNext,
+                        onAddToQueue = onAddToQueue,
+                        onToggleLike = onToggleLike,
+                        isLiked = favorites.any { it.id == track.id }
                     )
                 }
             } else {

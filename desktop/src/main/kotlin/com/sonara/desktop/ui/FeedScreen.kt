@@ -37,6 +37,10 @@ fun FeedScreen(
     searchService: MusicSearchService,
     lastFmClient: LastFmClient,
     lastFmUser: String,
+    onPlayNext: ((Track) -> Unit)? = null,
+    onAddToQueue: ((Track) -> Unit)? = null,
+    onToggleLike: ((Track) -> Unit)? = null,
+    favoriteIds: Set<String> = emptySet(),
     modifier: Modifier = Modifier
 ) {
     var quickPicks by remember { mutableStateOf<List<Track>>(emptyList()) }
@@ -422,7 +426,11 @@ fun FeedScreen(
                     track = track,
                     isPlaying = isPlaying && isCurrent,
                     isCurrent = isCurrent,
-                    onPlay = { onPlayTrack(track, quickPicks) }
+                    onPlay = { onPlayTrack(track, quickPicks) },
+                    onPlayNext = onPlayNext,
+                    onAddToQueue = onAddToQueue,
+                    onToggleLike = onToggleLike,
+                    isLiked = favoriteIds.contains(track.id)
                 )
             }
         }

@@ -672,7 +672,16 @@ fun SettingsScreen(
                 Surface(
                     color = SonaraTokens.Surface,
                     shape = RoundedCornerShape(SonaraTokens.RadiusMd),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(SonaraTokens.RadiusMd))
+                        .clickable(enabled = !updateState.isDownloading && !updateState.isChecking) {
+                            if (updateState.isUpdateAvailable) {
+                                updateManager?.downloadAndInstall()
+                            } else {
+                                updateManager?.downloadAndInstall(force = true)
+                            }
+                        }
                 ) {
                     Column(
                         modifier = Modifier
@@ -742,14 +751,32 @@ fun SettingsScreen(
                                     )
                                 }
                             } else {
-                                OutlinedButton(
-                                    onClick = { updateManager?.checkForUpdates(isSilent = false) },
-                                    shape = RoundedCornerShape(8.dp),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = SonaraTokens.TextPrimary),
-                                    border = BorderStroke(1.dp, SonaraTokens.SurfaceChip),
-                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("Check Now", fontSize = 13.sp)
+                                    OutlinedButton(
+                                        onClick = { updateManager?.checkForUpdates(isSilent = false) },
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = SonaraTokens.TextPrimary),
+                                        border = BorderStroke(1.dp, SonaraTokens.SurfaceChip),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                    ) {
+                                        Text("Check", fontSize = 13.sp)
+                                    }
+                                    Button(
+                                        onClick = { updateManager?.downloadAndInstall(force = true) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = SonaraTokens.Accent),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(
+                                            "Update",
+                                            color = SonaraTokens.TextOnAccent,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -839,7 +866,7 @@ fun SettingsScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "v4.0.0 · GPL-3.0 License",
+                                text = "v${DesktopUpdateManager.CURRENT_VERSION} · GPL-3.0 License",
                                 color = SonaraTokens.Accent,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Medium

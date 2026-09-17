@@ -41,7 +41,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Exe, TargetFormat.Msi)
             packageName = "SonaraStream"
-            packageVersion = "4.0.1"
+            packageVersion = "4.0.2"
             description = "Sonara Stream - 100% Native Lossless Music Player"
             copyright = "Copyright (C) 2026 Sonara Stream. Licensed under GPL-3.0"
             vendor = "Sonara"

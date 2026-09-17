@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit
 data class DesktopUpdateState(
     val isChecking: Boolean = false,
     val isUpdateAvailable: Boolean = false,
-    val currentVersion: String = "4.0.1",
+    val currentVersion: String = "4.0.2",
     val latestVersion: String = "",
     val releaseTitle: String = "",
     val releaseNotes: String = "",
@@ -37,7 +37,7 @@ class DesktopUpdateManager(
         .build()
 ) {
     companion object {
-        const val CURRENT_VERSION = "4.0.1"
+        const val CURRENT_VERSION = "4.0.2"
         const val GITHUB_REPO = "rayyanbobs-art/sonara-stream"
     }
 

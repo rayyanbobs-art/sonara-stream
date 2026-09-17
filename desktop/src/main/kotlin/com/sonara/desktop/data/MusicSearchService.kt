@@ -87,32 +87,35 @@ class MusicSearchService(
 
     private val streamExtractor = DesktopStreamExtractor(client)
 
-    suspend fun resolveAudioStream(track: Track): Track = withContext(Dispatchers.IO) {
+    suspend fun resolveAudioStream(track: Track, preferredQuality: Int = LosslessClient.QUALITY_CD_LOSSLESS): Track = withContext(Dispatchers.IO) {
         // Check cache first
-        streamCache[track.id]?.let { cachedUrl ->
+        val cacheKey = "${track.id}_$preferredQuality"
+        streamCache[cacheKey]?.let { cachedUrl ->
             return@withContext track.copy(streamUrl = cachedUrl)
         }
 
-        // 1. Try Lossless backend first for pure CD / Hi-Res FLAC
-        try {
-            val losslessResult = losslessClient.resolveLosslessStream(track.title, track.artist)
-            if (losslessResult != null && losslessResult.url.isNotBlank()) {
-                val qualityLabel = if (losslessResult.formatId == LosslessClient.QUALITY_MAX_HI_RES || losslessResult.formatId == LosslessClient.QUALITY_HI_RES_96) {
-                    "Hi-Res FLAC ${losslessResult.bitDepth}-bit / ${losslessResult.samplingRate} kHz"
-                } else if (losslessResult.formatId == LosslessClient.QUALITY_MP3_320) {
-                    "MP3 320 kbps"
-                } else {
-                    "Lossless FLAC 16-bit / 44.1 kHz"
-                }
+        // 1. Try Lossless backend first for pure CD / Hi-Res FLAC / MP3 (unless user explicitly selected Standard Adaptive)
+        if (preferredQuality != LosslessClient.QUALITY_STANDARD) {
+            try {
+                val losslessResult = losslessClient.resolveLosslessStream(track.title, track.artist, preferredQuality)
+                if (losslessResult != null && losslessResult.url.isNotBlank()) {
+                    val qualityLabel = if (losslessResult.formatId == LosslessClient.QUALITY_MAX_HI_RES || losslessResult.formatId == LosslessClient.QUALITY_HI_RES_96) {
+                        "Hi-Res FLAC ${losslessResult.bitDepth}-bit / ${losslessResult.samplingRate} kHz"
+                    } else if (losslessResult.formatId == LosslessClient.QUALITY_MP3_320) {
+                        "MP3 320 kbps"
+                    } else {
+                        "Lossless FLAC 16-bit / 44.1 kHz"
+                    }
 
-                streamCache[track.id] = losslessResult.url
-                return@withContext track.copy(
-                    streamUrl = losslessResult.url,
-                    isLossless = true,
-                    audioQuality = qualityLabel
-                )
-            }
-        } catch (_: Exception) { }
+                    streamCache[cacheKey] = losslessResult.url
+                    return@withContext track.copy(
+                        streamUrl = losslessResult.url,
+                        isLossless = losslessResult.formatId != LosslessClient.QUALITY_MP3_320,
+                        audioQuality = qualityLabel
+                    )
+                }
+            } catch (_: Exception) { }
+        }
 
         // 2. Find real YouTube videoId if not already an 11-char ID
         val targetVideoId = if (track.videoId != null && track.videoId.length == 11 && !track.videoId.contains(" ")) {
@@ -131,7 +134,7 @@ class MusicSearchService(
             try {
                 val streamUrl = streamExtractor.resolveAudioStreamUrl(targetVideoId)
                 if (!streamUrl.isNullOrBlank()) {
-                    streamCache[track.id] = streamUrl
+                    streamCache[cacheKey] = streamUrl
                     return@withContext track.copy(
                         streamUrl = streamUrl,
                         videoId = targetVideoId,
@@ -144,7 +147,7 @@ class MusicSearchService(
             // 4. Fallback to direct InnerTube or Piped
             val ytStreamUrl = fetchInnerTubeStreamUrl(targetVideoId)
             if (ytStreamUrl != null) {
-                streamCache[track.id] = ytStreamUrl
+                streamCache[cacheKey] = ytStreamUrl
                 return@withContext track.copy(
                     streamUrl = ytStreamUrl,
                     videoId = targetVideoId,
@@ -155,7 +158,7 @@ class MusicSearchService(
 
             val pipedUrl = fetchPipedStreamUrl(targetVideoId)
             if (pipedUrl != null) {
-                streamCache[track.id] = pipedUrl
+                streamCache[cacheKey] = pipedUrl
                 return@withContext track.copy(
                     streamUrl = pipedUrl,
                     videoId = targetVideoId,

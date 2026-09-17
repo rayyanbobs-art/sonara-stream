@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.BorderStroke
+import com.sonara.desktop.data.DesktopYtMusicApi
 import com.sonara.desktop.data.LastFmClient
 import com.sonara.desktop.data.LosslessClient
 import com.sonara.desktop.storage.DesktopDatabase
@@ -35,6 +36,8 @@ fun SettingsScreen(
     lastFmClient: LastFmClient,
     updateManager: DesktopUpdateManager? = null,
     onSignOut: () -> Unit = {},
+    onAmoledChanged: (Boolean) -> Unit = {},
+    onDynamicColorChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -45,18 +48,23 @@ fun SettingsScreen(
 
     var isYtConnected by remember { mutableStateOf(database.isYtConnected()) }
     var ytAccountName by remember { mutableStateOf(database.getYtAccountName().orEmpty()) }
+    var ytChannelHandle by remember { mutableStateOf(database.getYtChannelHandle().orEmpty()) }
     var ytSyncEnabled by remember { mutableStateOf(database.isYtSyncEnabled()) }
-    var showYtDialog by remember { mutableStateOf(false) }
-    var tempYtAccount by remember { mutableStateOf(ytAccountName) }
-    var tempYtCookies by remember { mutableStateOf(database.getYtCookies().orEmpty()) }
+    var isYtConnecting by remember { mutableStateOf(false) }
+    var showYtDetailsDialog by remember { mutableStateOf(false) }
+    val ytMusicApi = remember { DesktopYtMusicApi() }
 
-    var amoledMode by remember { mutableStateOf(false) }
-    var dynamicColor by remember { mutableStateOf(false) }
-    var dynamicNowPlaying by remember { mutableStateOf(true) }
-    var bitPerfect by remember { mutableStateOf(true) }
-    var crossfade by remember { mutableStateOf(false) }
-    var selectedQuality by remember { mutableStateOf(LosslessClient.QUALITY_MAX_HI_RES) }
+    var amoledMode by remember { mutableStateOf(database.getAmoledMode()) }
+    var dynamicColor by remember { mutableStateOf(database.getDynamicColor()) }
+    var dynamicNowPlaying by remember { mutableStateOf(database.getDynamicNowPlaying()) }
+    var bitPerfect by remember { mutableStateOf(database.getBitPerfect()) }
+    var crossfade by remember { mutableStateOf(database.getCrossfade()) }
+    var selectedQuality by remember { mutableStateOf(database.getStreamingQuality()) }
     var showQualityDialog by remember { mutableStateOf(false) }
+
+    var appLanguage by remember { mutableStateOf(database.getAppLanguage()) }
+    var showLanguageDialog by remember { mutableStateOf(false) }
+
     val updateState by (updateManager?.state ?: remember { MutableStateFlow(DesktopUpdateState()) }).collectAsState()
 
     if (showUserDialog) {
@@ -146,17 +154,17 @@ fun SettingsScreen(
         )
     }
 
-    if (showYtDialog && isYtConnected) {
+    if (showYtDetailsDialog && isYtConnected) {
         AlertDialog(
-            onDismissRequest = { showYtDialog = false },
+            onDismissRequest = { showYtDetailsDialog = false },
             containerColor = SonaraTokens.SurfaceRaised,
             title = {
-                Text("YouTube Music Connected", color = SonaraTokens.TextPrimary, fontWeight = FontWeight.Bold)
+                Text("YouTube Music Account", color = SonaraTokens.TextPrimary, fontWeight = FontWeight.Bold)
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        "Connected account:",
+                        "Connected Google Account:",
                         color = SonaraTokens.TextSecondary,
                         fontSize = 13.sp
                     )
@@ -164,11 +172,18 @@ fun SettingsScreen(
                         ytAccountName.ifBlank { "YouTube Music User" },
                         color = SonaraTokens.Accent,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
+                        fontSize = 17.sp
                     )
+                    if (ytChannelHandle.isNotBlank()) {
+                        Text(
+                            ytChannelHandle,
+                            color = SonaraTokens.TextSecondary,
+                            fontSize = 13.sp
+                        )
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        "Your playlists and library are synced with Sonara Stream desktop.",
+                        "Your YouTube Music library playlists are synced with Sonara Stream and updated in real time.",
                         color = SonaraTokens.TextSecondary,
                         fontSize = 13.sp
                     )
@@ -176,7 +191,7 @@ fun SettingsScreen(
             },
             confirmButton = {
                 Button(
-                    onClick = { showYtDialog = false },
+                    onClick = { showYtDetailsDialog = false },
                     colors = ButtonDefaults.buttonColors(containerColor = SonaraTokens.Accent, contentColor = SonaraTokens.TextOnAccent)
                 ) {
                     Text("Done", fontWeight = FontWeight.Bold)
@@ -188,8 +203,9 @@ fun SettingsScreen(
                         database.clearYtConnection()
                         isYtConnected = false
                         ytAccountName = ""
+                        ytChannelHandle = ""
                         ytSyncEnabled = false
-                        showYtDialog = false
+                        showYtDetailsDialog = false
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFD97070))
                 ) {
@@ -197,97 +213,62 @@ fun SettingsScreen(
                 }
             }
         )
-    } else if (showYtDialog && !isYtConnected) {
+    }
+
+    if (showLanguageDialog) {
+        val languages = listOf(
+            "System default",
+            "English",
+            "Türkçe",
+            "Español",
+            "Deutsch",
+            "Français",
+            "日本語",
+            "한국어",
+            "中文"
+        )
         AlertDialog(
-            onDismissRequest = { showYtDialog = false },
+            onDismissRequest = { showLanguageDialog = false },
             containerColor = SonaraTokens.SurfaceRaised,
             title = {
-                Text("Connect YouTube Music", color = SonaraTokens.TextPrimary, fontWeight = FontWeight.Bold)
+                Text("App Language", color = SonaraTokens.TextPrimary, fontWeight = FontWeight.Bold)
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        "Sign in to access your YouTube Music library and enable two-way playlist sync:",
-                        color = SonaraTokens.TextSecondary,
-                        fontSize = 13.sp
-                    )
-                    Button(
-                        onClick = {
-                            try {
-                                if (java.awt.Desktop.isDesktopSupported() && java.awt.Desktop.getDesktop().isSupported(java.awt.Desktop.Action.BROWSE)) {
-                                    java.awt.Desktop.getDesktop().browse(java.net.URI("https://music.youtube.com"))
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    languages.forEach { lang ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    appLanguage = lang
+                                    database.setAppLanguage(lang)
+                                    showLanguageDialog = false
                                 }
-                            } catch (_: Exception) {}
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = SonaraTokens.SurfaceChip,
-                            contentColor = SonaraTokens.TextPrimary
-                        ),
-                        shape = RoundedCornerShape(SonaraTokens.RadiusSm),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.OpenInBrowser,
-                            contentDescription = null,
-                            tint = SonaraTokens.Accent,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Open music.youtube.com in Browser", fontSize = 13.sp)
+                                .padding(vertical = 8.dp, horizontal = 8.dp)
+                        ) {
+                            RadioButton(
+                                selected = appLanguage == lang,
+                                onClick = {
+                                    appLanguage = lang
+                                    database.setAppLanguage(lang)
+                                    showLanguageDialog = false
+                                },
+                                colors = RadioButtonDefaults.colors(
+                                    selectedColor = SonaraTokens.Accent,
+                                    unselectedColor = SonaraTokens.TextSecondary
+                                )
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(lang, color = SonaraTokens.TextPrimary, fontSize = 14.sp)
+                        }
                     }
-
-                    Spacer(modifier = Modifier.height(2.dp))
-
-                    OutlinedTextField(
-                        value = tempYtAccount,
-                        onValueChange = { tempYtAccount = it },
-                        label = { Text("Account Name / Email", fontSize = 12.sp) },
-                        placeholder = { Text("e.g. My YTM Account", color = SonaraTokens.TextSecondary.copy(alpha = 0.5f)) },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = SonaraTokens.Accent,
-                            unfocusedBorderColor = SonaraTokens.SurfaceChip,
-                            focusedTextColor = SonaraTokens.TextPrimary,
-                            unfocusedTextColor = SonaraTokens.TextPrimary
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    OutlinedTextField(
-                        value = tempYtCookies,
-                        onValueChange = { tempYtCookies = it },
-                        label = { Text("Session Cookie / Header (Optional)", fontSize = 12.sp) },
-                        placeholder = { Text("Paste SAPISID or cookie (optional)", color = SonaraTokens.TextSecondary.copy(alpha = 0.5f)) },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = SonaraTokens.Accent,
-                            unfocusedBorderColor = SonaraTokens.SurfaceChip,
-                            focusedTextColor = SonaraTokens.TextPrimary,
-                            unfocusedTextColor = SonaraTokens.TextPrimary
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = {
-                        val name = tempYtAccount.trim().ifBlank { "YouTube Music User" }
-                        database.saveYtConnection(name, tempYtCookies.trim())
-                        database.setYtSyncEnabled(true)
-                        isYtConnected = true
-                        ytAccountName = name
-                        ytSyncEnabled = true
-                        showYtDialog = false
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = SonaraTokens.Accent, contentColor = SonaraTokens.TextOnAccent)
-                ) {
-                    Text("Connect", fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showYtDialog = false }) {
-                    Text("Cancel", color = SonaraTokens.TextSecondary)
+                TextButton(onClick = { showLanguageDialog = false }) {
+                    Text("Close", color = SonaraTokens.Accent)
                 }
             }
         )
@@ -316,6 +297,7 @@ fun SettingsScreen(
                                 .clip(RoundedCornerShape(8.dp))
                                 .clickable {
                                     selectedQuality = id
+                                    database.setStreamingQuality(id)
                                     showQualityDialog = false
                                 }
                                 .padding(vertical = 10.dp, horizontal = 8.dp)
@@ -324,6 +306,7 @@ fun SettingsScreen(
                                 selected = selectedQuality == id,
                                 onClick = {
                                     selectedQuality = id
+                                    database.setStreamingQuality(id)
                                     showQualityDialog = false
                                 },
                                 colors = RadioButtonDefaults.colors(
@@ -473,8 +456,8 @@ fun SettingsScreen(
                 SettingsNavRow(
                     icon = Icons.Rounded.Language,
                     title = "App Language",
-                    subtitle = "System default",
-                    onClick = { /* System language */ }
+                    subtitle = appLanguage,
+                    onClick = { showLanguageDialog = true }
                 )
             }
         }
@@ -493,13 +476,43 @@ fun SettingsScreen(
                 SettingsNavRow(
                     icon = Icons.Rounded.Sync,
                     title = if (isYtConnected) "YouTube Music Account" else "Connect YouTube Music",
-                    subtitle = if (isYtConnected) "Connected: ${ytAccountName.ifBlank { "Active" }} · Sync ready" else "Sign in to see and sync every playlist",
-                    badge = if (isYtConnected) "Connected" else null,
+                    subtitle = if (isYtConnected) {
+                        "Connected: ${ytAccountName.ifBlank { "Active" }}${if (ytChannelHandle.isNotBlank()) " ($ytChannelHandle)" else ""} · Real-time Sync Active"
+                    } else if (isYtConnecting) {
+                        "Opening Google sign-in window..."
+                    } else {
+                        "Sign in to sync your YouTube Music playlists live"
+                    },
+                    badge = if (isYtConnected) "Connected" else if (isYtConnecting) "Connecting..." else null,
                     onClick = {
-                        if (!isYtConnected && tempYtAccount.isBlank()) {
-                            tempYtAccount = if (lastFmUser.isNotBlank()) "$lastFmUser (YTM)" else "My YouTube Music"
+                        if (isYtConnected) {
+                            showYtDetailsDialog = true
+                        } else {
+                            isYtConnecting = true
+                            YouTubeLoginWindow.open(
+                                onSuccess = { cookies ->
+                                    coroutineScope.launch {
+                                        val accountInfo = ytMusicApi.fetchAccountInfo(cookies)
+                                        val name = accountInfo?.accountName?.ifBlank { "YouTube Music User" } ?: "YouTube Music User"
+                                        database.saveYtConnection(
+                                            accountName = name,
+                                            cookies = cookies,
+                                            channelHandle = accountInfo?.channelHandle,
+                                            photoUrl = accountInfo?.photoUrl
+                                        )
+                                        database.setYtSyncEnabled(true)
+                                        isYtConnected = true
+                                        ytAccountName = name
+                                        ytChannelHandle = accountInfo?.channelHandle.orEmpty()
+                                        ytSyncEnabled = true
+                                        isYtConnecting = false
+                                    }
+                                },
+                                onCancel = {
+                                    isYtConnecting = false
+                                }
+                            )
                         }
-                        showYtDialog = true
                     }
                 )
 
@@ -514,7 +527,28 @@ fun SettingsScreen(
                             database.setYtSyncEnabled(it)
                             ytSyncEnabled = it
                         } else {
-                            showYtDialog = true
+                            isYtConnecting = true
+                            YouTubeLoginWindow.open(
+                                onSuccess = { cookies ->
+                                    coroutineScope.launch {
+                                        val accountInfo = ytMusicApi.fetchAccountInfo(cookies)
+                                        val name = accountInfo?.accountName?.ifBlank { "YouTube Music User" } ?: "YouTube Music User"
+                                        database.saveYtConnection(
+                                            accountName = name,
+                                            cookies = cookies,
+                                            channelHandle = accountInfo?.channelHandle,
+                                            photoUrl = accountInfo?.photoUrl
+                                        )
+                                        database.setYtSyncEnabled(true)
+                                        isYtConnected = true
+                                        ytAccountName = name
+                                        ytChannelHandle = accountInfo?.channelHandle.orEmpty()
+                                        ytSyncEnabled = true
+                                        isYtConnecting = false
+                                    }
+                                },
+                                onCancel = { isYtConnecting = false }
+                            )
                         }
                     }
                 )
@@ -594,7 +628,11 @@ fun SettingsScreen(
                     title = "AMOLED Mode",
                     subtitle = "Pure black background",
                     checked = amoledMode,
-                    onCheckedChange = { amoledMode = it }
+                    onCheckedChange = {
+                        amoledMode = it
+                        database.setAmoledMode(it)
+                        onAmoledChanged(it)
+                    }
                 )
 
                 SettingsToggleRow(
@@ -602,7 +640,11 @@ fun SettingsScreen(
                     title = "Dynamic Color",
                     subtitle = "Use your wallpaper's colors",
                     checked = dynamicColor,
-                    onCheckedChange = { dynamicColor = it }
+                    onCheckedChange = {
+                        dynamicColor = it
+                        database.setDynamicColor(it)
+                        onDynamicColorChanged(it)
+                    }
                 )
 
                 SettingsToggleRow(
@@ -610,7 +652,10 @@ fun SettingsScreen(
                     title = "Dynamic Now Playing",
                     subtitle = "Match album colors",
                     checked = dynamicNowPlaying,
-                    onCheckedChange = { dynamicNowPlaying = it }
+                    onCheckedChange = {
+                        dynamicNowPlaying = it
+                        database.setDynamicNowPlaying(it)
+                    }
                 )
             }
         }
@@ -645,7 +690,10 @@ fun SettingsScreen(
                     title = "Bit-Perfect Output",
                     subtitle = "Bypass OS mixer resampling for pristine audio",
                     checked = bitPerfect,
-                    onCheckedChange = { bitPerfect = it }
+                    onCheckedChange = {
+                        bitPerfect = it
+                        database.setBitPerfect(it)
+                    }
                 )
 
                 SettingsToggleRow(
@@ -653,7 +701,10 @@ fun SettingsScreen(
                     title = "Gapless & Crossfade",
                     subtitle = "Smooth 3-second crossfade between tracks",
                     checked = crossfade,
-                    onCheckedChange = { crossfade = it }
+                    onCheckedChange = {
+                        crossfade = it
+                        database.setCrossfade(it)
+                    }
                 )
             }
         }

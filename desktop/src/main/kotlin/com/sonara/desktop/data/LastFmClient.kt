@@ -7,6 +7,7 @@ import com.sonara.desktop.model.Track
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
+import okhttp3.FormBody
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -147,26 +148,172 @@ class LastFmClient(
         }
     }
 
+    private fun safeText(element: JsonElement?): String {
+        return when (element) {
+            is JsonObject -> element["#text"]?.jsonPrimitive?.contentOrNull
+                ?: element["name"]?.jsonPrimitive?.contentOrNull ?: ""
+            is JsonPrimitive -> element.contentOrNull ?: ""
+            else -> ""
+        }
+    }
+
+    private fun safeImageUrl(element: JsonElement?): String? {
+        val raw = when (element) {
+            is JsonArray -> {
+                val last = element.lastOrNull()
+                when (last) {
+                    is JsonObject -> last["#text"]?.jsonPrimitive?.contentOrNull
+                    is JsonPrimitive -> last.contentOrNull
+                    else -> null
+                }
+            }
+            is JsonObject -> element["#text"]?.jsonPrimitive?.contentOrNull
+            is JsonPrimitive -> element.contentOrNull
+            else -> null
+        }
+        return if (DesktopArtworkResolver.isRealArtwork(raw)) raw else null
+    }
+
+    suspend fun updateNowPlaying(
+        artist: String,
+        track: String,
+        album: String? = null,
+        sessionKey: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (sessionKey.isBlank() || artist.isBlank() || track.isBlank()) return@withContext false
+        try {
+            val params = mutableMapOf(
+                "method" to "track.updateNowPlaying",
+                "artist" to artist.trim(),
+                "track" to track.trim(),
+                "api_key" to apiKey,
+                "sk" to sessionKey.trim()
+            )
+            if (!album.isNullOrBlank()) {
+                params["album"] = album.trim()
+            }
+            val sig = LastFmSigner.sign(params, apiSecret)
+
+            val formBuilder = FormBody.Builder()
+            params.forEach { (k, v) -> formBuilder.add(k, v) }
+            formBuilder.add("api_sig", sig)
+            formBuilder.add("format", "json")
+
+            val req = Request.Builder()
+                .url("https://ws.audioscrobbler.com/2.0/")
+                .header("User-Agent", "SonaraStream/4.0.0")
+                .post(formBuilder.build())
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                resp.isSuccessful
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    suspend fun scrobble(
+        artist: String,
+        track: String,
+        album: String? = null,
+        timestampSec: Long = System.currentTimeMillis() / 1000,
+        sessionKey: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (sessionKey.isBlank() || artist.isBlank() || track.isBlank()) return@withContext false
+        try {
+            val params = mutableMapOf(
+                "method" to "track.scrobble",
+                "artist" to artist.trim(),
+                "track" to track.trim(),
+                "timestamp" to timestampSec.toString(),
+                "api_key" to apiKey,
+                "sk" to sessionKey.trim()
+            )
+            if (!album.isNullOrBlank()) {
+                params["album"] = album.trim()
+            }
+            val sig = LastFmSigner.sign(params, apiSecret)
+
+            val formBuilder = FormBody.Builder()
+            params.forEach { (k, v) -> formBuilder.add(k, v) }
+            formBuilder.add("api_sig", sig)
+            formBuilder.add("format", "json")
+
+            val req = Request.Builder()
+                .url("https://ws.audioscrobbler.com/2.0/")
+                .header("User-Agent", "SonaraStream/4.0.0")
+                .post(formBuilder.build())
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                resp.isSuccessful
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    suspend fun obtainMobileSession(username: String, password: String): String? = withContext(Dispatchers.IO) {
+        if (username.isBlank() || password.isBlank()) return@withContext null
+        try {
+            val params = mapOf(
+                "method" to "auth.getMobileSession",
+                "username" to username.trim(),
+                "password" to password,
+                "api_key" to apiKey
+            )
+            val sig = LastFmSigner.sign(params, apiSecret)
+
+            val formBuilder = FormBody.Builder()
+            params.forEach { (k, v) -> formBuilder.add(k, v) }
+            formBuilder.add("api_sig", sig)
+            formBuilder.add("format", "json")
+
+            val req = Request.Builder()
+                .url("https://ws.audioscrobbler.com/2.0/")
+                .header("User-Agent", "SonaraStream/4.0.0")
+                .post(formBuilder.build())
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext null
+                val body = resp.body?.string() ?: return@withContext null
+                val root = json.parseToJsonElement(body).jsonObject
+                val session = root["session"]?.jsonObject
+                session?.get("key")?.jsonPrimitive?.contentOrNull
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     suspend fun getUserStats(username: String): LastFmStats = withContext(Dispatchers.IO) {
         if (username.isBlank()) return@withContext LastFmStats()
         try {
             val user = getUserInfo(username)
-            val playcount = user?.playcount ?: 13L
+            val playcount = user?.playcount ?: 0L
 
             val artistsCount = fetchTopCount(username, "user.gettopartists", "topartists", "artist")
             val tracksCount = fetchTopCount(username, "user.gettoptracks", "toptracks", "track")
             val albumsCount = fetchTopCount(username, "user.gettopalbums", "topalbums", "album")
 
-            val minutes = (playcount * 3.5).toLong()
-            val hours = minutes / 60
-            val remMins = minutes % 60
-            val timeStr = if (hours > 0) "${hours}h ${remMins}m" else "${remMins}m 0s"
+            val totalSecs = (playcount * 210L)
+            val d = totalSecs / 86400
+            val h = (totalSecs % 86400) / 3600
+            val m = (totalSecs % 3600) / 60
+            val s = totalSecs % 60
+            val timeStr = when {
+                d > 0 -> "${d}d ${h}h ${m}m"
+                h > 0 -> "${h}h ${m}m ${s}s"
+                else -> "${m}m ${s}s"
+            }
 
             LastFmStats(
                 scrobbles = playcount,
                 tracks = if (tracksCount > 0) tracksCount else playcount,
-                artists = if (artistsCount > 0) artistsCount else 10L,
-                albums = if (albumsCount > 0) albumsCount else 12L,
+                artists = if (artistsCount > 0) artistsCount else 0L,
+                albums = if (albumsCount > 0) albumsCount else 0L,
                 listeningTime = timeStr
             )
         } catch (_: Exception) {
@@ -225,24 +372,22 @@ class LastFmClient(
                 }
 
                 array?.forEach { item ->
+                    if (item !is JsonObject) return@forEach
                     val obj = item.jsonObject
                     val title = obj["name"]?.jsonPrimitive?.contentOrNull ?: ""
-                    val artist = obj["artist"]?.jsonObject?.get("#text")?.jsonPrimitive?.contentOrNull ?: ""
-                    val album = obj["album"]?.jsonObject?.get("#text")?.jsonPrimitive?.contentOrNull ?: ""
-                    val images = obj["image"]?.jsonArray.orEmpty()
-                    var artworkUrl = images.lastOrNull()?.jsonObject?.get("#text")?.jsonPrimitive?.contentOrNull
-                    if (!DesktopArtworkResolver.isRealArtwork(artworkUrl)) {
-                        artworkUrl = null
-                    }
-                    val dateObj = obj["date"]?.jsonObject
-                    val timestamp = dateObj?.get("uts")?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0L
-                    val isNowPlaying = obj["@attr"]?.jsonObject?.get("nowplaying")?.jsonPrimitive?.contentOrNull == "true"
+                    val artist = safeText(obj["artist"])
+                    val album = safeText(obj["album"])
+                    val artworkUrl = safeImageUrl(obj["image"])
+                    val dateObj = obj["date"] as? JsonObject
+                    val timestamp = dateObj?.get("uts")?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: (System.currentTimeMillis() / 1000)
+                    val attrObj = obj["@attr"] as? JsonObject
+                    val isNowPlaying = attrObj?.get("nowplaying")?.jsonPrimitive?.contentOrNull == "true"
 
                     if (title.isNotBlank()) {
                         list.add(
                             ScrobbleItem(
                                 title = title,
-                                artist = artist,
+                                artist = artist.ifBlank { "Unknown Artist" },
                                 album = album,
                                 artworkUrl = artworkUrl,
                                 timestamp = timestamp,
@@ -278,14 +423,11 @@ class LastFmClient(
 
                 val list = mutableListOf<Track>()
                 for (item in trackArray) {
+                    if (item !is JsonObject) continue
                     val obj = item.jsonObject
                     val title = obj["name"]?.jsonPrimitive?.contentOrNull ?: continue
-                    val artist = obj["artist"]?.jsonObject?.get("name")?.jsonPrimitive?.contentOrNull ?: "Unknown Artist"
-                    val images = obj["image"]?.jsonArray.orEmpty()
-                    var artworkUrl = images.lastOrNull()?.jsonObject?.get("#text")?.jsonPrimitive?.contentOrNull
-                    if (!DesktopArtworkResolver.isRealArtwork(artworkUrl)) {
-                        artworkUrl = null
-                    }
+                    val artist = safeText(obj["artist"]).ifBlank { "Unknown Artist" }
+                    val artworkUrl = safeImageUrl(obj["image"])
                     val durationSeconds = obj["duration"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 210L
                     val playcount = obj["playcount"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 1L
 
@@ -366,14 +508,11 @@ class LastFmClient(
 
                 val result = mutableListOf<Track>()
                 for (item in tracksArray) {
+                    if (item !is JsonObject) continue
                     val obj = item.jsonObject
                     val title = obj["name"]?.jsonPrimitive?.contentOrNull ?: continue
-                    val artist = obj["artist"]?.jsonObject?.get("name")?.jsonPrimitive?.contentOrNull ?: "Unknown Artist"
-                    val images = obj["image"]?.jsonArray.orEmpty()
-                    var artworkUrl = images.lastOrNull()?.jsonObject?.get("#text")?.jsonPrimitive?.contentOrNull
-                    if (!DesktopArtworkResolver.isRealArtwork(artworkUrl)) {
-                        artworkUrl = null
-                    }
+                    val artist = safeText(obj["artist"]).ifBlank { "Unknown Artist" }
+                    val artworkUrl = safeImageUrl(obj["image"])
                     val durationSeconds = obj["duration"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 210L
 
                     result.add(

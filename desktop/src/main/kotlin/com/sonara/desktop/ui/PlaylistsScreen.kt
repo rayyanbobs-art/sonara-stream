@@ -19,9 +19,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.sonara.desktop.data.DesktopYtMusicApi
 import com.sonara.desktop.model.Playlist
 import com.sonara.desktop.model.Track
 import com.sonara.desktop.storage.DesktopDatabase
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -37,22 +39,64 @@ fun PlaylistsScreen(
     onToggleLike: ((Track) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val scope = rememberCoroutineScope()
     var playlists by remember { mutableStateOf(database.getPlaylists()) }
     var favorites by remember { mutableStateOf(database.getFavorites()) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var newPlaylistTitle by remember { mutableStateOf("") }
     var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
 
+    val isYtConnected = database.isYtConnected()
+    val ytCookies = database.getYtCookies().orEmpty()
+    val ytMusicApi = remember { DesktopYtMusicApi() }
+    var remotePlaylists by remember { mutableStateOf<List<Playlist>>(emptyList()) }
+    var isLoadingRemote by remember { mutableStateOf(false) }
+    var isLoadingTracks by remember { mutableStateOf(false) }
+
+    fun syncYtPlaylists() {
+        if (!isYtConnected || ytCookies.isBlank()) return
+        scope.launch {
+            isLoadingRemote = true
+            try {
+                val fetched = ytMusicApi.fetchLibraryPlaylists(ytCookies)
+                if (fetched.isNotEmpty()) {
+                    remotePlaylists = fetched
+                }
+            } catch (_: Exception) {}
+            isLoadingRemote = false
+        }
+    }
+
+    fun selectPlaylist(pl: Playlist) {
+        selectedPlaylist = pl
+        if (pl.isRemote && pl.tracks.isEmpty()) {
+            scope.launch {
+                isLoadingTracks = true
+                try {
+                    val tracks = ytMusicApi.fetchPlaylistTracks(pl.id, ytCookies)
+                    selectedPlaylist = pl.copy(tracks = tracks, trackCount = tracks.size)
+                } catch (_: Exception) {}
+                isLoadingTracks = false
+            }
+        }
+    }
+
+    LaunchedEffect(isYtConnected) {
+        if (isYtConnected) {
+            syncYtPlaylists()
+        }
+    }
+
     fun refresh() {
         playlists = database.getPlaylists()
         favorites = database.getFavorites()
         selectedPlaylist = selectedPlaylist?.let { cur ->
-            playlists.find { it.id == cur.id }
+            playlists.find { it.id == cur.id } ?: remotePlaylists.find { it.id == cur.id }
         }
     }
 
-    val totalTracks = favorites.size + playlists.sumOf { it.tracks.size }
-    val totalCount = playlists.size + 1 // +1 for Liked Songs
+    val totalTracks = favorites.size + playlists.sumOf { it.tracks.size } + remotePlaylists.sumOf { it.tracks.size }
+    val totalCount = playlists.size + remotePlaylists.size + 1 // +1 for Liked Songs
 
     if (showCreateDialog) {
         AlertDialog(
@@ -146,6 +190,31 @@ fun PlaylistsScreen(
                                 )
                             }
                         } else {
+                            if (isYtConnected) {
+                                IconButton(
+                                    onClick = { syncYtPlaylists() },
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(SonaraTokens.SurfaceRaised)
+                                ) {
+                                    if (isLoadingRemote) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(18.dp),
+                                            strokeWidth = 2.dp,
+                                            color = SonaraTokens.Accent
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Sync,
+                                            contentDescription = "Sync YouTube Music Playlists",
+                                            tint = SonaraTokens.Accent,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                            }
+
                             IconButton(
                                 onClick = { showCreateDialog = true },
                                 modifier = Modifier
@@ -191,18 +260,44 @@ fun PlaylistsScreen(
             }
 
             if (selectedPlaylist != null) {
-                // Playlist tracks detail
-                items(selectedPlaylist!!.tracks) { track ->
-                    DensityTrackRow(
-                        track = track,
-                        isPlaying = isPlaying,
-                        isCurrent = currentTrack?.id == track.id,
-                        onPlay = { onPlayTrack(track, selectedPlaylist!!.tracks) },
-                        onPlayNext = onPlayNext,
-                        onAddToQueue = onAddToQueue,
-                        onToggleLike = onToggleLike,
-                        isLiked = favorites.any { it.id == track.id }
-                    )
+                if (isLoadingTracks) {
+                    item {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(48.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                CircularProgressIndicator(color = SonaraTokens.Accent)
+                                Text("Loading tracks from YouTube Music...", color = SonaraTokens.TextSecondary, fontSize = 13.sp)
+                            }
+                        }
+                    }
+                } else if (selectedPlaylist!!.tracks.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(48.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("No tracks found in this playlist", color = SonaraTokens.TextSecondary, fontSize = 14.sp)
+                        }
+                    }
+                } else {
+                    // Playlist tracks detail
+                    items(selectedPlaylist!!.tracks) { track ->
+                        DensityTrackRow(
+                            track = track,
+                            isPlaying = isPlaying,
+                            isCurrent = currentTrack?.id == track.id,
+                            onPlay = { onPlayTrack(track, selectedPlaylist!!.tracks) },
+                            onPlayNext = onPlayNext,
+                            onAddToQueue = onAddToQueue,
+                            onToggleLike = onToggleLike,
+                            isLiked = favorites.any { it.id == track.id }
+                        )
+                    }
                 }
             } else {
                 // Pinned Liked Songs row
@@ -352,6 +447,104 @@ fun PlaylistsScreen(
                                     tint = SonaraTokens.TextSecondary,
                                     modifier = Modifier.size(20.dp)
                                 )
+                            }
+                        }
+                    }
+                }
+
+                if (remotePlaylists.isNotEmpty()) {
+                    item {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
+                        ) {
+                            Text(
+                                text = "YouTube Music Library",
+                                color = SonaraTokens.TextPrimary,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Surface(
+                                color = Color(0xFF421C1C),
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Text(
+                                    text = "${remotePlaylists.size}",
+                                    color = Color(0xFFFF6B6B),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    items(remotePlaylists) { pl ->
+                        Surface(
+                            color = SonaraTokens.Surface,
+                            shape = RoundedCornerShape(SonaraTokens.RadiusMd),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { selectPlaylist(pl) }
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(14.dp)
+                            ) {
+                                AsyncArtwork(
+                                    url = pl.coverUrl,
+                                    modifier = Modifier
+                                        .size(60.dp)
+                                        .clip(RoundedCornerShape(SonaraTokens.RadiusSm))
+                                )
+
+                                Spacer(modifier = Modifier.width(16.dp))
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            text = pl.title,
+                                            color = SonaraTokens.TextPrimary,
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.weight(1f, fill = false)
+                                        )
+                                        Surface(
+                                            color = Color(0xFF381E1E),
+                                            shape = RoundedCornerShape(4.dp)
+                                        ) {
+                                            Text(
+                                                text = "YTM",
+                                                color = Color(0xFFFF8080),
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = pl.description.ifBlank { "YouTube Music Playlist" },
+                                        color = SonaraTokens.TextSecondary,
+                                        fontSize = 13.sp
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = { selectPlaylist(pl) },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.ChevronRight,
+                                        contentDescription = "Open",
+                                        tint = SonaraTokens.TextSecondary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
                     }

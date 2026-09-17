@@ -1,4 +1,4 @@
-﻿package com.sonara.desktop.model
+package com.sonara.desktop.model
 
 import kotlinx.serialization.Serializable
 
@@ -59,6 +59,7 @@ data class Playlist(
     val trackCount: Int = 0,
     val coverUrl: String? = null,
     val isPinned: Boolean = false,
+    val isRemote: Boolean = false,
     val tracks: List<Track> = emptyList(),
     val createdAt: Long = System.currentTimeMillis()
 )

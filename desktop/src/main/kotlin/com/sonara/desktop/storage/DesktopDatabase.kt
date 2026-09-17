@@ -163,7 +163,56 @@ class DesktopDatabase {
     fun signOut() {
         setAuthenticated(false)
         setLastFmUser("")
+        setLastFmSessionKey("")
     }
+
+    @Synchronized
+    fun getLastFmSessionKey(): String = getSetting("lastfm_session_key", "")
+
+    @Synchronized
+    fun setLastFmSessionKey(key: String) = setSetting("lastfm_session_key", key)
+
+    @Synchronized
+    fun getAmoledMode(): Boolean = getSetting("amoled_mode", "false") == "true"
+
+    @Synchronized
+    fun setAmoledMode(enabled: Boolean) = setSetting("amoled_mode", if (enabled) "true" else "false")
+
+    @Synchronized
+    fun getDynamicColor(): Boolean = getSetting("dynamic_color", "false") == "true"
+
+    @Synchronized
+    fun setDynamicColor(enabled: Boolean) = setSetting("dynamic_color", if (enabled) "true" else "false")
+
+    @Synchronized
+    fun getDynamicNowPlaying(): Boolean = getSetting("dynamic_now_playing", "true") == "true"
+
+    @Synchronized
+    fun setDynamicNowPlaying(enabled: Boolean) = setSetting("dynamic_now_playing", if (enabled) "true" else "false")
+
+    @Synchronized
+    fun getBitPerfect(): Boolean = getSetting("bit_perfect", "false") == "true"
+
+    @Synchronized
+    fun setBitPerfect(enabled: Boolean) = setSetting("bit_perfect", if (enabled) "true" else "false")
+
+    @Synchronized
+    fun getCrossfade(): Boolean = getSetting("crossfade", "false") == "true"
+
+    @Synchronized
+    fun setCrossfade(enabled: Boolean) = setSetting("crossfade", if (enabled) "true" else "false")
+
+    @Synchronized
+    fun getAppLanguage(): String = getSetting("app_language", "System default")
+
+    @Synchronized
+    fun setAppLanguage(lang: String) = setSetting("app_language", lang)
+
+    @Synchronized
+    fun getStreamingQuality(): Int = getSetting("streaming_quality", "27").toIntOrNull() ?: 27
+
+    @Synchronized
+    fun setStreamingQuality(quality: Int) = setSetting("streaming_quality", quality.toString())
 
     @Synchronized
     fun getCachedArtwork(cacheKey: String): String? {
@@ -203,16 +252,26 @@ class DesktopDatabase {
     fun isYtConnected(): Boolean = !getYtCookies().isNullOrBlank()
 
     @Synchronized
-    fun saveYtConnection(accountName: String, cookies: String) {
+    fun getYtChannelHandle(): String? = getSetting("yt_channel_handle", "")?.takeIf { it.isNotBlank() }
+
+    @Synchronized
+    fun getYtPhotoUrl(): String? = getSetting("yt_photo_url", "")?.takeIf { it.isNotBlank() }
+
+    @Synchronized
+    fun saveYtConnection(accountName: String, cookies: String, channelHandle: String? = null, photoUrl: String? = null) {
         setSetting("yt_account_name", accountName)
         setSetting("yt_cookies", cookies)
         setSetting("yt_connected", "true")
+        if (channelHandle != null) setSetting("yt_channel_handle", channelHandle)
+        if (photoUrl != null) setSetting("yt_photo_url", photoUrl)
     }
 
     @Synchronized
     fun clearYtConnection() {
         setSetting("yt_account_name", "")
         setSetting("yt_cookies", "")
+        setSetting("yt_channel_handle", "")
+        setSetting("yt_photo_url", "")
         setSetting("yt_connected", "false")
     }
 

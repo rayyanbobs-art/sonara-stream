@@ -47,7 +47,11 @@ fun LoginScreen(
                 coroutineScope.launch {
                     val session = lastFmClient.completeWebAuth(token)
                     val username = session?.first ?: "Rayyanbobs"
+                    val sessionKey = session?.second.orEmpty()
                     database.setLastFmUser(username)
+                    if (sessionKey.isNotBlank()) {
+                        database.setLastFmSessionKey(sessionKey)
+                    }
                     database.setAuthenticated(true)
                     isAwaitingBrowser = false
                     onLoginSuccess(username)

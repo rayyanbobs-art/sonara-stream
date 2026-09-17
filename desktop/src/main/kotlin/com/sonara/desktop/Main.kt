@@ -43,8 +43,13 @@ import com.sonara.desktop.storage.DesktopDatabase
 import com.sonara.desktop.ui.*
 import com.sonara.desktop.update.DesktopUpdateManager
 
-fun main() = application {
-    val windowState = rememberWindowState(width = 1120.dp, height = 860.dp)
+fun main() {
+    Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+        System.err.println("Uncaught exception in thread ${thread.name}:")
+        throwable.printStackTrace()
+    }
+    application {
+        val windowState = rememberWindowState(width = 1120.dp, height = 860.dp)
 
     val database = remember { DesktopDatabase() }
     val artworkResolver = remember { DesktopArtworkResolver(database) }
@@ -52,7 +57,7 @@ fun main() = application {
     val losslessClient = remember { LosslessClient() }
     val searchService = remember { MusicSearchService(losslessClient) }
     val lrclibClient = remember { LrclibClient() }
-    val audioPlayer = remember { DesktopAudioPlayer(searchService, database) }
+    val audioPlayer = remember { DesktopAudioPlayer(searchService, database).apply { this.lastFmClient = lastFmClient } }
     val updateManager = remember { DesktopUpdateManager() }
 
     val playerState by audioPlayer.state.collectAsState()
@@ -64,6 +69,8 @@ fun main() = application {
     var lyrics by remember { mutableStateOf<List<SyncedLine>>(emptyList()) }
     var favoriteIds by remember { mutableStateOf(database.getFavorites().map { it.id }.toSet()) }
     var lastFmUser by remember { mutableStateOf(database.getLastFmUser()) }
+    var amoledMode by remember { mutableStateOf(database.getAmoledMode()) }
+    var dynamicColor by remember { mutableStateOf(database.getDynamicColor()) }
 
     // Fetch real-time synced lyrics when track changes
     LaunchedEffect(playerState.track?.id) {
@@ -168,7 +175,7 @@ fun main() = application {
             }
         }
     ) {
-        SonaraStreamTheme {
+        SonaraStreamTheme(amoledMode = amoledMode, dynamicColor = dynamicColor) {
             CompositionLocalProvider(LocalArtworkResolver provides artworkResolver) {
                 Box(
                     modifier = Modifier
@@ -232,7 +239,8 @@ fun main() = application {
                                             onPlayTrack = { trk -> handlePlayTrack(trk, listOf(trk)) },
                                             onNavigateToDiscover = { currentNav = NavItem.DISCOVER },
                                             onNavigateToSearch = { searchActive = true },
-                                            onNavigateToSettings = { currentNav = NavItem.SETTINGS }
+                                            onNavigateToSettings = { currentNav = NavItem.SETTINGS },
+                                            audioPlayer = audioPlayer
                                         )
                                         NavItem.PLAYLISTS -> PlaylistsScreen(
                                             onPlayTrack = ::handlePlayTrack,
@@ -264,7 +272,9 @@ fun main() = application {
                                             onSignOut = {
                                                 isAuthenticated = false
                                                 currentNav = NavItem.FEED
-                                            }
+                                            },
+                                            onAmoledChanged = { amoledMode = it },
+                                            onDynamicColorChanged = { dynamicColor = it }
                                         )
                                     }
                                 }
@@ -459,5 +469,6 @@ fun main() = application {
             }
         }
     }
+}
 }
 }

@@ -20,10 +20,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.sonara.desktop.audio.DesktopAudioPlayer
 import com.sonara.desktop.data.LastFmClient
 import com.sonara.desktop.model.LastFmStats
+import com.sonara.desktop.model.PlaybackStatus
+import com.sonara.desktop.model.PlayerState
 import com.sonara.desktop.model.ScrobbleItem
 import com.sonara.desktop.model.Track
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 @Composable
@@ -34,6 +40,7 @@ fun StatsScreen(
     onNavigateToDiscover: () -> Unit,
     onNavigateToSearch: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    audioPlayer: DesktopAudioPlayer? = null,
     modifier: Modifier = Modifier
 ) {
     var stats by remember { mutableStateOf(LastFmStats()) }
@@ -41,13 +48,50 @@ fun StatsScreen(
     var isLoading by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
 
+    val playerState by (audioPlayer?.state ?: remember { MutableStateFlow(PlayerState()) }).collectAsState()
+    val liveListenSecs by (audioPlayer?.liveListenSeconds ?: remember { MutableStateFlow(0L) }).collectAsState()
+
+    suspend fun refreshStats() {
+        if (lastFmUser.isNotBlank()) {
+            val s = lastFmClient.getUserStats(lastFmUser)
+            val r = lastFmClient.getRecentTracks(lastFmUser)
+            stats = s
+            recentTracks = r
+        }
+    }
+
     LaunchedEffect(lastFmUser) {
         isLoading = true
-        scope.launch {
-            stats = lastFmClient.getUserStats(lastFmUser)
-            recentTracks = lastFmClient.getRecentTracks(lastFmUser)
-            isLoading = false
+        refreshStats()
+        isLoading = false
+        // Live polling every 15s to catch web or external updates
+        while (isActive) {
+            delay(15_000L)
+            refreshStats()
         }
+    }
+
+    LaunchedEffect(audioPlayer) {
+        audioPlayer?.scrobbleEvents?.collect {
+            // Immediate optimistic increment so UI updates live with zero lag!
+            stats = stats.copy(
+                scrobbles = stats.scrobbles + 1,
+                tracks = stats.tracks + 1
+            )
+            refreshStats()
+        }
+    }
+
+    // Live total seconds calculation: lifetime estimated base + current session's live listened seconds
+    val totalSeconds = (stats.scrobbles * 210L) + liveListenSecs
+    val d = totalSeconds / 86400
+    val h = (totalSeconds % 86400) / 3600
+    val m = (totalSeconds % 3600) / 60
+    val s = totalSeconds % 60
+    val liveTimerStr = when {
+        d > 0 -> "${d}d ${h}h ${m}m"
+        h > 0 -> "${h}h ${m}m ${s}s"
+        else -> "${m}m ${s}s"
     }
 
     LazyColumn(
@@ -106,11 +150,11 @@ fun StatsScreen(
                         Icon(
                             imageVector = Icons.Rounded.Headphones,
                             contentDescription = null,
-                            tint = SonaraTokens.TextSecondary,
+                            tint = if (playerState.status == PlaybackStatus.PLAYING) SonaraTokens.Accent else SonaraTokens.TextSecondary,
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            text = stats.listeningTime,
+                            text = if (totalSeconds > 0) liveTimerStr else stats.listeningTime,
                             color = SonaraTokens.TextPrimary,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold
@@ -303,7 +347,24 @@ fun StatsScreen(
             }
         }
 
-        if (recentTracks.isEmpty()) {
+        val currentTrack = playerState.track
+        val hasNowPlaying = currentTrack != null
+        val alreadyInList = currentTrack != null && recentTracks.any {
+            it.title.equals(currentTrack.title, ignoreCase = true) && it.artist.equals(currentTrack.artist, ignoreCase = true)
+        }
+
+        if (hasNowPlaying && !alreadyInList) {
+            item {
+                DensityTrackRow(
+                    track = currentTrack!!,
+                    isPlaying = playerState.status == PlaybackStatus.PLAYING,
+                    isCurrent = true,
+                    onPlay = { onPlayTrack(currentTrack) }
+                )
+            }
+        }
+
+        if (recentTracks.isEmpty() && !hasNowPlaying) {
             item {
                 Box(
                     modifier = Modifier
@@ -320,8 +381,11 @@ fun StatsScreen(
             }
         } else {
             items(recentTracks) { scrobble ->
+                val isMatch = currentTrack != null &&
+                    currentTrack.title.equals(scrobble.title, ignoreCase = true) &&
+                    currentTrack.artist.equals(scrobble.artist, ignoreCase = true)
                 val track = Track(
-                    id = "scrobble_${scrobble.title.hashCode()}",
+                    id = "scrobble_${scrobble.title.hashCode()}_${scrobble.artist.hashCode()}",
                     title = scrobble.title,
                     artist = scrobble.artist,
                     album = scrobble.album,
@@ -330,8 +394,8 @@ fun StatsScreen(
                 )
                 DensityTrackRow(
                     track = track,
-                    isPlaying = false,
-                    isCurrent = false,
+                    isPlaying = isMatch && playerState.status == PlaybackStatus.PLAYING,
+                    isCurrent = isMatch,
                     onPlay = { onPlayTrack(track) }
                 )
             }

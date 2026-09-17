@@ -1,5 +1,6 @@
 package com.sonara.desktop.audio
 
+import com.sonara.desktop.data.LastFmClient
 import com.sonara.desktop.data.MusicSearchService
 import com.sonara.desktop.model.PlaybackStatus
 import com.sonara.desktop.model.PlayerState
@@ -11,8 +12,11 @@ import javafx.scene.media.Media
 import javafx.scene.media.MediaPlayer
 import javafx.util.Duration
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
@@ -21,14 +25,28 @@ class DesktopAudioPlayer(
     private val searchService: MusicSearchService,
     private val database: DesktopDatabase
 ) {
+    var lastFmClient: LastFmClient? = null
+
+    private val _scrobbleEvents = MutableSharedFlow<Unit>(replay = 0, extraBufferCapacity = 10)
+    val scrobbleEvents: SharedFlow<Unit> = _scrobbleEvents.asSharedFlow()
+
+    val liveListenSeconds = MutableStateFlow(0L)
+
+    private var hasScrobbledCurrent = false
+    private var hasUpdatedNowPlaying = false
+    private var lastRecordedSecond = -1L
     companion object {
         private val javafxStarted = AtomicBoolean(false)
         fun initJavaFx() {
             if (javafxStarted.compareAndSet(false, true)) {
                 try {
-                    Platform.startup { }
+                    Platform.startup {
+                        Platform.setImplicitExit(false)
+                    }
                 } catch (_: IllegalStateException) {
-                    // Already initialized
+                    try {
+                        Platform.setImplicitExit(false)
+                    } catch (_: Exception) {}
                 }
             }
         }
@@ -52,6 +70,10 @@ class DesktopAudioPlayer(
     }
 
     fun play(track: Track, newQueue: List<Track> = emptyList()) {
+        hasScrobbledCurrent = false
+        hasUpdatedNowPlaying = false
+        lastRecordedSecond = -1L
+
         scope.launch {
             try {
                 if (newQueue.isNotEmpty()) {
@@ -73,9 +95,10 @@ class DesktopAudioPlayer(
                     durationMs = track.durationMs
                 )
 
-                // Resolve audio stream URL (lossless FLAC or HQ YouTube stream)
+                // Resolve audio stream URL with preferred user quality (lossless FLAC or HQ YouTube stream)
+                val quality = database.getStreamingQuality()
                 val resolved = if (track.streamUrl.isNullOrBlank()) {
-                    searchService.resolveAudioStream(track)
+                    searchService.resolveAudioStream(track, quality)
                 } else {
                     track
                 }
@@ -140,13 +163,36 @@ class DesktopAudioPlayer(
                         val player = MediaPlayer(media)
                         mediaPlayer = player
 
-                        player.volume = if (_state.value.isMuted) 0.0 else _state.value.volume.toDouble()
+                        player.volume = if (database.getBitPerfect()) {
+                            1.0
+                        } else {
+                            if (_state.value.isMuted) 0.0 else _state.value.volume.toDouble()
+                        }
 
                         player.currentTimeProperty().addListener { _, _, newTime ->
                             if (newTime != null) {
                                 val ms = newTime.toMillis().toLong()
                                 if (ms >= 0) {
                                     _state.value = _state.value.copy(positionMs = ms)
+                                    val sec = ms / 1000
+                                    if (sec != lastRecordedSecond && _state.value.status == PlaybackStatus.PLAYING) {
+                                        lastRecordedSecond = sec
+                                        liveListenSeconds.value += 1L
+                                    }
+                                    val totalMs = _state.value.durationMs
+                                    if (!hasScrobbledCurrent && totalMs > 0L) {
+                                        val scrobbleThreshold = minOf(totalMs / 2, 240_000L)
+                                        if (ms >= 30_000L && ms >= scrobbleThreshold) {
+                                            hasScrobbledCurrent = true
+                                            val sk = database.getLastFmSessionKey()
+                                            scope.launch(Dispatchers.IO) {
+                                                if (sk.isNotBlank()) {
+                                                    lastFmClient?.scrobble(resolved.artist, resolved.title, resolved.album, System.currentTimeMillis() / 1000, sk)
+                                                }
+                                                _scrobbleEvents.emit(Unit)
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -170,6 +216,15 @@ class DesktopAudioPlayer(
 
                         player.setOnPlaying {
                             _state.value = _state.value.copy(status = PlaybackStatus.PLAYING)
+                            if (!hasUpdatedNowPlaying) {
+                                hasUpdatedNowPlaying = true
+                                val sk = database.getLastFmSessionKey()
+                                if (sk.isNotBlank()) {
+                                    scope.launch(Dispatchers.IO) {
+                                        lastFmClient?.updateNowPlaying(resolved.artist, resolved.title, resolved.album, sk)
+                                    }
+                                }
+                            }
                         }
 
                         player.setOnPaused {
@@ -280,8 +335,13 @@ class DesktopAudioPlayer(
         val clamped = volume.coerceIn(0f, 1f)
         _state.value = _state.value.copy(volume = clamped, isMuted = false)
         Platform.runLater {
-            mediaPlayer?.volume = clamped.toDouble()
-            mediaPlayer?.isMute = false
+            if (!database.getBitPerfect()) {
+                mediaPlayer?.volume = clamped.toDouble()
+                mediaPlayer?.isMute = false
+            } else {
+                mediaPlayer?.volume = 1.0
+                mediaPlayer?.isMute = false
+            }
         }
     }
 
@@ -301,7 +361,19 @@ class DesktopAudioPlayer(
             queueIndex = (queueIndex + 1) % playlistQueue.size
         }
         val nextTrack = playlistQueue.getOrNull(queueIndex) ?: return
-        play(nextTrack)
+        if (database.getCrossfade() && mediaPlayer != null && _state.value.status == PlaybackStatus.PLAYING) {
+            val oldPlayer = mediaPlayer
+            scope.launch {
+                val currentVol = oldPlayer?.volume ?: 1.0
+                for (step in 5 downTo 1) {
+                    Platform.runLater { oldPlayer?.volume = currentVol * (step / 5.0) }
+                    delay(200)
+                }
+                play(nextTrack)
+            }
+        } else {
+            play(nextTrack)
+        }
     }
 
     fun previous() {

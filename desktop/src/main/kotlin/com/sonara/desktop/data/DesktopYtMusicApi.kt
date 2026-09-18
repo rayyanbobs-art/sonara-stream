@@ -102,19 +102,29 @@ class DesktopYtMusicApi(
                 collectObjects(root, "activeAccountHeaderRenderer", headers)
                 val header = headers.firstOrNull() ?: return@withContext null
 
-                val accountName = header["accountName"]?.jsonObject?.get("runs")?.jsonArray?.firstOrNull()
-                    ?.jsonObject?.get("text")?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
-
-                if (accountName.isBlank()) return@withContext null
+                val accountName = (header["accountName"]?.jsonObject?.get("runs")?.jsonArray?.firstOrNull()
+                    ?.jsonObject?.get("text")?.jsonPrimitive?.contentOrNull?.trim()
+                    ?: header["accountName"]?.jsonObject?.get("simpleText")?.jsonPrimitive?.contentOrNull?.trim())
+                    .orEmpty()
 
                 val channelHandle = header["channelHandle"]?.jsonObject?.get("runs")?.jsonArray?.firstOrNull()
                     ?.jsonObject?.get("text")?.jsonPrimitive?.contentOrNull?.trim()
+                    ?: header["channelHandle"]?.jsonObject?.get("simpleText")?.jsonPrimitive?.contentOrNull?.trim()
 
-                val photoUrl = header["accountPhoto"]?.jsonObject?.get("thumbnails")?.jsonObject?.get("thumbnails")
-                    ?.jsonArray?.lastOrNull()?.jsonObject?.get("url")?.jsonPrimitive?.contentOrNull
+                val photoUrl = try {
+                    val photoObj = header["accountPhoto"]?.jsonObject
+                    val thumbArray = when (val t = photoObj?.get("thumbnails")) {
+                        is JsonArray -> t
+                        is JsonObject -> t["thumbnails"]?.jsonArray
+                        else -> null
+                    }
+                    thumbArray?.lastOrNull()?.jsonObject?.get("url")?.jsonPrimitive?.contentOrNull
+                } catch (_: Exception) {
+                    null
+                }
 
                 YtAccountInfo(
-                    accountName = accountName,
+                    accountName = if (accountName.isNotBlank()) accountName else "YouTube Music User",
                     channelHandle = channelHandle,
                     photoUrl = photoUrl
                 )

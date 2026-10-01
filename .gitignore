@@ -56,5 +56,7 @@ keystore_credentials.txt
 *.sqlite-wal
 *.sqlite-shm
 sonara_desktop.db
+build_assets_v4.0.3/
+final_apk/
 
 

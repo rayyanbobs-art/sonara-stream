@@ -64,6 +64,17 @@ class DesktopAudioPlayer(
     private val playlistQueue = mutableListOf<Track>()
     private var queueIndex = -1
 
+    private val _queue = MutableStateFlow<List<Track>>(emptyList())
+    val queue: StateFlow<List<Track>> = _queue.asStateFlow()
+
+    private val _queueIndex = MutableStateFlow(-1)
+    val currentQueueIndex: StateFlow<Int> = _queueIndex.asStateFlow()
+
+    private fun syncQueueState() {
+        _queue.value = playlistQueue.toList()
+        _queueIndex.value = queueIndex
+    }
+
     init {
         initJavaFx()
         proxy.start()
@@ -86,6 +97,7 @@ class DesktopAudioPlayer(
                 } else {
                     queueIndex = playlistQueue.indexOfFirst { it.id == track.id }
                 }
+                syncQueueState()
 
                 _state.value = _state.value.copy(
                     track = track,
@@ -95,21 +107,18 @@ class DesktopAudioPlayer(
                     durationMs = track.durationMs
                 )
 
-                // Resolve audio stream URL with preferred user quality (lossless FLAC or HQ YouTube stream)
-                val quality = database.getStreamingQuality()
-                val resolved = if (track.streamUrl.isNullOrBlank()) {
+                // Check if this is a local audio file
+                val localFile = track.localFilePath?.let { File(it) }
+                val isLocalFile = localFile != null && localFile.exists() && localFile.length() > 0
+
+                val resolved = if (isLocalFile) {
+                    track
+                } else if (track.streamUrl.isNullOrBlank()) {
+                    // Resolve audio stream URL with preferred user quality (lossless FLAC or HQ YouTube stream)
+                    val quality = database.getStreamingQuality()
                     searchService.resolveAudioStream(track, quality)
                 } else {
                     track
-                }
-
-                val finalUrl = resolved.streamUrl
-                if (finalUrl.isNullOrBlank()) {
-                    _state.value = _state.value.copy(
-                        status = PlaybackStatus.ERROR,
-                        errorMessage = "Could not resolve audio stream for ${track.title}"
-                    )
-                    return@launch
                 }
 
                 _state.value = _state.value.copy(
@@ -119,21 +128,34 @@ class DesktopAudioPlayer(
 
                 database.addToHistory(resolved)
 
-                // High-speed chunked cache: download in 1MB Range chunks (~500ms) to ensure continuous playback
-                val targetId = resolved.videoId ?: resolved.id
-                val cachedFile = if (targetId.isNotBlank()) audioCache.getCachedFile(targetId) else null
-
-                val mediaSource = if (cachedFile != null && cachedFile.exists() && cachedFile.length() > 0) {
-                    cachedFile.toURI().toString()
-                } else if (!finalUrl.isNullOrBlank()) {
-                    val downloaded = audioCache.ensureTrackCached(targetId, finalUrl)
-                    if (downloaded.exists() && downloaded.length() > 0) {
-                        downloaded.toURI().toString()
-                    } else {
-                        proxy.getPlaybackUrl(finalUrl)
-                    }
+                val mediaSource = if (isLocalFile) {
+                    localFile!!.toURI().toString()
                 } else {
-                    null
+                    val finalUrl = resolved.streamUrl
+                    if (finalUrl.isNullOrBlank()) {
+                        _state.value = _state.value.copy(
+                            status = PlaybackStatus.ERROR,
+                            errorMessage = "Could not resolve audio stream for ${track.title}"
+                        )
+                        return@launch
+                    }
+
+                    // High-speed chunked cache: download in 1MB Range chunks (~500ms) to ensure continuous playback
+                    val targetId = resolved.videoId ?: resolved.id
+                    val cachedFile = if (targetId.isNotBlank()) audioCache.getCachedFile(targetId) else null
+
+                    if (cachedFile != null && cachedFile.exists() && cachedFile.length() > 0) {
+                        cachedFile.toURI().toString()
+                    } else if (!finalUrl.isNullOrBlank()) {
+                        val downloaded = audioCache.ensureTrackCached(targetId, finalUrl)
+                        if (downloaded.exists() && downloaded.length() > 0) {
+                            downloaded.toURI().toString()
+                        } else {
+                            proxy.getPlaybackUrl(finalUrl)
+                        }
+                    } else {
+                        null
+                    }
                 }
 
                 if (mediaSource.isNullOrBlank()) {
@@ -285,6 +307,7 @@ class DesktopAudioPlayer(
         } else {
             val insertIdx = (queueIndex + 1).coerceAtMost(playlistQueue.size)
             playlistQueue.add(insertIdx, track)
+            syncQueueState()
             prewarmNextTrack()
         }
     }
@@ -294,9 +317,60 @@ class DesktopAudioPlayer(
             play(track, listOf(track))
         } else {
             playlistQueue.add(track)
+            syncQueueState()
             if (playlistQueue.size == queueIndex + 2) {
                 prewarmNextTrack()
             }
+        }
+    }
+
+    fun removeFromQueue(index: Int) {
+        if (index in playlistQueue.indices) {
+            playlistQueue.removeAt(index)
+            if (queueIndex > index) {
+                queueIndex--
+            } else if (queueIndex == index) {
+                if (playlistQueue.isNotEmpty()) {
+                    queueIndex = queueIndex.coerceAtMost(playlistQueue.lastIndex)
+                    play(playlistQueue[queueIndex])
+                } else {
+                    stopCurrentPlayer()
+                    _state.value = PlayerState()
+                }
+            }
+            syncQueueState()
+        }
+    }
+
+    fun moveQueueItem(fromIndex: Int, toIndex: Int) {
+        if (fromIndex in playlistQueue.indices && toIndex in playlistQueue.indices && fromIndex != toIndex) {
+            val currentTrack = playlistQueue.getOrNull(queueIndex)
+            val item = playlistQueue.removeAt(fromIndex)
+            playlistQueue.add(toIndex, item)
+            if (currentTrack != null) {
+                queueIndex = playlistQueue.indexOfFirst { it.id == currentTrack.id }.coerceAtLeast(0)
+            }
+            syncQueueState()
+        }
+    }
+
+    fun clearQueue() {
+        val current = _state.value.track
+        playlistQueue.clear()
+        if (current != null) {
+            playlistQueue.add(current)
+            queueIndex = 0
+        } else {
+            queueIndex = -1
+        }
+        syncQueueState()
+    }
+
+    fun jumpToQueueIndex(index: Int) {
+        if (index in playlistQueue.indices) {
+            queueIndex = index
+            syncQueueState()
+            play(playlistQueue[index])
         }
     }
 

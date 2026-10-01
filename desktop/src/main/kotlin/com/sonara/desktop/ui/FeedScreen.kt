@@ -74,6 +74,7 @@ fun FeedScreen(
         modifier = modifier
             .fillMaxSize()
             .padding(horizontal = 24.dp, vertical = 8.dp),
+        contentPadding = PaddingValues(bottom = if (currentTrack != null) 160.dp else 90.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         // Top Header

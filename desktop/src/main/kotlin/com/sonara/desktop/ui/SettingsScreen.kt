@@ -19,14 +19,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.BorderStroke
+import com.sonara.desktop.data.BrowserCookieImporter
 import com.sonara.desktop.data.DesktopYtMusicApi
 import com.sonara.desktop.data.LastFmClient
 import com.sonara.desktop.data.LosslessClient
 import com.sonara.desktop.storage.DesktopDatabase
 import com.sonara.desktop.update.DesktopUpdateManager
 import com.sonara.desktop.update.DesktopUpdateState
+import com.sonara.desktop.i18n.LocalStrings
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import java.awt.Desktop
+import java.net.URI
 
 @Composable
 fun SettingsScreen(
@@ -38,8 +43,11 @@ fun SettingsScreen(
     onSignOut: () -> Unit = {},
     onAmoledChanged: (Boolean) -> Unit = {},
     onDynamicColorChanged: (Boolean) -> Unit = {},
+    onDynamicNowPlayingChanged: (Boolean) -> Unit = {},
+    onLanguageChanged: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val strings = LocalStrings.current
     val coroutineScope = rememberCoroutineScope()
     var lastFmUser by remember { mutableStateOf(database.getLastFmUser()) }
     var showUserDialog by remember { mutableStateOf(false) }
@@ -52,7 +60,47 @@ fun SettingsScreen(
     var ytSyncEnabled by remember { mutableStateOf(database.isYtSyncEnabled()) }
     var isYtConnecting by remember { mutableStateOf(false) }
     var showYtDetailsDialog by remember { mutableStateOf(false) }
+    var showBrowserAuthDialog by remember { mutableStateOf(false) }
     val ytMusicApi = remember { DesktopYtMusicApi() }
+
+    fun handleConnectYouTube() {
+        if (isYtConnected) {
+            showYtDetailsDialog = true
+            return
+        }
+        isYtConnecting = true
+        coroutineScope.launch {
+            // First attempt: Check for active cookies in installed browsers (Firefox, Chrome, Edge, Brave, etc.)
+            val existingCookies = BrowserCookieImporter.findYouTubeMusicCookies()
+            if (existingCookies != null) {
+                val accountInfo = ytMusicApi.fetchAccountInfo(existingCookies)
+                if (accountInfo != null) {
+                    val name = accountInfo.accountName.ifBlank { "YouTube Music User" }
+                    database.saveYtConnection(
+                        accountName = name,
+                        cookies = existingCookies,
+                        channelHandle = accountInfo.channelHandle,
+                        photoUrl = accountInfo.photoUrl
+                    )
+                    database.setYtSyncEnabled(true)
+                    isYtConnected = true
+                    ytAccountName = name
+                    ytChannelHandle = accountInfo.channelHandle.orEmpty()
+                    ytSyncEnabled = true
+                    isYtConnecting = false
+                    return@launch
+                }
+            }
+
+            // If not found in browser yet, open default system browser to music.youtube.com
+            try {
+                if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                    Desktop.getDesktop().browse(URI("https://music.youtube.com"))
+                }
+            } catch (_: Exception) {}
+            showBrowserAuthDialog = true
+        }
+    }
 
     var amoledMode by remember { mutableStateOf(database.getAmoledMode()) }
     var dynamicColor by remember { mutableStateOf(database.getDynamicColor()) }
@@ -72,7 +120,7 @@ fun SettingsScreen(
             onDismissRequest = { showUserDialog = false },
             containerColor = SonaraTokens.SurfaceRaised,
             title = {
-                Text("Last.fm Account", color = SonaraTokens.TextPrimary, fontWeight = FontWeight.Bold)
+                Text(strings.lastFmAccount, color = SonaraTokens.TextPrimary, fontWeight = FontWeight.Bold)
             },
             text = {
                 Column {
@@ -109,12 +157,12 @@ fun SettingsScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = SonaraTokens.Accent, contentColor = SonaraTokens.TextOnAccent)
                 ) {
-                    Text("Save", fontWeight = FontWeight.Bold)
+                    Text(strings.save, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showUserDialog = false }) {
-                    Text("Cancel", color = SonaraTokens.TextSecondary)
+                    Text(strings.cancel, color = SonaraTokens.TextSecondary)
                 }
             }
         )
@@ -125,7 +173,7 @@ fun SettingsScreen(
             onDismissRequest = { showDisconnectDialog = false },
             containerColor = SonaraTokens.SurfaceRaised,
             title = {
-                Text("Disconnect Account", color = SonaraTokens.TextPrimary, fontWeight = FontWeight.Bold)
+                Text(strings.disconnectAccount, color = SonaraTokens.TextPrimary, fontWeight = FontWeight.Bold)
             },
             text = {
                 Text(
@@ -143,12 +191,12 @@ fun SettingsScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B2626), contentColor = Color.White)
                 ) {
-                    Text("Disconnect", fontWeight = FontWeight.Bold)
+                    Text(strings.disconnect, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDisconnectDialog = false }) {
-                    Text("Cancel", color = SonaraTokens.TextSecondary)
+                    Text(strings.cancel, color = SonaraTokens.TextSecondary)
                 }
             }
         )
@@ -159,7 +207,7 @@ fun SettingsScreen(
             onDismissRequest = { showYtDetailsDialog = false },
             containerColor = SonaraTokens.SurfaceRaised,
             title = {
-                Text("YouTube Music Account", color = SonaraTokens.TextPrimary, fontWeight = FontWeight.Bold)
+                Text(strings.youtubeAccount, color = SonaraTokens.TextPrimary, fontWeight = FontWeight.Bold)
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -194,7 +242,7 @@ fun SettingsScreen(
                     onClick = { showYtDetailsDialog = false },
                     colors = ButtonDefaults.buttonColors(containerColor = SonaraTokens.Accent, contentColor = SonaraTokens.TextOnAccent)
                 ) {
-                    Text("Done", fontWeight = FontWeight.Bold)
+                    Text(strings.done, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -209,7 +257,103 @@ fun SettingsScreen(
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFD97070))
                 ) {
-                    Text("Disconnect Account")
+                    Text(strings.disconnectAccount)
+                }
+            }
+        )
+    }
+
+    if (showBrowserAuthDialog && !isYtConnected) {
+        LaunchedEffect(Unit) {
+            while (showBrowserAuthDialog && !isYtConnected) {
+                delay(2000)
+                val cookies = BrowserCookieImporter.findYouTubeMusicCookies()
+                if (cookies != null) {
+                    val accountInfo = ytMusicApi.fetchAccountInfo(cookies)
+                    if (accountInfo != null) {
+                        val name = accountInfo.accountName.ifBlank { "YouTube Music User" }
+                        database.saveYtConnection(
+                            accountName = name,
+                            cookies = cookies,
+                            channelHandle = accountInfo.channelHandle,
+                            photoUrl = accountInfo.photoUrl
+                        )
+                        database.setYtSyncEnabled(true)
+                        isYtConnected = true
+                        ytAccountName = name
+                        ytChannelHandle = accountInfo.channelHandle.orEmpty()
+                        ytSyncEnabled = true
+                        isYtConnecting = false
+                        showBrowserAuthDialog = false
+                        break
+                    }
+                }
+            }
+        }
+
+        AlertDialog(
+            onDismissRequest = {
+                showBrowserAuthDialog = false
+                isYtConnecting = false
+            },
+            containerColor = SonaraTokens.SurfaceRaised,
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    CircularProgressIndicator(
+                        color = SonaraTokens.Accent,
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.5.dp
+                    )
+                    Text(
+                        "YouTube Music Sign-In",
+                        color = SonaraTokens.TextPrimary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp
+                    )
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "We opened YouTube Music in your browser.",
+                        color = SonaraTokens.TextPrimary,
+                        fontSize = 14.sp
+                    )
+                    Text(
+                        "Sign in to your Google account in the browser. Sonara Stream will automatically detect your login and connect your account here.",
+                        color = SonaraTokens.TextSecondary,
+                        fontSize = 13.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        try {
+                            if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                                Desktop.getDesktop().browse(URI("https://music.youtube.com"))
+                            }
+                        } catch (_: Exception) {}
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = SonaraTokens.Accent,
+                        contentColor = SonaraTokens.TextOnAccent
+                    )
+                ) {
+                    Text("Re-open Browser", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showBrowserAuthDialog = false
+                        isYtConnecting = false
+                    }
+                ) {
+                    Text("Cancel", color = SonaraTokens.TextSecondary)
                 }
             }
         )
@@ -231,11 +375,12 @@ fun SettingsScreen(
             onDismissRequest = { showLanguageDialog = false },
             containerColor = SonaraTokens.SurfaceRaised,
             title = {
-                Text("App Language", color = SonaraTokens.TextPrimary, fontWeight = FontWeight.Bold)
+                Text(strings.chooseLanguage, color = SonaraTokens.TextPrimary, fontWeight = FontWeight.Bold)
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     languages.forEach { lang ->
+                        val displayLabel = if (lang == "System default") strings.systemDefault else lang
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
@@ -244,6 +389,7 @@ fun SettingsScreen(
                                 .clickable {
                                     appLanguage = lang
                                     database.setAppLanguage(lang)
+                                    onLanguageChanged(lang)
                                     showLanguageDialog = false
                                 }
                                 .padding(vertical = 8.dp, horizontal = 8.dp)
@@ -253,6 +399,7 @@ fun SettingsScreen(
                                 onClick = {
                                     appLanguage = lang
                                     database.setAppLanguage(lang)
+                                    onLanguageChanged(lang)
                                     showLanguageDialog = false
                                 },
                                 colors = RadioButtonDefaults.colors(
@@ -261,14 +408,14 @@ fun SettingsScreen(
                                 )
                             )
                             Spacer(modifier = Modifier.width(10.dp))
-                            Text(lang, color = SonaraTokens.TextPrimary, fontSize = 14.sp)
+                            Text(displayLabel, color = SonaraTokens.TextPrimary, fontSize = 14.sp)
                         }
                     }
                 }
             },
             confirmButton = {
                 TextButton(onClick = { showLanguageDialog = false }) {
-                    Text("Close", color = SonaraTokens.Accent)
+                    Text(strings.close, color = SonaraTokens.Accent)
                 }
             }
         )
@@ -279,7 +426,7 @@ fun SettingsScreen(
             onDismissRequest = { showQualityDialog = false },
             containerColor = SonaraTokens.SurfaceRaised,
             title = {
-                Text("Streaming Quality", color = SonaraTokens.TextPrimary, fontWeight = FontWeight.Bold)
+                Text(strings.streamingQuality, color = SonaraTokens.TextPrimary, fontWeight = FontWeight.Bold)
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -322,7 +469,7 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showQualityDialog = false }) {
-                    Text("Close", color = SonaraTokens.Accent)
+                    Text(strings.close, color = SonaraTokens.Accent)
                 }
             }
         )
@@ -349,7 +496,7 @@ fun SettingsScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.ArrowBack,
-                        contentDescription = "Back",
+                        contentDescription = strings.back,
                         tint = SonaraTokens.TextPrimary,
                         modifier = Modifier.size(22.dp)
                     )
@@ -358,7 +505,7 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.width(16.dp))
 
                 Text(
-                    text = "Settings",
+                    text = strings.settings,
                     color = SonaraTokens.TextPrimary,
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
@@ -380,12 +527,12 @@ fun SettingsScreen(
                         .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Green circular avatar with "R"
+                    // Dynamic circular avatar with user initial
                     Box(
                         modifier = Modifier
                             .size(48.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF3F6438)),
+                            .background(SonaraTokens.AccentStrong),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -407,7 +554,7 @@ fun SettingsScreen(
                             }
                     ) {
                         Text(
-                            text = "Last.fm Account",
+                            text = strings.lastFmAccount,
                             color = SonaraTokens.TextSecondary,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium
@@ -433,7 +580,7 @@ fun SettingsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.ExitToApp,
-                            contentDescription = "Disconnect Account",
+                            contentDescription = strings.disconnectAccount,
                             tint = Color(0xFFD97070),
                             modifier = Modifier.size(20.dp)
                         )
@@ -446,7 +593,7 @@ fun SettingsScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "Language",
+                    text = strings.sectionLanguage,
                     color = SonaraTokens.TextPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
@@ -455,8 +602,8 @@ fun SettingsScreen(
 
                 SettingsNavRow(
                     icon = Icons.Rounded.Language,
-                    title = "App Language",
-                    subtitle = appLanguage,
+                    title = strings.appLanguage,
+                    subtitle = if (appLanguage == "System default") strings.systemDefault else appLanguage,
                     onClick = { showLanguageDialog = true }
                 )
             }
@@ -466,7 +613,7 @@ fun SettingsScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "YouTube Music",
+                    text = strings.sectionYouTube,
                     color = SonaraTokens.TextPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
@@ -475,51 +622,22 @@ fun SettingsScreen(
 
                 SettingsNavRow(
                     icon = Icons.Rounded.Sync,
-                    title = if (isYtConnected) "YouTube Music Account" else "Connect YouTube Music",
+                    title = if (isYtConnected) strings.youtubeAccount else strings.connectYouTube,
                     subtitle = if (isYtConnected) {
-                        "Connected: ${ytAccountName.ifBlank { "Active" }}${if (ytChannelHandle.isNotBlank()) " ($ytChannelHandle)" else ""} · Real-time Sync Active"
+                        "${strings.connected}: ${ytAccountName.ifBlank { "Active" }}${if (ytChannelHandle.isNotBlank()) " ($ytChannelHandle)" else ""} · ${strings.realtimeSyncActive}"
                     } else if (isYtConnecting) {
-                        "Opening Google sign-in window..."
+                        strings.connectingYouTube
                     } else {
-                        "Sign in to sync your YouTube Music playlists live"
+                        strings.connectYouTubeSub
                     },
-                    badge = if (isYtConnected) "Connected" else if (isYtConnecting) "Connecting..." else null,
-                    onClick = {
-                        if (isYtConnected) {
-                            showYtDetailsDialog = true
-                        } else {
-                            isYtConnecting = true
-                            YouTubeLoginWindow.open(
-                                onSuccess = { cookies ->
-                                    coroutineScope.launch {
-                                        val accountInfo = ytMusicApi.fetchAccountInfo(cookies)
-                                        val name = accountInfo?.accountName?.ifBlank { "YouTube Music User" } ?: "YouTube Music User"
-                                        database.saveYtConnection(
-                                            accountName = name,
-                                            cookies = cookies,
-                                            channelHandle = accountInfo?.channelHandle,
-                                            photoUrl = accountInfo?.photoUrl
-                                        )
-                                        database.setYtSyncEnabled(true)
-                                        isYtConnected = true
-                                        ytAccountName = name
-                                        ytChannelHandle = accountInfo?.channelHandle.orEmpty()
-                                        ytSyncEnabled = true
-                                        isYtConnecting = false
-                                    }
-                                },
-                                onCancel = {
-                                    isYtConnecting = false
-                                }
-                            )
-                        }
-                    }
+                    badge = if (isYtConnected) strings.connected else if (isYtConnecting) strings.connectingBadge else null,
+                    onClick = { handleConnectYouTube() }
                 )
 
                 SettingsToggleRow(
                     icon = Icons.Rounded.Sync,
-                    title = "Two-way Playlist Sync",
-                    subtitle = if (isYtConnected) "Automatically sync playlists between Sonara and YouTube Music" else "Connect an account first",
+                    title = strings.twoWayPlaylistSync,
+                    subtitle = if (isYtConnected) strings.twoWayPlaylistSyncSub else strings.connectAccountFirst,
                     checked = ytSyncEnabled && isYtConnected,
                     enabled = isYtConnected,
                     onCheckedChange = {
@@ -527,38 +645,17 @@ fun SettingsScreen(
                             database.setYtSyncEnabled(it)
                             ytSyncEnabled = it
                         } else {
-                            isYtConnecting = true
-                            YouTubeLoginWindow.open(
-                                onSuccess = { cookies ->
-                                    coroutineScope.launch {
-                                        val accountInfo = ytMusicApi.fetchAccountInfo(cookies)
-                                        val name = accountInfo?.accountName?.ifBlank { "YouTube Music User" } ?: "YouTube Music User"
-                                        database.saveYtConnection(
-                                            accountName = name,
-                                            cookies = cookies,
-                                            channelHandle = accountInfo?.channelHandle,
-                                            photoUrl = accountInfo?.photoUrl
-                                        )
-                                        database.setYtSyncEnabled(true)
-                                        isYtConnected = true
-                                        ytAccountName = name
-                                        ytChannelHandle = accountInfo?.channelHandle.orEmpty()
-                                        ytSyncEnabled = true
-                                        isYtConnecting = false
-                                    }
-                                },
-                                onCancel = { isYtConnecting = false }
-                            )
+                            handleConnectYouTube()
                         }
                     }
                 )
             }
         }
 
-        // Section 4: SOLID GREEN FILLED ROW - Downloads & Offline Music
+        // Section 4: Downloads & Offline Music
         item {
             Surface(
-                color = Color(0xFF3F6438),
+                color = SonaraTokens.AccentStrong,
                 shape = RoundedCornerShape(SonaraTokens.RadiusMd),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -574,13 +671,13 @@ fun SettingsScreen(
                         modifier = Modifier
                             .size(44.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFFC7E2B5)),
+                            .background(SonaraTokens.Accent),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.ArrowDownward,
                             contentDescription = "Download",
-                            tint = Color(0xFF1B3117),
+                            tint = SonaraTokens.TextOnAccent,
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -589,15 +686,15 @@ fun SettingsScreen(
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Downloads & Offline Music",
-                            color = Color.White,
+                            text = strings.downloadsAndOffline,
+                            color = SonaraTokens.TextPrimary,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "No offline songs downloaded",
-                            color = Color(0xFFC5DAC0),
+                            text = strings.noOfflineSongs,
+                            color = SonaraTokens.TextPrimary.copy(alpha = 0.8f),
                             fontSize = 13.sp
                         )
                     }
@@ -605,7 +702,7 @@ fun SettingsScreen(
                     Icon(
                         imageVector = Icons.Rounded.ChevronRight,
                         contentDescription = null,
-                        tint = Color.White,
+                        tint = SonaraTokens.TextPrimary,
                         modifier = Modifier.size(22.dp)
                     )
                 }
@@ -616,7 +713,7 @@ fun SettingsScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "Appearance",
+                    text = strings.sectionAppearance,
                     color = SonaraTokens.TextPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
@@ -625,8 +722,8 @@ fun SettingsScreen(
 
                 SettingsToggleRow(
                     icon = Icons.Rounded.BrightnessMedium,
-                    title = "AMOLED Mode",
-                    subtitle = "Pure black background",
+                    title = strings.amoledMode,
+                    subtitle = strings.amoledModeSub,
                     checked = amoledMode,
                     onCheckedChange = {
                         amoledMode = it
@@ -637,8 +734,8 @@ fun SettingsScreen(
 
                 SettingsToggleRow(
                     icon = Icons.Rounded.Palette,
-                    title = "Dynamic Color",
-                    subtitle = "Use your wallpaper's colors",
+                    title = strings.dynamicColor,
+                    subtitle = strings.dynamicColorSub,
                     checked = dynamicColor,
                     onCheckedChange = {
                         dynamicColor = it
@@ -649,12 +746,13 @@ fun SettingsScreen(
 
                 SettingsToggleRow(
                     icon = Icons.Rounded.Album,
-                    title = "Dynamic Now Playing",
-                    subtitle = "Match album colors",
+                    title = strings.dynamicNowPlaying,
+                    subtitle = strings.dynamicNowPlayingSub,
                     checked = dynamicNowPlaying,
                     onCheckedChange = {
                         dynamicNowPlaying = it
                         database.setDynamicNowPlaying(it)
+                        onDynamicNowPlayingChanged(it)
                     }
                 )
             }
@@ -664,7 +762,7 @@ fun SettingsScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "Audio & Streaming",
+                    text = strings.sectionAudio,
                     color = SonaraTokens.TextPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
@@ -680,15 +778,15 @@ fun SettingsScreen(
 
                 SettingsNavRow(
                     icon = Icons.Rounded.HighQuality,
-                    title = "Streaming Quality",
+                    title = strings.streamingQuality,
                     subtitle = qualityTitle,
                     onClick = { showQualityDialog = true }
                 )
 
                 SettingsToggleRow(
                     icon = Icons.Rounded.GraphicEq,
-                    title = "Bit-Perfect Output",
-                    subtitle = "Bypass OS mixer resampling for pristine audio",
+                    title = strings.bitPerfect,
+                    subtitle = strings.bitPerfectSub,
                     checked = bitPerfect,
                     onCheckedChange = {
                         bitPerfect = it
@@ -698,8 +796,8 @@ fun SettingsScreen(
 
                 SettingsToggleRow(
                     icon = Icons.Rounded.FastForward,
-                    title = "Gapless & Crossfade",
-                    subtitle = "Smooth 3-second crossfade between tracks",
+                    title = strings.crossfade,
+                    subtitle = strings.crossfadeSub,
                     checked = crossfade,
                     onCheckedChange = {
                         crossfade = it
@@ -713,7 +811,7 @@ fun SettingsScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "Updates",
+                    text = strings.sectionUpdates,
                     color = SonaraTokens.TextPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
@@ -763,7 +861,7 @@ fun SettingsScreen(
 
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = if (updateState.isUpdateAvailable) "Update Available" else "App Version",
+                                    text = if (updateState.isUpdateAvailable) strings.updateAvailable else strings.appVersion,
                                     color = SonaraTokens.TextPrimary,
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.SemiBold
@@ -772,9 +870,9 @@ fun SettingsScreen(
                                 Text(
                                     text = when {
                                         updateState.isUpdateAvailable -> "Sonara Stream v${updateState.latestVersion} is ready to install"
-                                        updateState.isChecking -> "Checking for updates..."
+                                        updateState.isChecking -> strings.checkingForUpdates
                                         !updateState.message.isNullOrBlank() -> updateState.message!!
-                                        else -> "You're on the latest version (v${DesktopUpdateManager.CURRENT_VERSION})"
+                                        else -> "${strings.onLatestVersion} (v${DesktopUpdateManager.CURRENT_VERSION})"
                                     },
                                     color = if (updateState.isUpdateAvailable) SonaraTokens.Accent else SonaraTokens.TextSecondary,
                                     fontSize = 13.sp
@@ -795,7 +893,7 @@ fun SettingsScreen(
                                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                                 ) {
                                     Text(
-                                        "Update Now",
+                                        strings.updateNow,
                                         color = SonaraTokens.TextOnAccent,
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold
@@ -813,7 +911,7 @@ fun SettingsScreen(
                                         border = BorderStroke(1.dp, SonaraTokens.SurfaceChip),
                                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                                     ) {
-                                        Text("Check", fontSize = 13.sp)
+                                        Text(strings.check, fontSize = 13.sp)
                                     }
                                     Button(
                                         onClick = { updateManager?.downloadAndInstall(force = true) },
@@ -822,7 +920,7 @@ fun SettingsScreen(
                                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                                     ) {
                                         Text(
-                                            "Update",
+                                            strings.update,
                                             color = SonaraTokens.TextOnAccent,
                                             fontSize = 13.sp,
                                             fontWeight = FontWeight.Bold
@@ -873,7 +971,7 @@ fun SettingsScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "About",
+                    text = strings.about,
                     color = SonaraTokens.TextPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,

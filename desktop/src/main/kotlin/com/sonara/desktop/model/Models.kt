@@ -16,6 +16,7 @@ data class Track(
     val audioQuality: String = "16-bit / 44.1 kHz",
     val isDownloaded: Boolean = false,
     val localFilePath: String? = null,
+    val isLocal: Boolean = false,
 )
 
 enum class PlaybackStatus {
@@ -91,10 +92,20 @@ data class ScrobbleItem(
     val isNowPlaying: Boolean = false
 )
 
+@Serializable
+data class LibraryFolder(
+    val id: String,
+    val path: String,
+    val addedAt: Long = System.currentTimeMillis(),
+    val songCount: Int = 0
+)
+
 enum class NavItem(val label: String) {
     FEED("Feed"),
-    STATS("Stats"),
+    SONGS("Songs"),
+    FAVORITES("Favorites"),
     PLAYLISTS("Playlists"),
+    STATS("Stats"),
     DISCOVER("Discover"),
     SETTINGS("Settings")
 }

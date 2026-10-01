@@ -311,9 +311,10 @@ class DesktopYtMusicApi(
                         ?.get("thumbnail")?.jsonObject?.get("thumbnails")?.jsonArray
                         ?: r["thumbnail"]?.jsonObject?.get("thumbnails")?.jsonArray
 
-                    val artworkUrl = thumbnails?.lastOrNull()?.jsonObject?.get("url")?.jsonPrimitive?.contentOrNull
+                    val rawUrl = thumbnails?.lastOrNull()?.jsonObject?.get("url")?.jsonPrimitive?.contentOrNull
                         ?.let { if (it.startsWith("//")) "https:$it" else it }
                         ?: "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
+                    val artworkUrl = DesktopArtworkResolver.upgradeQuality(rawUrl) ?: rawUrl
 
                     val durationStr = detailRuns?.mapNotNull { it.jsonObject["text"]?.jsonPrimitive?.contentOrNull }
                         ?.lastOrNull { it.contains(":") }

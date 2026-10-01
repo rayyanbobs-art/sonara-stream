@@ -3,6 +3,9 @@ package com.sonara.desktop.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -96,7 +99,7 @@ fun SearchScreen(
 
                     Spacer(modifier = Modifier.width(10.dp))
 
-                    OutlinedTextField(
+                    BasicTextField(
                         value = query,
                         onValueChange = { newQuery ->
                             query = newQuery
@@ -112,22 +115,31 @@ fun SearchScreen(
                                 results = emptyList()
                             }
                         },
-                        placeholder = {
-                            Text(
-                                "Search tracks, artists, albums...",
-                                color = SonaraTokens.TextSecondary.copy(alpha = 0.6f),
-                                fontSize = 14.sp
-                            )
-                        },
                         singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color.Transparent,
-                            unfocusedBorderColor = Color.Transparent,
-                            focusedTextColor = SonaraTokens.TextPrimary,
-                            unfocusedTextColor = SonaraTokens.TextPrimary,
-                            cursorColor = SonaraTokens.Accent
+                        textStyle = TextStyle(
+                            color = SonaraTokens.TextPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Normal
                         ),
-                        modifier = Modifier.weight(1f)
+                        cursorBrush = SolidColor(SonaraTokens.Accent),
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        decorationBox = { innerTextField ->
+                            Box(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                if (query.isEmpty()) {
+                                    Text(
+                                        "Search tracks, artists, albums...",
+                                        color = SonaraTokens.TextSecondary.copy(alpha = 0.6f),
+                                        fontSize = 15.sp
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        }
                     )
 
                     if (query.isNotEmpty()) {

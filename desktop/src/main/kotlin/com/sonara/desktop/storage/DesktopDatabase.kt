@@ -1,5 +1,6 @@
 package com.sonara.desktop.storage
 
+import com.sonara.desktop.model.LibraryFolder
 import com.sonara.desktop.model.Playlist
 import com.sonara.desktop.model.Track
 import java.io.File
@@ -101,6 +102,30 @@ class DesktopDatabase {
                         cache_key TEXT PRIMARY KEY,
                         url TEXT NOT NULL,
                         timestamp INTEGER NOT NULL
+                    );
+                """.trimIndent())
+
+                stmt.executeUpdate("""
+                    CREATE TABLE IF NOT EXISTS library_folders (
+                        id TEXT PRIMARY KEY,
+                        path TEXT UNIQUE NOT NULL,
+                        added_at INTEGER NOT NULL,
+                        song_count INTEGER DEFAULT 0
+                    );
+                """.trimIndent())
+
+                stmt.executeUpdate("""
+                    CREATE TABLE IF NOT EXISTS local_songs (
+                        id TEXT PRIMARY KEY,
+                        title TEXT NOT NULL,
+                        artist TEXT NOT NULL,
+                        album TEXT,
+                        duration_ms INTEGER,
+                        file_path TEXT UNIQUE NOT NULL,
+                        artwork_url TEXT,
+                        folder_id TEXT,
+                        added_at INTEGER,
+                        play_count INTEGER DEFAULT 0
                     );
                 """.trimIndent())
             }
@@ -534,5 +559,161 @@ class DesktopDatabase {
             }
         }
         return list
+    }
+
+    @Synchronized
+    fun addLibraryFolder(path: String): LibraryFolder {
+        val existing = getLibraryFolders().find { it.path.equals(path, ignoreCase = true) }
+        if (existing != null) return existing
+
+        val id = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        getConnection().use { conn ->
+            val sql = "INSERT INTO library_folders (id, path, added_at, song_count) VALUES (?, ?, ?, ?)"
+            conn.prepareStatement(sql).use { ps ->
+                ps.setString(1, id)
+                ps.setString(2, path)
+                ps.setLong(3, now)
+                ps.setInt(4, 0)
+                ps.executeUpdate()
+            }
+        }
+        return LibraryFolder(id = id, path = path, addedAt = now, songCount = 0)
+    }
+
+    @Synchronized
+    fun getLibraryFolders(): List<LibraryFolder> {
+        val list = mutableListOf<LibraryFolder>()
+        getConnection().use { conn ->
+            val sql = "SELECT * FROM library_folders ORDER BY added_at DESC"
+            conn.prepareStatement(sql).use { ps ->
+                ps.executeQuery().use { rs ->
+                    while (rs.next()) {
+                        list.add(
+                            LibraryFolder(
+                                id = rs.getString("id"),
+                                path = rs.getString("path"),
+                                addedAt = rs.getLong("added_at"),
+                                songCount = rs.getInt("song_count")
+                            )
+                        )
+                    }
+                }
+            }
+        }
+        return list
+    }
+
+    @Synchronized
+    fun removeLibraryFolder(folderId: String) {
+        getConnection().use { conn ->
+            conn.prepareStatement("DELETE FROM local_songs WHERE folder_id = ?").use {
+                it.setString(1, folderId)
+                it.executeUpdate()
+            }
+            conn.prepareStatement("DELETE FROM library_folders WHERE id = ?").use {
+                it.setString(1, folderId)
+                it.executeUpdate()
+            }
+        }
+    }
+
+    @Synchronized
+    fun updateFolderSongCount(folderId: String, count: Int) {
+        getConnection().use { conn ->
+            conn.prepareStatement("UPDATE library_folders SET song_count = ? WHERE id = ?").use {
+                it.setInt(1, count)
+                it.setString(2, folderId)
+                it.executeUpdate()
+            }
+        }
+    }
+
+    @Synchronized
+    fun saveLocalSongs(songs: List<Track>, folderId: String? = null) {
+        if (songs.isEmpty()) return
+        getConnection().use { conn ->
+            val sql = """
+                INSERT OR REPLACE INTO local_songs
+                (id, title, artist, album, duration_ms, file_path, artwork_url, folder_id, added_at, play_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT play_count FROM local_songs WHERE file_path = ?), 0))
+            """.trimIndent()
+            conn.prepareStatement(sql).use { ps ->
+                val now = System.currentTimeMillis()
+                for (track in songs) {
+                    val filePath = track.localFilePath ?: continue
+                    ps.setString(1, track.id)
+                    ps.setString(2, track.title)
+                    ps.setString(3, track.artist)
+                    ps.setString(4, track.album)
+                    ps.setLong(5, track.durationMs)
+                    ps.setString(6, filePath)
+                    ps.setString(7, track.artworkUrl)
+                    ps.setString(8, folderId)
+                    ps.setLong(9, now)
+                    ps.setString(10, filePath)
+                    ps.addBatch()
+                }
+                ps.executeBatch()
+            }
+        }
+    }
+
+    @Synchronized
+    fun getLocalSongs(): List<Track> {
+        val list = mutableListOf<Track>()
+        getConnection().use { conn ->
+            val sql = "SELECT * FROM local_songs ORDER BY title COLLATE NOCASE ASC"
+            conn.prepareStatement(sql).use { ps ->
+                ps.executeQuery().use { rs ->
+                    while (rs.next()) {
+                        list.add(
+                            Track(
+                                id = rs.getString("id"),
+                                title = rs.getString("title"),
+                                artist = rs.getString("artist"),
+                                album = rs.getString("album") ?: "",
+                                durationMs = rs.getLong("duration_ms"),
+                                artworkUrl = rs.getString("artwork_url"),
+                                videoId = null,
+                                streamUrl = null,
+                                isLossless = true,
+                                audioQuality = "Local Audio",
+                                isDownloaded = true,
+                                localFilePath = rs.getString("file_path"),
+                                isLocal = true
+                            )
+                        )
+                    }
+                }
+            }
+        }
+        return list
+    }
+
+    @Synchronized
+    fun deleteLocalSong(songId: String) {
+        getConnection().use { conn ->
+            conn.prepareStatement("DELETE FROM local_songs WHERE id = ?").use {
+                it.setString(1, songId)
+                it.executeUpdate()
+            }
+        }
+    }
+
+    @Synchronized
+    fun getAllLibrarySongs(): List<Track> {
+        val local = getLocalSongs()
+        val favs = getFavorites()
+        val map = LinkedHashMap<String, Track>()
+        for (t in local) {
+            map[t.id] = t
+        }
+        for (t in favs) {
+            if (!map.containsKey(t.id)) {
+                map[t.id] = t
+            }
+        }
+        return map.values.toList()
     }
 }

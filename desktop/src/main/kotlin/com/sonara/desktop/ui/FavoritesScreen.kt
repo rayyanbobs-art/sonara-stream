@@ -7,9 +7,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.Shuffle
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,41 +31,57 @@ fun FavoritesScreen(
     modifier: Modifier = Modifier
 ) {
     var favorites by remember { mutableStateOf(database.getFavorites()) }
+    var searchQuery by remember { mutableStateOf("") }
+
+    val filteredFavorites = remember(favorites, searchQuery) {
+        if (searchQuery.isBlank()) favorites
+        else {
+            val q = searchQuery.trim().lowercase()
+            favorites.filter {
+                it.title.lowercase().contains(q) ||
+                it.artist.lowercase().contains(q) ||
+                it.album.lowercase().contains(q)
+            }
+        }
+    }
+
+    val totalDurationMs = remember(filteredFavorites) {
+        filteredFavorites.sumOf { it.durationMs }
+    }
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 12.dp)
+            .padding(horizontal = 28.dp, vertical = 20.dp)
     ) {
+        // Header
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp)
+            modifier = Modifier.fillMaxWidth()
         ) {
             Column {
                 Text(
-                    text = "Liked Songs 📌",
+                    text = "Favorites",
                     color = SonaraTokens.TextPrimary,
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = (-0.5).sp
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Bold
                 )
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "${favorites.size} saved tracks · Offline & Streaming",
+                    text = "${filteredFavorites.size} saved tracks • ${formatDuration(totalDurationMs)} total",
                     color = SonaraTokens.TextSecondary,
                     fontSize = 13.sp
                 )
             }
 
-            if (favorites.isNotEmpty()) {
+            if (filteredFavorites.isNotEmpty()) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = {
-                            val shuffled = favorites.shuffled()
-                            onPlayTrack(shuffled.first(), shuffled)
+                            val shuffled = filteredFavorites.shuffled()
+                            val first = shuffled.firstOrNull()
+                            if (first != null) onPlayTrack(first, shuffled)
                         },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = SonaraTokens.SurfaceChip,
@@ -82,7 +96,8 @@ fun FavoritesScreen(
 
                     Button(
                         onClick = {
-                            onPlayTrack(favorites.first(), favorites)
+                            val first = filteredFavorites.firstOrNull()
+                            if (first != null) onPlayTrack(first, filteredFavorites)
                         },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = SonaraTokens.Accent,
@@ -98,11 +113,41 @@ fun FavoritesScreen(
             }
         }
 
+        if (favorites.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(16.dp))
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Search favorites...", color = SonaraTokens.TextSecondary, fontSize = 13.sp) },
+                singleLine = true,
+                leadingIcon = {
+                    Icon(Icons.Rounded.Search, contentDescription = null, tint = SonaraTokens.TextSecondary, modifier = Modifier.size(18.dp))
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Rounded.Close, contentDescription = "Clear", tint = SonaraTokens.TextSecondary, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = SonaraTokens.TextPrimary,
+                    unfocusedTextColor = SonaraTokens.TextPrimary,
+                    focusedBorderColor = SonaraTokens.Accent,
+                    unfocusedBorderColor = SonaraTokens.SurfaceChip,
+                    focusedContainerColor = SonaraTokens.Surface,
+                    unfocusedContainerColor = SonaraTokens.Surface
+                ),
+                shape = RoundedCornerShape(SonaraTokens.RadiusPill),
+                modifier = Modifier.fillMaxWidth().height(48.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         if (favorites.isEmpty()) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(bottom = 80.dp),
+                modifier = Modifier.fillMaxSize().weight(1f),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -129,23 +174,34 @@ fun FavoritesScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        "Click the heart button while listening to save tracks here",
+                        "Click the heart icon while listening to save tracks here",
                         color = SonaraTokens.TextSecondary,
                         fontSize = 13.sp
                     )
                 }
             }
+        } else if (filteredFavorites.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize().weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "No favorites match \"$searchQuery\"",
+                    color = SonaraTokens.TextSecondary,
+                    fontSize = 14.sp
+                )
+            }
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.fillMaxSize().weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                itemsIndexed(favorites, key = { index, item -> "${item.id}_$index" }) { _, track ->
+                itemsIndexed(filteredFavorites, key = { index, item -> "${item.id}_$index" }) { _, track ->
                     DensityTrackRow(
                         track = track,
                         isPlaying = isPlaying,
                         isCurrent = currentTrack?.id == track.id,
-                        onPlay = { onPlayTrack(track, favorites) },
+                        onPlay = { onPlayTrack(track, filteredFavorites) },
                         onPlayNext = onPlayNext,
                         onAddToQueue = onAddToQueue,
                         onToggleLike = { trk ->
@@ -154,10 +210,6 @@ fun FavoritesScreen(
                         },
                         isLiked = true
                     )
-                }
-
-                item {
-                    Spacer(modifier = Modifier.height(84.dp))
                 }
             }
         }

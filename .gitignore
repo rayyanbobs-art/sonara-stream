@@ -51,4 +51,10 @@ keystore_credentials.txt
 .env
 *.env
 .wrangler/
+*.db
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+sonara_desktop.db
+
 

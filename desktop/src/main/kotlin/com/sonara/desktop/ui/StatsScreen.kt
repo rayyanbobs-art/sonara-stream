@@ -98,6 +98,7 @@ fun StatsScreen(
         modifier = modifier
             .fillMaxSize()
             .padding(horizontal = 24.dp, vertical = 8.dp),
+        contentPadding = PaddingValues(bottom = if (playerState.track != null) 160.dp else 90.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // Top Header

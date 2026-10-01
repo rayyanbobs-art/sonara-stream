@@ -42,14 +42,18 @@ import com.sonara.desktop.data.DesktopArtworkResolver
 import com.sonara.desktop.storage.DesktopDatabase
 import com.sonara.desktop.ui.*
 import com.sonara.desktop.update.DesktopUpdateManager
+import com.sonara.desktop.i18n.DesktopStrings
+import com.sonara.desktop.i18n.LocalStrings
 
 fun main() {
+    System.setProperty("prism.order", "sw")
+    System.setProperty("prism.allowhidpi", "true")
     Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
         System.err.println("Uncaught exception in thread ${thread.name}:")
         throwable.printStackTrace()
     }
     application {
-        val windowState = rememberWindowState(width = 1120.dp, height = 860.dp)
+        val windowState = rememberWindowState(width = 1200.dp, height = 860.dp)
 
     val database = remember { DesktopDatabase() }
     val artworkResolver = remember { DesktopArtworkResolver(database) }
@@ -61,21 +65,35 @@ fun main() {
     val updateManager = remember { DesktopUpdateManager() }
 
     val playerState by audioPlayer.state.collectAsState()
+    val queue by audioPlayer.queue.collectAsState()
+    val currentQueueIndex by audioPlayer.currentQueueIndex.collectAsState()
     val updateState by updateManager.state.collectAsState()
     var isAuthenticated by remember { mutableStateOf(database.isAuthenticated()) }
     var currentNav by remember { mutableStateOf(NavItem.FEED) }
     var searchActive by remember { mutableStateOf(false) }
     var isLyricsOpen by remember { mutableStateOf(false) }
+    var isQueueOpen by remember { mutableStateOf(false) }
     var lyrics by remember { mutableStateOf<List<SyncedLine>>(emptyList()) }
     var favoriteIds by remember { mutableStateOf(database.getFavorites().map { it.id }.toSet()) }
     var lastFmUser by remember { mutableStateOf(database.getLastFmUser()) }
     var amoledMode by remember { mutableStateOf(database.getAmoledMode()) }
     var dynamicColor by remember { mutableStateOf(database.getDynamicColor()) }
+    var dynamicNowPlaying by remember { mutableStateOf(database.getDynamicNowPlaying()) }
+    var currentArtworkUrl by remember { mutableStateOf<String?>(null) }
+    var appLanguage by remember { mutableStateOf(database.getAppLanguage()) }
+    val strings = remember(appLanguage) { DesktopStrings.forLanguage(appLanguage) }
+    var isPlayerExpanded by remember { mutableStateOf(false) }
+    var showAddToPlaylistTrack by remember { mutableStateOf<Track?>(null) }
 
-    // Fetch real-time synced lyrics when track changes
+    // Fetch real-time synced lyrics and resolve artwork when track changes
     LaunchedEffect(playerState.track?.id) {
         val track = playerState.track
         if (track != null) {
+            currentArtworkUrl = if (!track.artworkUrl.isNullOrBlank() && DesktopArtworkResolver.isRealArtwork(track.artworkUrl)) {
+                DesktopArtworkResolver.upgradeQuality(track.artworkUrl) ?: track.artworkUrl
+            } else {
+                artworkResolver.resolveArtwork(track.title, track.artist, track.album)
+            }
             lyrics = emptyList()
             lyrics = lrclibClient.fetchLyrics(
                 trackName = track.title,
@@ -83,6 +101,8 @@ fun main() {
                 albumName = track.album,
                 durationSeconds = if (track.durationMs > 0) (track.durationMs / 1000).toInt() else null
             )
+        } else {
+            currentArtworkUrl = null
         }
     }
 
@@ -142,6 +162,11 @@ fun main() {
                         handleLikeCurrentTrack()
                         true
                     }
+                    keyEvent.isCtrlPressed && keyEvent.key == Key.Q -> {
+                        isQueueOpen = !isQueueOpen
+                        if (isQueueOpen) isLyricsOpen = false
+                        true
+                    }
                     keyEvent.isCtrlPressed && keyEvent.key == Key.Comma -> {
                         currentNav = NavItem.SETTINGS
                         searchActive = false
@@ -153,6 +178,18 @@ fun main() {
                     }
                     keyEvent.key == Key.Escape -> {
                         when {
+                            showAddToPlaylistTrack != null -> {
+                                showAddToPlaylistTrack = null
+                                true
+                            }
+                            isPlayerExpanded -> {
+                                isPlayerExpanded = false
+                                true
+                            }
+                            isQueueOpen -> {
+                                isQueueOpen = false
+                                true
+                            }
                             isLyricsOpen -> {
                                 isLyricsOpen = false
                                 true
@@ -175,8 +212,17 @@ fun main() {
             }
         }
     ) {
-        SonaraStreamTheme(amoledMode = amoledMode, dynamicColor = dynamicColor) {
-            CompositionLocalProvider(LocalArtworkResolver provides artworkResolver) {
+        SonaraStreamTheme(
+            amoledMode = amoledMode,
+            dynamicColor = dynamicColor,
+            dynamicNowPlaying = dynamicNowPlaying,
+            nowPlayingArtworkUrl = currentArtworkUrl
+        ) {
+            CompositionLocalProvider(
+                LocalArtworkResolver provides artworkResolver,
+                LocalDesktopDatabase provides database,
+                LocalStrings provides strings
+            ) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -193,16 +239,16 @@ fun main() {
                             }
                         )
                     } else {
+                        // Android 1:1 Adaptive Layout (Mobile Canvas Shell without Desktop Sidebar)
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.TopCenter
                         ) {
-                            // Centered Adaptive Content Area
+                            // Centered Canvas Container (maxWidth = 760.dp, matching Android shell)
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .widthIn(max = 760.dp)
-                                    .padding(bottom = if (playerState.track != null) 170.dp else 90.dp)
                             ) {
                                 if (searchActive) {
                                     SearchScreen(
@@ -232,6 +278,24 @@ fun main() {
                                             onAddToQueue = { audioPlayer.addToQueue(it) },
                                             onToggleLike = ::handleLikeTrack,
                                             favoriteIds = favoriteIds
+                                        )
+                                        NavItem.SONGS -> SongsScreen(
+                                            onPlayTrack = ::handlePlayTrack,
+                                            currentTrack = playerState.track,
+                                            isPlaying = playerState.status == PlaybackStatus.PLAYING,
+                                            database = database,
+                                            onPlayNext = { audioPlayer.playNext(it) },
+                                            onAddToQueue = { audioPlayer.addToQueue(it) },
+                                            onToggleLike = ::handleLikeTrack
+                                        )
+                                        NavItem.FAVORITES -> FavoritesScreen(
+                                            onPlayTrack = ::handlePlayTrack,
+                                            currentTrack = playerState.track,
+                                            isPlaying = playerState.status == PlaybackStatus.PLAYING,
+                                            database = database,
+                                            onPlayNext = { audioPlayer.playNext(it) },
+                                            onAddToQueue = { audioPlayer.addToQueue(it) },
+                                            onToggleLike = ::handleLikeTrack
                                         )
                                         NavItem.STATS -> StatsScreen(
                                             lastFmUser = lastFmUser,
@@ -274,11 +338,90 @@ fun main() {
                                                 currentNav = NavItem.FEED
                                             },
                                             onAmoledChanged = { amoledMode = it },
-                                            onDynamicColorChanged = { dynamicColor = it }
+                                            onDynamicColorChanged = { dynamicColor = it },
+                                            onDynamicNowPlayingChanged = { dynamicNowPlaying = it },
+                                            onLanguageChanged = { newLang -> appLanguage = newLang }
                                         )
                                     }
                                 }
                             }
+
+                            // Floating Mini-Player (docked right above floating nav dock)
+                            if (playerState.track != null && !isPlayerExpanded) {
+                                FloatingMiniPlayer(
+                                    playerState = playerState,
+                                    onPlayPause = { audioPlayer.togglePlayPause() },
+                                    onNext = { audioPlayer.next() },
+                                    isLiked = favoriteIds.contains(playerState.track!!.id),
+                                    onToggleLike = ::handleLikeCurrentTrack,
+                                    onClick = { isPlayerExpanded = true },
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .padding(bottom = 80.dp)
+                                        .widthIn(max = 680.dp)
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 14.dp)
+                                        .zIndex(15f)
+                                )
+                            }
+
+                            // Floating Bottom Nav Dock (3 Tabs + Satellite ✨ Mix Button)
+                            FloatingBottomNavDock(
+                                currentNav = currentNav,
+                                onNavSelect = { nav ->
+                                    currentNav = nav
+                                    searchActive = false
+                                },
+                                onOpenGenerator = {
+                                    currentNav = NavItem.PLAYLISTS
+                                },
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(bottom = 14.dp)
+                                    .zIndex(15f)
+                            )
+
+                            // Full-Screen Expandable Player Modal (1:1 with Android PlayerHost.kt)
+                            AnimatedVisibility(
+                                visible = isPlayerExpanded && playerState.track != null,
+                                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .zIndex(30f)
+                            ) {
+                                ExpandedPlayerModal(
+                                    playerState = playerState,
+                                    lyrics = lyrics,
+                                    queue = queue,
+                                    currentQueueIndex = currentQueueIndex,
+                                    isLiked = playerState.track?.let { favoriteIds.contains(it.id) } ?: false,
+                                    onToggleLike = ::handleLikeCurrentTrack,
+                                    onPlayPause = { audioPlayer.togglePlayPause() },
+                                    onNext = { audioPlayer.next() },
+                                    onPrevious = { audioPlayer.previous() },
+                                    onSeek = { audioPlayer.seekTo(it) },
+                                    onToggleShuffle = { audioPlayer.toggleShuffle() },
+                                    onCycleRepeat = { audioPlayer.cycleRepeatMode() },
+                                    onVolumeChange = { audioPlayer.setVolume(it) },
+                                    onToggleMute = { audioPlayer.toggleMute() },
+                                    onCollapse = { isPlayerExpanded = false },
+                                    onJumpToQueueIndex = { audioPlayer.jumpToQueueIndex(it) },
+                                    onRemoveFromQueue = { audioPlayer.removeFromQueue(it) },
+                                    onMoveQueueItem = { from, to -> audioPlayer.moveQueueItem(from, to) },
+                                    onClearQueue = { audioPlayer.clearQueue() },
+                                    onAddToPlaylist = { track -> showAddToPlaylistTrack = track }
+                                )
+                            }
+
+                            // Add To Playlist Dialog
+                            showAddToPlaylistTrack?.let { trk ->
+                                AddToPlaylistDialog(
+                                    track = trk,
+                                    onDismiss = { showAddToPlaylistTrack = null }
+                                )
+                            }
+                        }
 
                         // Top Floating Update Banner
                         AnimatedVisibility(
@@ -412,50 +555,15 @@ fun main() {
                             )
                         }
 
-                        // Bottom Floating Dock and Now Playing Bar
-                        Column(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .widthIn(max = 760.dp)
-                                .fillMaxWidth()
-                                .padding(horizontal = 20.dp, vertical = 14.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            if (playerState.track != null) {
-                                NowPlayingBottomBar(
-                                    playerState = playerState,
-                                    onPlayPause = { audioPlayer.togglePlayPause() },
-                                    onNext = { audioPlayer.next() },
-                                    onPrevious = { audioPlayer.previous() },
-                                    onSeek = { audioPlayer.seekTo(it) },
-                                    onVolumeChange = { audioPlayer.setVolume(it) },
-                                    onToggleMute = { audioPlayer.toggleMute() },
-                                    onToggleShuffle = { audioPlayer.toggleShuffle() },
-                                    onCycleRepeat = { audioPlayer.cycleRepeatMode() },
-                                    onToggleLyrics = { isLyricsOpen = !isLyricsOpen },
-                                    isLyricsOpen = isLyricsOpen,
-                                    isLiked = favoriteIds.contains(playerState.track!!.id),
-                                    onLikeTrack = ::handleLikeCurrentTrack
-                                )
-                            }
-
-                            // Android Floating Pill Dock
-                            FloatingBottomNavDock(
-                                currentNav = if (currentNav in listOf(NavItem.FEED, NavItem.STATS, NavItem.PLAYLISTS)) currentNav else NavItem.FEED,
-                                onNavSelect = { nav ->
-                                    currentNav = nav
-                                    searchActive = false
-                                }
-                            )
-                        }
-
                         // Right Slide-Over Synced Lyrics Panel
                         AnimatedVisibility(
                             visible = isLyricsOpen,
                             enter = slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
                             exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut(),
-                            modifier = Modifier.align(Alignment.CenterEnd)
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .padding(bottom = if (playerState.track != null) 90.dp else 0.dp)
+                                .zIndex(20f)
                         ) {
                             LyricsSheet(
                                 lyrics = lyrics,
@@ -464,11 +572,32 @@ fun main() {
                                 onSeekTo = { audioPlayer.seekTo(it) }
                             )
                         }
+
+                        // Right Slide-Over Play Queue Panel
+                        AnimatedVisibility(
+                            visible = isQueueOpen,
+                            enter = slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
+                            exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut(),
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .padding(bottom = if (playerState.track != null) 90.dp else 0.dp)
+                                .zIndex(20f)
+                        ) {
+                            QueueSheet(
+                                queue = queue,
+                                currentIndex = currentQueueIndex,
+                                isPlaying = playerState.status == PlaybackStatus.PLAYING,
+                                onClose = { isQueueOpen = false },
+                                onTrackSelect = { idx -> audioPlayer.jumpToQueueIndex(idx) },
+                                onRemoveFromQueue = { idx -> audioPlayer.removeFromQueue(idx) },
+                                onMoveQueueItem = { from, to -> audioPlayer.moveQueueItem(from, to) },
+                                onClearQueue = { audioPlayer.clearQueue() }
+                            )
+                        }
                     }
                 }
             }
         }
     }
-}
 }
 }

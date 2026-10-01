@@ -45,6 +45,7 @@ compose.desktop {
             description = "Sonara Stream - 100% Native Lossless Music Player"
             copyright = "Copyright (C) 2026 Sonara Stream. Licensed under GPL-3.0"
             vendor = "Sonara"
+            outputBaseDir.set(project.layout.buildDirectory.dir("package"))
             modules("java.sql", "java.naming", "java.instrument", "jdk.unsupported", "jdk.httpserver")
 
             windows {

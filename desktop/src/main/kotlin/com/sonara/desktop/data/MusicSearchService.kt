@@ -319,7 +319,8 @@ class MusicSearchService(
                 ?.get("musicThumbnailRenderer")?.jsonObject
                 ?.get("thumbnail")?.jsonObject
                 ?.get("thumbnails")?.jsonArray
-            val artworkUrl = thumbnails?.lastOrNull()?.jsonObject?.get("url")?.jsonPrimitive?.contentOrNull
+            val rawArtworkUrl = thumbnails?.lastOrNull()?.jsonObject?.get("url")?.jsonPrimitive?.contentOrNull
+            val artworkUrl = DesktopArtworkResolver.upgradeQuality(rawArtworkUrl) ?: rawArtworkUrl
 
             // VideoId from navigationEndpoint
             val navEndpoint = item["overlay"]?.jsonObject
